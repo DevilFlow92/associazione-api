@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
-class StatoSocio(str, StrEnum):
+class StatoSocio(StrEnum):
     ATTIVO = "attivo"
     SOSPESO = "sospeso"
     CESSATO = "cessato"

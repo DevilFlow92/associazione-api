@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: associazione
+      POSTGRES_PASSWORD: associazione
+      POSTGRES_DB: associazione_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://associazione:associazione@db:5432/associazione_db
+      APP_ENV: development
+      APP_DEBUG: "true"
+      SECRET_KEY: changeme
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
