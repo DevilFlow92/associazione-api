@@ -1,10 +1,16 @@
+from __future__ import annotations
+
 from datetime import date
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.iscrizione import Iscrizione
 
 
 class StatoSocio(StrEnum):
@@ -25,3 +31,4 @@ class Socio(Base):
     strumento: Mapped[str | None] = mapped_column(String(100), nullable=True)
     stato: Mapped[StatoSocio] = mapped_column(String(20), default=StatoSocio.ATTIVO)
     deleted_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    iscrizioni: Mapped[list[Iscrizione]] = relationship(back_populates="socio")
