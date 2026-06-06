@@ -3,6 +3,9 @@ name = "associazione-api"
 version = "0.1.0"
 description = "REST API backend for music association management"
 requires-python = ">=3.12"
+dependencies = [
+    "email-validator>=2.3.0",
+]
 
 [tool.ruff]
 line-length = 88
