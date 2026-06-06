@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.documento import Documento
     from app.models.iscrizione import Iscrizione
 
 
@@ -31,4 +32,6 @@ class Socio(Base):
     strumento: Mapped[str | None] = mapped_column(String(100), nullable=True)
     stato: Mapped[StatoSocio] = mapped_column(String(20), default=StatoSocio.ATTIVO)
     deleted_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+
     iscrizioni: Mapped[list[Iscrizione]] = relationship(back_populates="socio")
+    documenti: Mapped[list[Documento]] = relationship(back_populates="socio")
