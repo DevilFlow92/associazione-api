@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.template import Template, TipoTemplate
@@ -12,15 +12,33 @@ class TemplateRepository:
         self.db = db
 
     async def get_all(
-        self, tipo: TipoTemplate | None = None, solo_attivi: bool = True
+        self,
+        tipo: TipoTemplate | None = None,
+        solo_attivi: bool = True,
+        offset: int = 0,
+        limit: int = 20,
     ) -> list[Template]:
         stmt = select(Template)
         if tipo:
             stmt = stmt.where(Template.tipo == tipo)
         if solo_attivi:
             stmt = stmt.where(Template.attivo.is_(True))
+        stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_all(
+        self,
+        tipo: TipoTemplate | None = None,
+        solo_attivi: bool = True,
+    ) -> int:
+        stmt = select(func.count()).select_from(Template)
+        if tipo:
+            stmt = stmt.where(Template.tipo == tipo)
+        if solo_attivi:
+            stmt = stmt.where(Template.attivo.is_(True))
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def get_by_id(self, template_id: int) -> Template | None:
         stmt = select(Template).where(Template.id == template_id)

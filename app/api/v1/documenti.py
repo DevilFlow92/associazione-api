@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,12 +19,13 @@ def get_service(db: AsyncSession = Depends(get_db)) -> DocumentoService:
     return DocumentoService(DocumentoRepository(db))
 
 
-@router.get("/", response_model=list[DocumentoResponse])
+@router.get("/", response_model=PagedResponse[DocumentoResponse])
 async def list_documenti(
     tipo: TipoDocumento | None = Query(None),
+    params: PageParams = Depends(),
     service: DocumentoService = Depends(get_service),
-) -> list[DocumentoResponse]:
-    return await service.get_all(tipo)
+) -> PagedResponse[DocumentoResponse]:
+    return await service.get_all(tipo, params)
 
 
 @router.get("/socio/{socio_id}", response_model=list[DocumentoResponse])
@@ -57,7 +59,7 @@ async def upload_documento(
         return await service.upload(file, tipo, socio_id, note)
     except DocumentoTipoNonValidoError as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         ) from e
 
 
@@ -68,13 +70,9 @@ async def download_documento(
 ) -> FileResponse:
     try:
         doc = await service.get_by_id(documento_id)
-        return FileResponse(
-            path=doc.file_path,
-            media_type=doc.mime_type,
-            filename=doc.nome,
-        )
     except DocumentoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return FileResponse(path=doc.file_path, media_type=doc.mime_type, filename=doc.nome)
 
 
 @router.delete("/{documento_id}", status_code=status.HTTP_204_NO_CONTENT)

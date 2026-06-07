@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 from fastapi import UploadFile
 
 from app.core.storage import delete_file, save_upload, validate_pdf
@@ -17,10 +18,17 @@ class TemplateService:
         self.repo = repo
 
     async def get_all(
-        self, tipo: TipoTemplate | None = None, solo_attivi: bool = True
-    ) -> list[TemplateResponse]:
-        templates = await self.repo.get_all(tipo, solo_attivi)
-        return [TemplateResponse.model_validate(t) for t in templates]
+        self,
+        tipo: TipoTemplate | None,
+        solo_attivi: bool,
+        params: PageParams,
+    ) -> PagedResponse[TemplateResponse]:
+        templates = await self.repo.get_all(
+            tipo=tipo, solo_attivi=solo_attivi, offset=params.offset, limit=params.limit
+        )
+        total = await self.repo.count_all(tipo=tipo, solo_attivi=solo_attivi)
+        items = [TemplateResponse.model_validate(t) for t in templates]
+        return paginate(items, total, params)
 
     async def get_by_id(self, template_id: int) -> TemplateResponse:
         template = await self.repo.get_by_id(template_id)

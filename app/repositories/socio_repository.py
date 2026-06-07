@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from __future__ import annotations
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.socio import Socio, StatoSocio
@@ -9,12 +11,25 @@ class SocioRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_all(self, include_deleted: bool = False) -> list[Socio]:
+    async def get_all(
+        self,
+        include_deleted: bool = False,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[Socio]:
         stmt = select(Socio)
         if not include_deleted:
             stmt = stmt.where(Socio.deleted_at.is_(None))
+        stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_all(self, include_deleted: bool = False) -> int:
+        stmt = select(func.count()).select_from(Socio)
+        if not include_deleted:
+            stmt = stmt.where(Socio.deleted_at.is_(None))
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def get_by_id(self, socio_id: int) -> Socio | None:
         stmt = select(Socio).where(Socio.id == socio_id, Socio.deleted_at.is_(None))

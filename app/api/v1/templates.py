@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,13 +20,14 @@ def get_service(db: AsyncSession = Depends(get_db)) -> TemplateService:
     return TemplateService(TemplateRepository(db))
 
 
-@router.get("/", response_model=list[TemplateResponse])
+@router.get("/", response_model=PagedResponse[TemplateResponse])
 async def list_templates(
     tipo: TipoTemplate | None = Query(None),
     solo_attivi: bool = Query(True),
+    params: PageParams = Depends(),
     service: TemplateService = Depends(get_service),
-) -> list[TemplateResponse]:
-    return await service.get_all(tipo, solo_attivi)
+) -> PagedResponse[TemplateResponse]:
+    return await service.get_all(tipo, solo_attivi, params)
 
 
 @router.get("/{template_id}", response_model=TemplateResponse)
@@ -51,7 +53,7 @@ async def upload_template(
         return await service.upload(file, tipo, nome, descrizione)
     except DocumentoTipoNonValidoError as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         ) from e
 
 
@@ -74,13 +76,9 @@ async def download_template(
 ) -> FileResponse:
     try:
         t = await service.get_by_id(template_id)
-        return FileResponse(
-            path=t.file_path,
-            media_type=t.mime_type,
-            filename=t.nome,
-        )
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return FileResponse(path=t.file_path, media_type=t.mime_type, filename=t.nome)
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)

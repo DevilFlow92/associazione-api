@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.iscrizione import Iscrizione
@@ -11,10 +11,29 @@ class IscrizioneRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_by_socio(self, socio_id: int) -> list[Iscrizione]:
-        stmt = select(Iscrizione).where(Iscrizione.socio_id == socio_id)
+    async def get_by_socio(
+        self,
+        socio_id: int,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[Iscrizione]:
+        stmt = (
+            select(Iscrizione)
+            .where(Iscrizione.socio_id == socio_id)
+            .offset(offset)
+            .limit(limit)
+        )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_by_socio(self, socio_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Iscrizione)
+            .where(Iscrizione.socio_id == socio_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def get_by_id(self, iscrizione_id: int) -> Iscrizione | None:
         stmt = select(Iscrizione).where(Iscrizione.id == iscrizione_id)
@@ -36,7 +55,9 @@ class IscrizioneRepository:
         return iscrizione
 
     async def update(
-        self, iscrizione: Iscrizione, data: IscrizioneUpdate
+        self,
+        iscrizione: Iscrizione,
+        data: IscrizioneUpdate,
     ) -> Iscrizione:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(iscrizione, field, value)

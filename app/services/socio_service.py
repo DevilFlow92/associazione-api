@@ -1,3 +1,5 @@
+from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
+
 from app.exceptions.socio import SocioDuplicateEmailError, SocioNotFoundError
 from app.repositories.socio_repository import SocioRepository
 from app.schemas.socio import SocioCreate, SocioResponse, SocioUpdate
@@ -7,9 +9,11 @@ class SocioService:
     def __init__(self, repo: SocioRepository) -> None:
         self.repo = repo
 
-    async def get_all(self) -> list[SocioResponse]:
-        soci = await self.repo.get_all()
-        return [SocioResponse.model_validate(s) for s in soci]
+    async def get_all(self, params: PageParams) -> PagedResponse[SocioResponse]:
+        soci = await self.repo.get_all(offset=params.offset, limit=params.limit)
+        total = await self.repo.count_all()
+        items = [SocioResponse.model_validate(s) for s in soci]
+        return paginate(items, total, params)
 
     async def get_by_id(self, socio_id: int) -> SocioResponse:
         socio = await self.repo.get_by_id(socio_id)

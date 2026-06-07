@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 from fastapi import UploadFile
 
 from app.core.storage import delete_file, save_upload, validate_pdf
@@ -16,10 +17,18 @@ class DocumentoService:
         self.repo = repo
 
     async def get_all(
-        self, tipo: TipoDocumento | None = None
-    ) -> list[DocumentoResponse]:
-        documenti = await self.repo.get_all(tipo)
-        return [DocumentoResponse.model_validate(d) for d in documenti]
+        self,
+        tipo: TipoDocumento | None,
+        params: PageParams,
+    ) -> PagedResponse[DocumentoResponse]:
+        documenti = await self.repo.get_all(
+            tipo=tipo,
+            offset=params.offset,
+            limit=params.limit,
+        )
+        total = await self.repo.count_all(tipo=tipo)
+        items = [DocumentoResponse.model_validate(d) for d in documenti]
+        return paginate(items, total, params)
 
     async def get_by_id(self, documento_id: int) -> DocumentoResponse:
         documento = await self.repo.get_by_id(documento_id)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.documento import Documento, TipoDocumento
@@ -10,12 +10,25 @@ class DocumentoRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_all(self, tipo: TipoDocumento | None = None) -> list[Documento]:
+    async def get_all(
+        self,
+        tipo: TipoDocumento | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[Documento]:
         stmt = select(Documento)
         if tipo:
             stmt = stmt.where(Documento.tipo == tipo)
+        stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_all(self, tipo: TipoDocumento | None = None) -> int:
+        stmt = select(func.count()).select_from(Documento)
+        if tipo:
+            stmt = stmt.where(Documento.tipo == tipo)
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def get_by_id(self, documento_id: int) -> Documento | None:
         stmt = select(Documento).where(Documento.id == documento_id)

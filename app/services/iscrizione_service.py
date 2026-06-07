@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from app.exceptions.iscrizione import (
-    IscrizioneDuplicataError,
-    IscrizioneNotFoundError,
-)
+from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
+
+from app.exceptions.iscrizione import IscrizioneDuplicataError, IscrizioneNotFoundError
 from app.exceptions.socio import SocioNotFoundError
 from app.repositories.iscrizione_repository import IscrizioneRepository
 from app.repositories.socio_repository import SocioRepository
@@ -19,12 +18,18 @@ class IscrizioneService:
         self.repo = repo
         self.socio_repo = socio_repo
 
-    async def get_by_socio(self, socio_id: int) -> list[IscrizioneResponse]:
+    async def get_by_socio(
+        self, socio_id: int, params: PageParams
+    ) -> PagedResponse[IscrizioneResponse]:
         socio = await self.socio_repo.get_by_id(socio_id)
         if not socio:
             raise SocioNotFoundError(socio_id)
-        iscrizioni = await self.repo.get_by_socio(socio_id)
-        return [IscrizioneResponse.model_validate(i) for i in iscrizioni]
+        iscrizioni = await self.repo.get_by_socio(
+            socio_id, offset=params.offset, limit=params.limit
+        )
+        total = await self.repo.count_by_socio(socio_id)
+        items = [IscrizioneResponse.model_validate(i) for i in iscrizioni]
+        return paginate(items, total, params)
 
     async def get_by_id(self, iscrizione_id: int) -> IscrizioneResponse:
         iscrizione = await self.repo.get_by_id(iscrizione_id)
