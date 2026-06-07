@@ -2,6 +2,9 @@
 
 REST API backend for music association management — members, annual subscriptions, and document repository.
 
+[![CI](https://github.com/DevilFlow92/associazione-api/actions/workflows/ci.yml/badge.svg)](https://github.com/DevilFlow92/associazione-api/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 ## Stack
 
 | Layer | Technology |
@@ -14,8 +17,9 @@ REST API backend for music association management — members, annual subscripti
 | Validation | Pydantic v2 |
 | ASGI server | Uvicorn |
 | Package manager | uv |
+| Shared utilities | [associazione-api-toolkit](https://github.com/DevilFlow92/associazione-api-toolkit) |
 | Linting / formatting | Ruff |
-| Type checking | mypy (strict off) |
+| Type checking | mypy |
 
 ## Project structure
 
@@ -29,15 +33,11 @@ app/
 ├── core/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── database.py      # Async engine & session factory
-│   ├── logging.py       # Structured JSON logging
+│   ├── logging.py       # Shim → associazione_toolkit.logging
 │   ├── middleware.py     # Request ID & timing middleware
 │   └── storage.py       # File upload & validation
 ├── exceptions/          # Domain-specific exceptions
-├── models/
-│   ├── socio.py         # Socio SQLAlchemy model
-│   ├── iscrizione.py    # Iscrizione SQLAlchemy model
-│   ├── documento.py     # Documento SQLAlchemy model
-│   └── template.py      # Template SQLAlchemy model
+├── models/              # SQLAlchemy models
 ├── repositories/        # Data access layer
 ├── schemas/             # Pydantic request/response schemas
 └── services/            # Business logic layer
@@ -58,7 +58,7 @@ Base prefix: `/api/v1`
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/soci/` | List all members |
+| `GET` | `/soci/` | List members (paginated) |
 | `GET` | `/soci/{id}` | Get a member by ID |
 | `POST` | `/soci/` | Create a new member |
 | `PATCH` | `/soci/{id}` | Update a member |
@@ -68,7 +68,7 @@ Base prefix: `/api/v1`
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/iscrizioni/socio/{socio_id}` | Get all subscriptions for a member |
+| `GET` | `/iscrizioni/socio/{socio_id}` | Get subscriptions for a member (paginated) |
 | `GET` | `/iscrizioni/{id}` | Get a subscription by ID |
 | `POST` | `/iscrizioni/` | Create a new subscription |
 | `PATCH` | `/iscrizioni/{id}` | Update a subscription |
@@ -77,7 +77,7 @@ Base prefix: `/api/v1`
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/documenti/` | List all documents (filterable by type) |
+| `GET` | `/documenti/` | List documents, filterable by type (paginated) |
 | `GET` | `/documenti/socio/{socio_id}` | Get all documents for a member |
 | `GET` | `/documenti/{id}` | Get a document by ID |
 | `POST` | `/documenti/` | Upload a PDF document |
@@ -88,7 +88,7 @@ Base prefix: `/api/v1`
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/templates/` | List templates (filterable by type, active only) |
+| `GET` | `/templates/` | List templates, filterable by type (paginated) |
 | `GET` | `/templates/{id}` | Get a template by ID |
 | `POST` | `/templates/` | Upload a PDF template |
 | `PATCH` | `/templates/{id}` | Update template metadata |
@@ -102,6 +102,38 @@ Base prefix: `/api/v1`
 | `GET` | `/health` |
 
 Interactive docs are available at `/docs` (Swagger UI) and `/redoc` when the server is running.
+
+## Paginated responses
+
+All list endpoints return a paginated envelope. Query parameters: `page` (default: 1) and `page_size` (default: 20, max: 100).
+
+```bash
+GET /api/v1/soci/?page=1&page_size=10
+```
+
+```json
+{
+  "items": [...],
+  "meta": {
+    "page": 1,
+    "page_size": 10,
+    "total_items": 42,
+    "total_pages": 5,
+    "has_next": true,
+    "has_previous": false
+  }
+}
+```
+
+## Structured logging
+
+Every request is assigned a `request_id` (UUID) via middleware, bound to the async context via `associazione_toolkit.logging`. All log records emitted during a request — including service and repository layers — include the `request_id` automatically.
+
+In development (`APP_ENV=development`) logs are human-readable. In production they are emitted as JSON, ready for Datadog, Loki, or CloudWatch.
+
+```json
+{"event": "request completed", "method": "GET", "path": "/api/v1/soci/", "status_code": 200, "duration_ms": 12.4, "request_id": "abc-123", "timestamp": "..."}
+```
 
 ## Local development
 
@@ -150,11 +182,9 @@ This starts PostgreSQL 16 on port `5432` and the API on port `8000`.
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | `postgresql+asyncpg://user:password@localhost:5432/associazione_db` | Async PostgreSQL connection string |
-| `APP_ENV` | `development` | Environment name |
-| `APP_DEBUG` | `true` | Enables SQLAlchemy query logging |
+| `APP_ENV` | `development` | Environment name — controls log format (JSON in non-development) |
+| `APP_DEBUG` | `true` | Enables debug log level |
 | `SECRET_KEY` | `changeme` | Application secret key |
-
-Copy `.env.example` to `.env` and adjust the values before running locally.
 
 ## Database migrations
 
@@ -169,27 +199,24 @@ uv run alembic revision --autogenerate -m "description"
 uv run alembic downgrade -1
 ```
 
-## Code quality
-
-Pre-commit hooks run automatically on every commit (Ruff lint + format, trailing whitespace, YAML checks). To run them manually:
-
-```bash
-uv run pre-commit run --all-files
-```
-
-Type checking:
-
-```bash
-uv run mypy app/
-```
-
 ## Testing
 
 ```bash
-uv run pytest
+uv run pytest tests/ -v
 ```
 
 Test files live under `tests/unit/` and `tests/integration/`.
+
+## Code quality
+
+```bash
+# Lint + format
+uv run ruff check --fix app/ tests/
+uv run ruff format app/ tests/
+
+# Type check
+uv run mypy app/
+```
 
 ## CI/CD
 
@@ -199,3 +226,11 @@ GitHub Actions runs on every push and pull request to `main`:
 2. **Format** — `ruff format --check`
 3. **Type check** — `mypy`
 4. **Tests** — `pytest`
+
+## Related repositories
+
+| Repository | Description |
+|---|---|
+| [associazione-api-toolkit](https://github.com/DevilFlow92/associazione-api-toolkit) | Shared utilities — logging, pagination, retry, HTTP client |
+| [associazione-api-infra](https://github.com/DevilFlow92/associazione-api-infra) | Infrastructure — Helm charts + Kustomize for Kubernetes |
+| **associazione-api** | ← you are here |
