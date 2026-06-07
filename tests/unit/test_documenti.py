@@ -45,7 +45,10 @@ async def test_get_documento_not_found(client: AsyncClient):
 async def test_list_documenti_empty(client: AsyncClient):
     response = await client.get("/api/v1/documenti/")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert data["items"] == []
+    assert data["meta"]["total_items"] == 0
+    assert data["meta"]["page"] == 1
 
 
 @pytest.mark.asyncio

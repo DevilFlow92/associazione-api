@@ -45,4 +45,7 @@ async def test_get_socio_not_found(client: AsyncClient):
 async def test_get_soci_empty(client: AsyncClient):
     response = await client.get("/api/v1/soci/")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert data["items"] == []
+    assert data["meta"]["total_items"] == 0
+    assert data["meta"]["page"] == 1
