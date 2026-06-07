@@ -1,19 +1,35 @@
-from __future__ import annotations
+"""
+app.core.logging
+~~~~~~~~~~~~~~~~
+Thin compatibility shim — delegates entirely to associazione_toolkit.logging.
 
-import logging
-import sys
+All modules in the app should import from here (not directly from the toolkit),
+so if the toolkit API ever changes, there is a single place to update.
 
-from pythonjsonlogger.json import JsonFormatter
+Usage::
+
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+    logger.info("socio created", socio_id=42)
+"""
+
+from associazione_toolkit.logging import (
+    bind_request_id,
+    configure_logging,
+    get_logger,
+)
+
+__all__ = [
+    "configure_logging",
+    "get_logger",
+    "bind_request_id",
+]
 
 
-def setup_logging() -> None:
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = JsonFormatter(
-        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%SZ",
-    )
-    handler.setFormatter(formatter)
-    logger.handlers = [handler]
+def setup_logging(level: str = "INFO", render_json: bool = True) -> None:
+    """
+    Backward-compatible alias for configure_logging().
+    Called from main.py at startup.
+    """
+    configure_logging(level=level, render_json=render_json)
