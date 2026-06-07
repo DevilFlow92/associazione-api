@@ -1,6 +1,6 @@
 # associazione-api
 
-REST API backend for music association management — members and annual subscriptions.
+REST API backend for music association management — members, annual subscriptions, and document repository.
 
 ## Stack
 
@@ -19,18 +19,25 @@ REST API backend for music association management — members and annual subscri
 
 ## Project structure
 
-```
+```text
 app/
 ├── api/v1/
 │   ├── soci.py          # Members router
-│   └── iscrizioni.py    # Subscriptions router
+│   ├── iscrizioni.py    # Subscriptions router
+│   ├── documenti.py     # Documents router
+│   └── templates.py     # Templates router
 ├── core/
 │   ├── config.py        # Settings (pydantic-settings)
-│   └── database.py      # Async engine & session factory
+│   ├── database.py      # Async engine & session factory
+│   ├── logging.py       # Structured JSON logging
+│   ├── middleware.py     # Request ID & timing middleware
+│   └── storage.py       # File upload & validation
 ├── exceptions/          # Domain-specific exceptions
 ├── models/
 │   ├── socio.py         # Socio SQLAlchemy model
-│   └── iscrizione.py    # Iscrizione SQLAlchemy model
+│   ├── iscrizione.py    # Iscrizione SQLAlchemy model
+│   ├── documento.py     # Documento SQLAlchemy model
+│   └── template.py      # Template SQLAlchemy model
 ├── repositories/        # Data access layer
 ├── schemas/             # Pydantic request/response schemas
 └── services/            # Business logic layer
@@ -55,7 +62,7 @@ Base prefix: `/api/v1`
 | `GET` | `/soci/{id}` | Get a member by ID |
 | `POST` | `/soci/` | Create a new member |
 | `PATCH` | `/soci/{id}` | Update a member |
-| `DELETE` | `/soci/{id}` | Delete a member (204) |
+| `DELETE` | `/soci/{id}` | Soft delete a member (204) |
 
 ### Iscrizioni
 
@@ -65,6 +72,28 @@ Base prefix: `/api/v1`
 | `GET` | `/iscrizioni/{id}` | Get a subscription by ID |
 | `POST` | `/iscrizioni/` | Create a new subscription |
 | `PATCH` | `/iscrizioni/{id}` | Update a subscription |
+
+### Documenti
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/documenti/` | List all documents (filterable by type) |
+| `GET` | `/documenti/socio/{socio_id}` | Get all documents for a member |
+| `GET` | `/documenti/{id}` | Get a document by ID |
+| `POST` | `/documenti/` | Upload a PDF document |
+| `GET` | `/documenti/{id}/download` | Download a document |
+| `DELETE` | `/documenti/{id}` | Delete a document (204) |
+
+### Templates
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/templates/` | List templates (filterable by type, active only) |
+| `GET` | `/templates/{id}` | Get a template by ID |
+| `POST` | `/templates/` | Upload a PDF template |
+| `PATCH` | `/templates/{id}` | Update template metadata |
+| `GET` | `/templates/{id}/download` | Download a template |
+| `DELETE` | `/templates/{id}` | Delete a template (204) |
 
 ### Health
 
@@ -161,3 +190,12 @@ uv run pytest
 ```
 
 Test files live under `tests/unit/` and `tests/integration/`.
+
+## CI/CD
+
+GitHub Actions runs on every push and pull request to `main`:
+
+1. **Lint** — `ruff check`
+2. **Format** — `ruff format --check`
+3. **Type check** — `mypy`
+4. **Tests** — `pytest`
