@@ -227,6 +227,37 @@ GitHub Actions runs on every push and pull request to `main`:
 3. **Type check** — `mypy`
 4. **Tests** — `pytest`
 
+## Roadmap
+
+### Authentication & multi-user access (coming soon)
+
+The API currently has no authentication layer. The planned design separates two distinct authentication planes:
+
+**Machine-to-machine — JWT**
+Service accounts for workers, bots, and bulk import services authenticate via JWT tokens. Stateless, long-lived, scoped per service type (e.g. a Celery worker can write data but not manage users).
+
+**Human users — session-based**
+Two macro-roles with configurable permissions per association:
+
+- **Amministratori** — consiglio direttivo members, with per-carica permission sets (e.g. tesoriere gets contabilità access, segretario gets verbali and archivio parti, presidente gets everything)
+- **Soci standard** — minimal access, self-service only (event attendance)
+
+Credentials are managed natively (email + bcrypt password hash) — no external OAuth2 provider.
+
+The RBAC model is association-configurable, meaning each banda can decide which permissions map to which direttivo role without code changes.
+
+**Planned tables:** `utenti`, `ruoli`, `permessi`, `ruoli_permessi`, `utenti_ruoli`
+
+---
+
+### Other planned features
+
+- Bulk import of members and externals from Excel files (via async worker)
+- Event management — processioni, concerti, prove — with attendance tracking
+- Receipt generation for externals and event revenues
+- Assembly minutes editor with PDF template rendering
+- Telegram / email notification service
+
 ## Related repositories
 
 | Repository | Description |
