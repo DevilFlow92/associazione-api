@@ -17,5 +17,6 @@ class DocumentoResponse(BaseModel):
     socio_id: int | None
     caricato_il: datetime
     note: str | None
+    file_path: str
 
     model_config = {"from_attributes": True}

@@ -57,7 +57,7 @@ async def upload_documento(
         return await service.upload(file, tipo, socio_id, note)
     except DocumentoTipoNonValidoError as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
         ) from e
 
 
