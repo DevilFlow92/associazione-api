@@ -4,12 +4,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.models  # noqa: F401
 from app.core.database import Base, get_db
-from app.models import (
-    documento,  # noqa: F401
-    iscrizione,  # noqa: F401
-    socio,  # noqa: F401
-)
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"

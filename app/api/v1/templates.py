@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.exceptions.documento import DocumentoTipoNonValidoError
+from app.exceptions.template import TemplateNotFoundError
+from app.models.template import TipoTemplate
+from app.repositories.template_repository import TemplateRepository
+from app.schemas.template import TemplateResponse, TemplateUpdate
+from app.services.template_service import TemplateService
+
+router = APIRouter(prefix="/templates", tags=["templates"])
+
+
+def get_service(db: AsyncSession = Depends(get_db)) -> TemplateService:
+    return TemplateService(TemplateRepository(db))
+
+
+@router.get("/", response_model=list[TemplateResponse])
+async def list_templates(
+    tipo: TipoTemplate | None = Query(None),
+    solo_attivi: bool = Query(True),
+    service: TemplateService = Depends(get_service),
+) -> list[TemplateResponse]:
+    return await service.get_all(tipo, solo_attivi)
+
+
+@router.get("/{template_id}", response_model=TemplateResponse)
+async def get_template(
+    template_id: int,
+    service: TemplateService = Depends(get_service),
+) -> TemplateResponse:
+    try:
+        return await service.get_by_id(template_id)
+    except TemplateNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post("/", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED)
+async def upload_template(
+    file: UploadFile,
+    tipo: TipoTemplate = Query(...),
+    nome: str = Query(...),
+    descrizione: str | None = Query(None),
+    service: TemplateService = Depends(get_service),
+) -> TemplateResponse:
+    try:
+        return await service.upload(file, tipo, nome, descrizione)
+    except DocumentoTipoNonValidoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)
+        ) from e
+
+
+@router.patch("/{template_id}", response_model=TemplateResponse)
+async def update_template(
+    template_id: int,
+    data: TemplateUpdate,
+    service: TemplateService = Depends(get_service),
+) -> TemplateResponse:
+    try:
+        return await service.update(template_id, data)
+    except TemplateNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.get("/{template_id}/download")
+async def download_template(
+    template_id: int,
+    service: TemplateService = Depends(get_service),
+) -> FileResponse:
+    try:
+        t = await service.get_by_id(template_id)
+        return FileResponse(
+            path=t.file_path,
+            media_type=t.mime_type,
+            filename=t.nome,
+        )
+    except TemplateNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_template(
+    template_id: int,
+    service: TemplateService = Depends(get_service),
+) -> None:
+    try:
+        await service.delete(template_id)
+    except TemplateNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

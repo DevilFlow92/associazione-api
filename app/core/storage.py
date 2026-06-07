@@ -6,12 +6,12 @@ from pathlib import Path
 from fastapi import UploadFile
 
 UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_upload_path(tipo: str, filename: str) -> Path:
     folder = UPLOAD_DIR / tipo
-    folder.mkdir(exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)
     return folder / filename
 
 
