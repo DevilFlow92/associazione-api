@@ -1,37 +1,29 @@
 from __future__ import annotations
 
-from datetime import date
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, String
+from sqlalchemy import ForeignKey, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.documento import Documento
-    from app.models.iscrizione import Iscrizione
-
-
-class StatoSocio(StrEnum):
-    ATTIVO = "attivo"
-    SOSPESO = "sospeso"
-    CESSATO = "cessato"
+    from app.models.persona import Persona
 
 
 class Socio(Base):
     __tablename__ = "soci"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    nome: Mapped[str] = mapped_column(String(100))
-    cognome: Mapped[str] = mapped_column(String(100))
-    email: Mapped[str] = mapped_column(String(255), unique=True)
-    telefono: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    data_nascita: Mapped[date | None] = mapped_column(Date, nullable=True)
-    strumento: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    stato: Mapped[StatoSocio] = mapped_column(String(20), default=StatoSocio.ATTIVO)
-    deleted_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    codice_socio: Mapped[str] = mapped_column(String(5))
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persone.id"), nullable=False)
+    banda_codice: Mapped[int] = mapped_column(
+        SmallInteger, ForeignKey("bande.codice"), nullable=False
+    )
+    ruolo_banda_codice: Mapped[int] = mapped_column(
+        SmallInteger, ForeignKey("ruoli_banda.codice"), nullable=False
+    )
 
-    iscrizioni: Mapped[list[Iscrizione]] = relationship(back_populates="socio")
+    persona: Mapped[Persona] = relationship(back_populates="soci")
     documenti: Mapped[list[Documento]] = relationship(back_populates="socio")

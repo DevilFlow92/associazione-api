@@ -3,7 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.exceptions.socio import SocioDuplicateEmailError, SocioNotFoundError
+from app.exceptions.persona import PersonaNotFoundError
+from app.exceptions.socio import SocioDuplicateCodiceError, SocioNotFoundError
+from app.repositories.persona_repository import PersonaRepository
 from app.repositories.socio_repository import SocioRepository
 from app.schemas.socio import SocioCreate, SocioResponse, SocioUpdate
 from app.services.socio_service import SocioService
@@ -12,7 +14,7 @@ router = APIRouter(prefix="/soci", tags=["soci"])
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> SocioService:
-    return SocioService(SocioRepository(db))
+    return SocioService(SocioRepository(db), PersonaRepository(db))
 
 
 @router.get("/", response_model=PagedResponse[SocioResponse])
@@ -39,7 +41,9 @@ async def create_socio(
 ) -> SocioResponse:
     try:
         return await service.create(data)
-    except SocioDuplicateEmailError as e:
+    except PersonaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except SocioDuplicateCodiceError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
@@ -51,7 +55,7 @@ async def update_socio(
         return await service.update(socio_id, data)
     except SocioNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except SocioDuplicateEmailError as e:
+    except SocioDuplicateCodiceError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 

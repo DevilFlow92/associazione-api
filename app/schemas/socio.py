@@ -1,35 +1,26 @@
-from datetime import date
+from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr
-
-from app.models.socio import StatoSocio
+from pydantic import BaseModel
 
 
 class SocioBase(BaseModel):
-    nome: str
-    cognome: str
-    email: EmailStr
-    telefono: str | None = None
-    data_nascita: date | None = None
-    strumento: str | None = None
+    codice_socio: str
+    banda_codice: int
+    ruolo_banda_codice: int
 
 
 class SocioCreate(SocioBase):
-    pass
+    persona_id: int
 
 
 class SocioUpdate(BaseModel):
-    nome: str | None = None
-    cognome: str | None = None
-    email: EmailStr | None = None
-    telefono: str | None = None
-    data_nascita: date | None = None
-    strumento: str | None = None
-    stato: StatoSocio | None = None
+    codice_socio: str | None = None
+    banda_codice: int | None = None
+    ruolo_banda_codice: int | None = None
 
 
 class SocioResponse(SocioBase):
     id: int
-    stato: StatoSocio
+    persona_id: int
 
     model_config = {"from_attributes": True}

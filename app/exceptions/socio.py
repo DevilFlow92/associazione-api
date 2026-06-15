@@ -4,7 +4,10 @@ class SocioNotFoundError(Exception):
         super().__init__(f"Socio con id {socio_id} non trovato")
 
 
-class SocioDuplicateEmailError(Exception):
-    def __init__(self, email: str) -> None:
-        self.email = email
-        super().__init__(f"Email {email} già registrata")
+class SocioDuplicateCodiceError(Exception):
+    def __init__(self, codice_socio: str, banda_codice: int) -> None:
+        self.codice_socio = codice_socio
+        self.banda_codice = banda_codice
+        super().__init__(
+            f"Codice socio {codice_socio} già presente per la banda {banda_codice}"
+        )

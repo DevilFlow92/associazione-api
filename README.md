@@ -26,10 +26,16 @@ REST API backend for music association management — members, annual subscripti
 ```text
 app/
 ├── api/v1/
+│   ├── persone.py       # People (anagrafica) router + addresses (M2M)
+│   ├── indirizzi.py     # Addresses router
+│   ├── contatti.py      # Contacts router
 │   ├── soci.py          # Members router
-│   ├── iscrizioni.py    # Subscriptions router
-│   ├── documenti.py     # Documents router
-│   └── templates.py     # Templates router
+│   ├── esterni.py       # Externals router
+│   ├── stati.py …       # Lookup routers (states, regions, provinces,
+│   │                    #   municipalities, instruments, address types,
+│   │                    #   bands, contact/band roles)
+│   ├── documenti.py     # Documents router (file repository)
+│   └── templates.py     # Templates router (file repository)
 ├── core/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── database.py      # Async engine & session factory
@@ -37,10 +43,10 @@ app/
 │   ├── middleware.py     # Request ID & timing middleware
 │   └── storage.py       # File upload & validation
 ├── exceptions/          # Domain-specific exceptions
-├── models/              # SQLAlchemy models
-├── repositories/        # Data access layer
+├── models/              # SQLAlchemy models (lookups.py + entity modules)
+├── repositories/        # Data access layer (lookup.py = generic lookup CRUD)
 ├── schemas/             # Pydantic request/response schemas
-└── services/            # Business logic layer
+└── services/            # Business logic layer (lookup.py = generic lookup CRUD)
 migrations/              # Alembic revisions
 tests/
 ├── unit/
@@ -50,28 +56,62 @@ main.py                  # FastAPI app entrypoint
 
 The architecture follows a layered pattern: **Router → Service → Repository → Model**.
 
+### Domain model
+
+The schema mirrors the association's legacy database (`legacy_db/`). Core
+anagrafica entities — **Persona**, **Indirizzo**, **Contatto**, **Socio**,
+**Esterno** — are backed by **dimension (lookup) tables** (`Stato`, `Regione`,
+`Provincia`, `Comune`, `Strumento`, `TipoIndirizzo`, `Banda`, `RuoloContatto`,
+`RuoloBanda`). A person can hold several addresses (many-to-many via
+`persone_indirizzi`). The 9 lookup tables share a generic CRUD stack
+(`repositories/lookup.py`, `services/lookup.py`) to avoid duplication.
+
+> Services, receipts and accounting (`Servizio`, `Ricevuta`, contabilità) are
+> planned for a follow-up pass.
+
 ## API endpoints
 
 Base prefix: `/api/v1`
 
-### Soci
+### Persone (anagrafica)
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/soci/` | List members (paginated) |
-| `GET` | `/soci/{id}` | Get a member by ID |
-| `POST` | `/soci/` | Create a new member |
-| `PATCH` | `/soci/{id}` | Update a member |
-| `DELETE` | `/soci/{id}` | Soft delete a member (204) |
+| `GET` | `/persone/` | List people (paginated) |
+| `GET` | `/persone/{id}` | Get a person by ID |
+| `POST` | `/persone/` | Create a new person |
+| `PATCH` | `/persone/{id}` | Update a person |
+| `DELETE` | `/persone/{id}` | Delete a person (204; 409 if still a socio/esterno) |
+| `GET` | `/persone/{id}/indirizzi` | List a person's addresses |
+| `PUT` | `/persone/{id}/indirizzi/{indirizzo_id}` | Link an address to a person |
+| `DELETE` | `/persone/{id}/indirizzi/{indirizzo_id}` | Unlink an address (204) |
 
-### Iscrizioni
+### Indirizzi · Contatti · Soci · Esterni
+
+Each exposes standard CRUD under its prefix (`/indirizzi`, `/contatti`, `/soci`,
+`/esterni`): `GET /` (paginated list), `GET /{id}`, `POST /`, `PATCH /{id}`,
+`DELETE /{id}` (204). In addition:
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/iscrizioni/socio/{socio_id}` | Get subscriptions for a member (paginated) |
-| `GET` | `/iscrizioni/{id}` | Get a subscription by ID |
-| `POST` | `/iscrizioni/` | Create a new subscription |
-| `PATCH` | `/iscrizioni/{id}` | Update a subscription |
+| `GET` | `/contatti/persona/{persona_id}` | Contacts for a person (paginated) |
+
+`Socio` and `Esterno` require an existing `persona_id` (404 otherwise) and reject
+duplicate codes (409). `Contatto` requires an existing `persona_id`.
+
+### Tabelle dimensione (lookups)
+
+Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
+`/regioni`, `/province`, `/comuni`, `/strumenti`, `/tipi-indirizzo`, `/bande`,
+`/ruoli-contatto`, `/ruoli-banda`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/{lookup}/` | List entries (paginated) |
+| `GET` | `/{lookup}/{codice}` | Get an entry by code |
+| `POST` | `/{lookup}/` | Create an entry (409 on duplicate code) |
+| `PATCH` | `/{lookup}/{codice}` | Update an entry |
+| `DELETE` | `/{lookup}/{codice}` | Delete an entry (204) |
 
 ### Documenti
 
