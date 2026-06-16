@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.storage import file_exists
-from app.exceptions.template import TemplateNotFoundError, TemplateTipoNonValidoError
-from app.models.template import TipoTemplate
+from app.exceptions.template import TemplateNotFoundError
 from app.repositories.template_repository import TemplateRepository
-from app.schemas.template import TemplateResponse, TemplateUpdate
+from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
 from app.services.template_service import TemplateService
 
 router = APIRouter(prefix="/templates", tags=["templates"])
@@ -22,12 +21,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> TemplateService:
 
 @router.get("/", response_model=PagedResponse[TemplateResponse])
 async def list_templates(
-    tipo: TipoTemplate | None = Query(None),
-    solo_attivi: bool = Query(True),
+    documento_id: int | None = Query(None),
     params: PageParams = Depends(),
     service: TemplateService = Depends(get_service),
 ) -> PagedResponse[TemplateResponse]:
-    return await service.get_all(tipo, solo_attivi, params)
+    return await service.get_all(documento_id, params)
 
 
 @router.get("/{template_id}", response_model=TemplateResponse)
@@ -42,19 +40,11 @@ async def get_template(
 
 
 @router.post("/", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED)
-async def upload_template(
-    file: UploadFile,
-    tipo: TipoTemplate = Query(...),
-    nome: str = Query(...),
-    descrizione: str | None = Query(None),
+async def create_template(
+    data: TemplateCreate,
     service: TemplateService = Depends(get_service),
 ) -> TemplateResponse:
-    try:
-        return await service.upload(file, tipo, nome, descrizione)
-    except TemplateTipoNonValidoError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        ) from e
+    return await service.create(data)
 
 
 @router.patch("/{template_id}", response_model=TemplateResponse)
@@ -75,14 +65,14 @@ async def download_template(
     service: TemplateService = Depends(get_service),
 ) -> FileResponse:
     try:
-        t = await service.get_by_id(template_id)
+        doc = await service.get_documento_file(template_id)
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    if not file_exists(t.file_path):
+    if not file_exists(doc.file_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
         )
-    return FileResponse(path=t.file_path, media_type=t.mime_type, filename=t.nome)
+    return FileResponse(path=doc.file_path, media_type=doc.mime_type, filename=doc.nome)
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)

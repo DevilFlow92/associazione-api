@@ -48,12 +48,17 @@ class RicevutaService:
         return RicevutaResponse.model_validate(ricevuta)
 
     async def create(self, data: RicevutaCreate) -> RicevutaResponse:
-        servizio = await self.servizio_repo.get_by_id(data.servizio_id)
-        if not servizio:
-            raise ServizioNotFoundError(data.servizio_id)
-        esterno = await self.esterno_repo.get_by_id(data.esterno_id)
-        if not esterno:
-            raise EsternoNotFoundError(data.esterno_id)
+        # servizio/esterno sono opzionali: una ricevuta può riguardare un
+        # servizio (compenso a un esterno) oppure una quota di iscrizione
+        # (collegata dall'iscrizione). Validati solo se forniti.
+        if data.servizio_id is not None:
+            servizio = await self.servizio_repo.get_by_id(data.servizio_id)
+            if not servizio:
+                raise ServizioNotFoundError(data.servizio_id)
+        if data.esterno_id is not None:
+            esterno = await self.esterno_repo.get_by_id(data.esterno_id)
+            if not esterno:
+                raise EsternoNotFoundError(data.esterno_id)
         ricevuta = await self.repo.create(data)
         return RicevutaResponse.model_validate(ricevuta)
 

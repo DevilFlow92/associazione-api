@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
-    from app.models.documento import Documento
+    from app.models.iscrizione import Iscrizione
     from app.models.persona import Persona
 
 
@@ -26,4 +26,4 @@ class Socio(Base):
     )
 
     persona: Mapped[Persona] = relationship(back_populates="soci")
-    documenti: Mapped[list[Documento]] = relationship(back_populates="socio")
+    iscrizioni: Mapped[list[Iscrizione]] = relationship(back_populates="socio")

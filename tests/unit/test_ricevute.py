@@ -38,10 +38,8 @@ async def create_esterno(client: AsyncClient, codice: str = "E001") -> dict:
     return response.json()
 
 
-def ricevuta_payload(servizio_id: int, esterno_id: int, **overrides) -> dict:
+def ricevuta_payload(**overrides) -> dict:
     payload = {
-        "servizio_id": servizio_id,
-        "esterno_id": esterno_id,
         "data_ricevuta": "2026-07-21T10:00:00",
         "importo": 150.50,
         "note_in_stampa": "Compenso servizio",
@@ -51,11 +49,12 @@ def ricevuta_payload(servizio_id: int, esterno_id: int, **overrides) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_create_ricevuta(client: AsyncClient):
+async def test_create_ricevuta_con_servizio_esterno(client: AsyncClient):
     servizio = await create_servizio(client)
     esterno = await create_esterno(client)
     response = await client.post(
-        "/api/v1/ricevute/", json=ricevuta_payload(servizio["id"], esterno["id"])
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno["id"]),
     )
     assert response.status_code == 201
     data = response.json()
@@ -65,10 +64,25 @@ async def test_create_ricevuta(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_create_ricevuta_senza_servizio_esterno(client: AsyncClient):
+    """Ricevuta per quota di iscrizione: servizio/esterno assenti."""
+    response = await client.post(
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(importo=80.0),
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["servizio_id"] is None
+    assert data["esterno_id"] is None
+    assert data["importo"] == 80.0
+
+
+@pytest.mark.asyncio
 async def test_create_ricevuta_servizio_not_found(client: AsyncClient):
     esterno = await create_esterno(client)
     response = await client.post(
-        "/api/v1/ricevute/", json=ricevuta_payload(999, esterno["id"])
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=999, esterno_id=esterno["id"]),
     )
     assert response.status_code == 404
 
@@ -77,7 +91,8 @@ async def test_create_ricevuta_servizio_not_found(client: AsyncClient):
 async def test_create_ricevuta_esterno_not_found(client: AsyncClient):
     servizio = await create_servizio(client)
     response = await client.post(
-        "/api/v1/ricevute/", json=ricevuta_payload(servizio["id"], 999)
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=999),
     )
     assert response.status_code == 404
 
@@ -94,10 +109,12 @@ async def test_get_ricevute_servizio(client: AsyncClient):
     esterno1 = await create_esterno(client, "E001")
     esterno2 = await create_esterno(client, "E002")
     await client.post(
-        "/api/v1/ricevute/", json=ricevuta_payload(servizio["id"], esterno1["id"])
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno1["id"]),
     )
     await client.post(
-        "/api/v1/ricevute/", json=ricevuta_payload(servizio["id"], esterno2["id"])
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno2["id"]),
     )
     response = await client.get(f"/api/v1/ricevute/servizio/{servizio['id']}")
     assert response.status_code == 200
@@ -115,7 +132,8 @@ async def test_update_ricevuta(client: AsyncClient):
     servizio = await create_servizio(client)
     esterno = await create_esterno(client)
     created = await client.post(
-        "/api/v1/ricevute/", json=ricevuta_payload(servizio["id"], esterno["id"])
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno["id"]),
     )
     ricevuta_id = created.json()["id"]
     response = await client.patch(
@@ -130,7 +148,8 @@ async def test_delete_ricevuta(client: AsyncClient):
     servizio = await create_servizio(client)
     esterno = await create_esterno(client)
     created = await client.post(
-        "/api/v1/ricevute/", json=ricevuta_payload(servizio["id"], esterno["id"])
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno["id"]),
     )
     ricevuta_id = created.json()["id"]
     response = await client.delete(f"/api/v1/ricevute/{ricevuta_id}")

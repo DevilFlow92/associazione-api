@@ -192,3 +192,42 @@ class NaturaFlussoUpdate(LookupUpdate):
 
 class NaturaFlussoResponse(LookupResponse):
     pass
+
+
+# ── TipoDocumento ────────────────────────────────────────────────────────────
+class TipoDocumentoCreate(LookupCreate):
+    pass
+
+
+class TipoDocumentoUpdate(LookupUpdate):
+    pass
+
+
+class TipoDocumentoResponse(LookupResponse):
+    pass
+
+
+# ── TipoSpartito ─────────────────────────────────────────────────────────────
+class TipoSpartitoCreate(LookupCreate):
+    pass
+
+
+class TipoSpartitoUpdate(LookupUpdate):
+    pass
+
+
+class TipoSpartitoResponse(LookupResponse):
+    pass
+
+
+# ── StatoIscrizione ──────────────────────────────────────────────────────────
+class StatoIscrizioneCreate(LookupCreate):
+    pass
+
+
+class StatoIscrizioneUpdate(LookupUpdate):
+    pass
+
+
+class StatoIscrizioneResponse(LookupResponse):
+    pass

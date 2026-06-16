@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.documento import Documento, TipoDocumento
+from app.models.documento import Documento
 
 
 class DocumentoRepository:
@@ -12,21 +12,21 @@ class DocumentoRepository:
 
     async def get_all(
         self,
-        tipo: TipoDocumento | None = None,
+        tipo_documento_codice: int | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[Documento]:
         stmt = select(Documento)
-        if tipo:
-            stmt = stmt.where(Documento.tipo == tipo)
+        if tipo_documento_codice is not None:
+            stmt = stmt.where(Documento.tipo_documento_codice == tipo_documento_codice)
         stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_all(self, tipo: TipoDocumento | None = None) -> int:
+    async def count_all(self, tipo_documento_codice: int | None = None) -> int:
         stmt = select(func.count()).select_from(Documento)
-        if tipo:
-            stmt = stmt.where(Documento.tipo == tipo)
+        if tipo_documento_codice is not None:
+            stmt = stmt.where(Documento.tipo_documento_codice == tipo_documento_codice)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
@@ -35,30 +35,23 @@ class DocumentoRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_socio(self, socio_id: int) -> list[Documento]:
-        stmt = select(Documento).where(Documento.socio_id == socio_id)
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
-
     async def create(
         self,
         nome: str,
-        tipo: TipoDocumento,
         file_path: str,
         mime_type: str,
         dimensione_bytes: int,
         checksum: str,
-        socio_id: int | None = None,
+        tipo_documento_codice: int | None = None,
         note: str | None = None,
     ) -> Documento:
         documento = Documento(
             nome=nome,
-            tipo=tipo,
             file_path=file_path,
             mime_type=mime_type,
             dimensione_bytes=dimensione_bytes,
             checksum=checksum,
-            socio_id=socio_id,
+            tipo_documento_codice=tipo_documento_codice,
             note=note,
         )
         self.db.add(documento)

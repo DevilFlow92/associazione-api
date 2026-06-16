@@ -10,6 +10,7 @@ from app.api.v1.documenti import router as documenti_router
 from app.api.v1.esterni import router as esterni_router
 from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
+from app.api.v1.iscrizioni import router as iscrizioni_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.province import router as province_router
@@ -21,10 +22,14 @@ from app.api.v1.servizi import router as servizi_router
 from app.api.v1.sezioni_rendiconto import router as sezioni_rendiconto_router
 from app.api.v1.soci import router as soci_router
 from app.api.v1.sottovoci_rendiconto import router as sottovoci_rendiconto_router
+from app.api.v1.spartiti import router as spartiti_router
 from app.api.v1.stati import router as stati_router
+from app.api.v1.stati_iscrizione import router as stati_iscrizione_router
 from app.api.v1.strumenti import router as strumenti_router
 from app.api.v1.templates import router as template_router
+from app.api.v1.tipi_documento import router as tipi_documento_router
 from app.api.v1.tipi_indirizzo import router as tipi_indirizzo_router
+from app.api.v1.tipi_spartito import router as tipi_spartito_router
 from app.api.v1.voci_contabilita import router as voci_contabilita_router
 from app.api.v1.voci_rendiconto import router as voci_rendiconto_router
 from app.core.config import settings
@@ -91,6 +96,7 @@ app.include_router(indirizzi_router, prefix="/api/v1")
 app.include_router(contatti_router, prefix="/api/v1")
 app.include_router(soci_router, prefix="/api/v1")
 app.include_router(esterni_router, prefix="/api/v1")
+app.include_router(iscrizioni_router, prefix="/api/v1")
 
 # ── Eventi & ricevute ────────────────────────────────────────────────────────
 app.include_router(servizi_router, prefix="/api/v1")
@@ -114,10 +120,14 @@ app.include_router(sezioni_rendiconto_router, prefix="/api/v1")
 app.include_router(voci_rendiconto_router, prefix="/api/v1")
 app.include_router(sottovoci_rendiconto_router, prefix="/api/v1")
 app.include_router(nature_flusso_router, prefix="/api/v1")
+app.include_router(tipi_documento_router, prefix="/api/v1")
+app.include_router(tipi_spartito_router, prefix="/api/v1")
+app.include_router(stati_iscrizione_router, prefix="/api/v1")
 
-# ── Repository documentale (file) ────────────────────────────────────────────
+# ── Archivio documentale (file) ──────────────────────────────────────────────
 app.include_router(documenti_router, prefix="/api/v1")
 app.include_router(template_router, prefix="/api/v1")
+app.include_router(spartiti_router, prefix="/api/v1")
 
 
 @app.get("/health")

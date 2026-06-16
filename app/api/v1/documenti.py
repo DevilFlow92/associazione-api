@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.storage import file_exists
 from app.exceptions.documento import DocumentoNotFoundError, DocumentoTipoNonValidoError
-from app.models.documento import TipoDocumento
 from app.repositories.documento_repository import DocumentoRepository
 from app.schemas.documento import DocumentoResponse
 from app.services.documento_service import DocumentoService
@@ -22,19 +21,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> DocumentoService:
 
 @router.get("/", response_model=PagedResponse[DocumentoResponse])
 async def list_documenti(
-    tipo: TipoDocumento | None = Query(None),
+    tipo_documento_codice: int | None = Query(None),
     params: PageParams = Depends(),
     service: DocumentoService = Depends(get_service),
 ) -> PagedResponse[DocumentoResponse]:
-    return await service.get_all(tipo, params)
-
-
-@router.get("/socio/{socio_id}", response_model=list[DocumentoResponse])
-async def get_documenti_socio(
-    socio_id: int,
-    service: DocumentoService = Depends(get_service),
-) -> list[DocumentoResponse]:
-    return await service.get_by_socio(socio_id)
+    return await service.get_all(tipo_documento_codice, params)
 
 
 @router.get("/{documento_id}", response_model=DocumentoResponse)
@@ -51,13 +42,12 @@ async def get_documento(
 @router.post("/", response_model=DocumentoResponse, status_code=status.HTTP_201_CREATED)
 async def upload_documento(
     file: UploadFile,
-    tipo: TipoDocumento = Query(...),
-    socio_id: int | None = Query(None),
+    tipo_documento_codice: int | None = Query(None),
     note: str | None = Query(None),
     service: DocumentoService = Depends(get_service),
 ) -> DocumentoResponse:
     try:
-        return await service.upload(file, tipo, socio_id, note)
+        return await service.upload(file, tipo_documento_codice, note)
     except DocumentoTipoNonValidoError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)

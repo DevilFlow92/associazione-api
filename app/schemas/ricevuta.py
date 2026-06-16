@@ -13,8 +13,9 @@ class RicevutaBase(BaseModel):
 
 
 class RicevutaCreate(RicevutaBase):
-    servizio_id: int
-    esterno_id: int
+    servizio_id: int | None = None
+    esterno_id: int | None = None
+    documento_id: int | None = None
 
 
 class RicevutaUpdate(BaseModel):
@@ -22,11 +23,15 @@ class RicevutaUpdate(BaseModel):
     importo: float | None = None
     note_in_stampa: str | None = None
     note_fuori_stampa: str | None = None
+    servizio_id: int | None = None
+    esterno_id: int | None = None
+    documento_id: int | None = None
 
 
 class RicevutaResponse(RicevutaBase):
     id: int
-    servizio_id: int
-    esterno_id: int
+    servizio_id: int | None
+    esterno_id: int | None
+    documento_id: int | None
 
     model_config = {"from_attributes": True}

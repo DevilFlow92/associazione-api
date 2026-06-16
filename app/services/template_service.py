@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
-from fastapi import UploadFile
 
-from app.core.storage import delete_file, save_upload, validate_pdf
-from app.exceptions.template import TemplateNotFoundError, TemplateTipoNonValidoError
-from app.models.template import TipoTemplate
+from app.exceptions.template import TemplateNotFoundError
 from app.repositories.template_repository import TemplateRepository
-from app.schemas.template import TemplateResponse, TemplateUpdate
-
-MIME_TYPES_ACCETTATI = {"application/pdf"}
+from app.schemas.documento import DocumentoResponse
+from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
 
 
 class TemplateService:
@@ -18,14 +14,13 @@ class TemplateService:
 
     async def get_all(
         self,
-        tipo: TipoTemplate | None,
-        solo_attivi: bool,
+        documento_id: int | None,
         params: PageParams,
     ) -> PagedResponse[TemplateResponse]:
         templates = await self.repo.get_all(
-            tipo=tipo, solo_attivi=solo_attivi, offset=params.offset, limit=params.limit
+            documento_id=documento_id, offset=params.offset, limit=params.limit
         )
-        total = await self.repo.count_all(tipo=tipo, solo_attivi=solo_attivi)
+        total = await self.repo.count_all(documento_id=documento_id)
         items = [TemplateResponse.model_validate(t) for t in templates]
         return paginate(items, total, params)
 
@@ -35,35 +30,9 @@ class TemplateService:
             raise TemplateNotFoundError(template_id)
         return TemplateResponse.model_validate(template)
 
-    async def upload(
-        self,
-        file: UploadFile,
-        tipo: TipoTemplate,
-        nome: str,
-        descrizione: str | None = None,
-    ) -> TemplateResponse:
-        if file.content_type not in MIME_TYPES_ACCETTATI:
-            raise TemplateTipoNonValidoError(file.content_type or "unknown")
-
-        content = await file.read()
-        if not validate_pdf(content):
-            raise TemplateTipoNonValidoError(file.content_type or "unknown")
-
-        await file.seek(0)
-        file_path, checksum, dimensione = await save_upload(
-            file,
-            f"templates/{tipo.value}",
-        )
-
-        template = await self.repo.create(
-            nome=nome,
-            tipo=tipo,
-            file_path=file_path,
-            mime_type=file.content_type or "application/pdf",
-            dimensione_bytes=dimensione,
-            checksum=checksum,
-            descrizione=descrizione,
-        )
+    async def create(self, data: TemplateCreate) -> TemplateResponse:
+        # documento_id inesistente → IntegrityError → 409 (handler globale).
+        template = await self.repo.create(data)
         return TemplateResponse.model_validate(template)
 
     async def update(self, template_id: int, data: TemplateUpdate) -> TemplateResponse:
@@ -73,9 +42,16 @@ class TemplateService:
         updated = await self.repo.update(template, data)
         return TemplateResponse.model_validate(updated)
 
+    async def get_documento_file(self, template_id: int) -> DocumentoResponse:
+        """Documento (file) collegato al template, per il download."""
+        template = await self.repo.get_with_documento(template_id)
+        if not template:
+            raise TemplateNotFoundError(template_id)
+        return DocumentoResponse.model_validate(template.documento)
+
     async def delete(self, template_id: int) -> None:
         template = await self.repo.get_by_id(template_id)
         if not template:
             raise TemplateNotFoundError(template_id)
-        delete_file(template.file_path)
+        # Il file appartiene al Documento: non viene cancellato qui.
         await self.repo.delete(template)

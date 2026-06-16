@@ -103,3 +103,16 @@ class SottovoceRendiconto(LookupBase):
 
 class NaturaFlusso(LookupBase):
     __tablename__ = "nature_flusso"
+
+
+# ── Archivio documentale (Pass 3) ────────────────────────────────────────────
+class TipoDocumento(LookupBase):
+    __tablename__ = "tipi_documento"
+
+
+class TipoSpartito(LookupBase):
+    __tablename__ = "tipi_spartito"
+
+
+class StatoIscrizione(LookupBase):
+    __tablename__ = "stati_iscrizione"

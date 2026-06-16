@@ -1,33 +1,33 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
-
-class TipoTemplate(StrEnum):
-    MODULO_ISCRIZIONE = "modulo_iscrizione"
-    RICEVUTA = "ricevuta"
-    COMUNICAZIONE = "comunicazione"
-    ALTRO = "altro"
+if TYPE_CHECKING:
+    from app.models.documento import Documento
 
 
 class Template(Base):
+    """Template documentale: metadati su un Documento archiviato.
+
+    Base del futuro sistema di documenti dinamici (configuratore campi a
+    frontend). Il file vive su ``documenti``; il template ne è una vista con
+    nome e descrizione applicativi.
+    """
+
     __tablename__ = "templates"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    documento_id: Mapped[int] = mapped_column(
+        ForeignKey("documenti.id"), nullable=False
+    )
     nome: Mapped[str] = mapped_column(String(255))
-    tipo: Mapped[TipoTemplate] = mapped_column(String(50))
     descrizione: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    file_path: Mapped[str] = mapped_column(String(500))
-    mime_type: Mapped[str] = mapped_column(String(100))
-    dimensione_bytes: Mapped[int] = mapped_column(Integer)
-    checksum: Mapped[str] = mapped_column(String(64))
-    attivo: Mapped[bool] = mapped_column(Boolean, default=True)
     creato_il: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -36,3 +36,5 @@ class Template(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+    documento: Mapped[Documento] = relationship()

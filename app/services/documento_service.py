@@ -5,7 +5,6 @@ from fastapi import UploadFile
 
 from app.core.storage import delete_file, save_upload, validate_pdf
 from app.exceptions.documento import DocumentoNotFoundError, DocumentoTipoNonValidoError
-from app.models.documento import TipoDocumento
 from app.repositories.documento_repository import DocumentoRepository
 from app.schemas.documento import DocumentoResponse
 
@@ -18,15 +17,15 @@ class DocumentoService:
 
     async def get_all(
         self,
-        tipo: TipoDocumento | None,
+        tipo_documento_codice: int | None,
         params: PageParams,
     ) -> PagedResponse[DocumentoResponse]:
         documenti = await self.repo.get_all(
-            tipo=tipo,
+            tipo_documento_codice=tipo_documento_codice,
             offset=params.offset,
             limit=params.limit,
         )
-        total = await self.repo.count_all(tipo=tipo)
+        total = await self.repo.count_all(tipo_documento_codice=tipo_documento_codice)
         items = [DocumentoResponse.model_validate(d) for d in documenti]
         return paginate(items, total, params)
 
@@ -36,15 +35,10 @@ class DocumentoService:
             raise DocumentoNotFoundError(documento_id)
         return DocumentoResponse.model_validate(documento)
 
-    async def get_by_socio(self, socio_id: int) -> list[DocumentoResponse]:
-        documenti = await self.repo.get_by_socio(socio_id)
-        return [DocumentoResponse.model_validate(d) for d in documenti]
-
     async def upload(
         self,
         file: UploadFile,
-        tipo: TipoDocumento,
-        socio_id: int | None = None,
+        tipo_documento_codice: int | None = None,
         note: str | None = None,
     ) -> DocumentoResponse:
         if file.content_type not in MIME_TYPES_ACCETTATI:
@@ -55,16 +49,20 @@ class DocumentoService:
             raise DocumentoTipoNonValidoError(file.content_type or "unknown")
 
         await file.seek(0)
-        file_path, checksum, dimensione = await save_upload(file, tipo.value)
+        sottocartella = (
+            f"documenti/{tipo_documento_codice}"
+            if tipo_documento_codice is not None
+            else "documenti"
+        )
+        file_path, checksum, dimensione = await save_upload(file, sottocartella)
 
         documento = await self.repo.create(
             nome=file.filename or "documento.pdf",
-            tipo=tipo,
             file_path=file_path,
             mime_type=file.content_type or "application/pdf",
             dimensione_bytes=dimensione,
             checksum=checksum,
-            socio_id=socio_id,
+            tipo_documento_codice=tipo_documento_codice,
             note=note,
         )
         return DocumentoResponse.model_validate(documento)

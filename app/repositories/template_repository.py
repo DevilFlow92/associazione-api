@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models.template import Template, TipoTemplate
-from app.schemas.template import TemplateUpdate
+from app.models.template import Template
+from app.schemas.template import TemplateCreate, TemplateUpdate
 
 
 class TemplateRepository:
@@ -13,30 +14,21 @@ class TemplateRepository:
 
     async def get_all(
         self,
-        tipo: TipoTemplate | None = None,
-        solo_attivi: bool = True,
+        documento_id: int | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[Template]:
         stmt = select(Template)
-        if tipo:
-            stmt = stmt.where(Template.tipo == tipo)
-        if solo_attivi:
-            stmt = stmt.where(Template.attivo.is_(True))
+        if documento_id is not None:
+            stmt = stmt.where(Template.documento_id == documento_id)
         stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_all(
-        self,
-        tipo: TipoTemplate | None = None,
-        solo_attivi: bool = True,
-    ) -> int:
+    async def count_all(self, documento_id: int | None = None) -> int:
         stmt = select(func.count()).select_from(Template)
-        if tipo:
-            stmt = stmt.where(Template.tipo == tipo)
-        if solo_attivi:
-            stmt = stmt.where(Template.attivo.is_(True))
+        if documento_id is not None:
+            stmt = stmt.where(Template.documento_id == documento_id)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
@@ -45,25 +37,17 @@ class TemplateRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def create(
-        self,
-        nome: str,
-        tipo: TipoTemplate,
-        file_path: str,
-        mime_type: str,
-        dimensione_bytes: int,
-        checksum: str,
-        descrizione: str | None = None,
-    ) -> Template:
-        template = Template(
-            nome=nome,
-            tipo=tipo,
-            file_path=file_path,
-            mime_type=mime_type,
-            dimensione_bytes=dimensione_bytes,
-            checksum=checksum,
-            descrizione=descrizione,
+    async def get_with_documento(self, template_id: int) -> Template | None:
+        stmt = (
+            select(Template)
+            .where(Template.id == template_id)
+            .options(selectinload(Template.documento))
         )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create(self, data: TemplateCreate) -> Template:
+        template = Template(**data.model_dump())
         self.db.add(template)
         await self.db.commit()
         await self.db.refresh(template)
