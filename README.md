@@ -33,9 +33,12 @@ app/
 │   ├── esterni.py       # Externals router
 │   ├── servizi.py       # Events router (filterable by year)
 │   ├── ricevute.py      # Receipts router
+│   ├── voci_contabilita.py  # Accounting items router
+│   ├── flussi_cassa.py  # Cash-flow movements router
 │   ├── stati.py …       # Lookup routers (states, regions, provinces,
 │   │                    #   municipalities, instruments, address types,
-│   │                    #   bands, contact/band roles)
+│   │                    #   bands, contact/band roles, rendiconto sections/
+│   │                    #   items/sub-items, cash-flow natures)
 │   ├── documenti.py     # Documents router (file repository)
 │   └── templates.py     # Templates router (file repository)
 ├── core/
@@ -64,17 +67,20 @@ The schema mirrors the association's legacy database (`legacy_db/`). Core
 anagrafica entities — **Persona**, **Indirizzo**, **Contatto**, **Socio**,
 **Esterno** — are backed by **dimension (lookup) tables** (`Stato`, `Regione`,
 `Provincia`, `Comune`, `Strumento`, `TipoIndirizzo`, `Banda`, `RuoloContatto`,
-`RuoloBanda`). A person can hold several addresses (many-to-many via
-`persone_indirizzi`); a band can hold several addresses too (`bande_indirizzi`).
-The 9 lookup tables share a generic CRUD stack (`repositories/lookup.py`,
-`services/lookup.py`) to avoid duplication.
+`RuoloBanda`, plus the rendiconto lookups `SezioneRendiconto`, `VoceRendiconto`,
+`SottovoceRendiconto`, `NaturaFlusso`). A person can hold several addresses
+(many-to-many via `persone_indirizzi`); a band can hold several addresses too
+(`bande_indirizzi`). The 13 lookup tables share a generic CRUD stack
+(`repositories/lookup.py`, `services/lookup.py`) to avoid duplication.
 
 Events and receipts are modelled by **Servizio** (T_Servizi) and **Ricevuta**
 (T_Ricevute): a service/event happens at an address for a band in a given year,
 and receipts link a service to an external performer.
 
-> Accounting (contabilità — `VoceContabilita`, `FlussoCassa` and the rendiconto
-> lookups) is planned for a follow-up pass.
+Accounting (contabilità) is modelled by **VoceContabilita** (S_VoceContabilita —
+a band's chart-of-accounts line, classified by rendiconto section/item/sub-item)
+and **FlussoCassa** (T_FlussoCassa — cash movements against an accounting item,
+with a sign and a cash/bank nature).
 
 ## API endpoints
 
@@ -119,11 +125,24 @@ Standard CRUD under `/servizi` and `/ricevute`. In addition:
 it has receipts (409). `Ricevuta` requires an existing `servizio_id` and
 `esterno_id` (404 otherwise).
 
+### Contabilità (accounting)
+
+Standard CRUD under `/voci-contabilita` and `/flussi-cassa`. In addition:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/voci-contabilita/?banda_codice={codice}` | Accounting items, filterable by band |
+| `GET` | `/flussi-cassa/voce-contabilita/{voce_id}` | Cash movements for an accounting item |
+
+A `VoceContabilita` cannot be deleted while it has cash movements (409). A
+`FlussoCassa` requires an existing `voce_contabilita_id` (404 otherwise).
+
 ### Tabelle dimensione (lookups)
 
 Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 `/regioni`, `/province`, `/comuni`, `/strumenti`, `/tipi-indirizzo`, `/bande`,
-`/ruoli-contatto`, `/ruoli-banda`.
+`/ruoli-contatto`, `/ruoli-banda`, `/sezioni-rendiconto`, `/voci-rendiconto`,
+`/sottovoci-rendiconto`, `/nature-flusso`.
 
 | Method | Path | Description |
 |---|---|---|

@@ -8,7 +8,9 @@ from app.api.v1.comuni import router as comuni_router
 from app.api.v1.contatti import router as contatti_router
 from app.api.v1.documenti import router as documenti_router
 from app.api.v1.esterni import router as esterni_router
+from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
+from app.api.v1.nature_flusso import router as nature_flusso_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.province import router as province_router
 from app.api.v1.regioni import router as regioni_router
@@ -16,11 +18,15 @@ from app.api.v1.ricevute import router as ricevute_router
 from app.api.v1.ruoli_banda import router as ruoli_banda_router
 from app.api.v1.ruoli_contatto import router as ruoli_contatto_router
 from app.api.v1.servizi import router as servizi_router
+from app.api.v1.sezioni_rendiconto import router as sezioni_rendiconto_router
 from app.api.v1.soci import router as soci_router
+from app.api.v1.sottovoci_rendiconto import router as sottovoci_rendiconto_router
 from app.api.v1.stati import router as stati_router
 from app.api.v1.strumenti import router as strumenti_router
 from app.api.v1.templates import router as template_router
 from app.api.v1.tipi_indirizzo import router as tipi_indirizzo_router
+from app.api.v1.voci_contabilita import router as voci_contabilita_router
+from app.api.v1.voci_rendiconto import router as voci_rendiconto_router
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestMiddleware
@@ -90,6 +96,10 @@ app.include_router(esterni_router, prefix="/api/v1")
 app.include_router(servizi_router, prefix="/api/v1")
 app.include_router(ricevute_router, prefix="/api/v1")
 
+# ── Contabilità ──────────────────────────────────────────────────────────────
+app.include_router(voci_contabilita_router, prefix="/api/v1")
+app.include_router(flussi_cassa_router, prefix="/api/v1")
+
 # ── Tabelle dimensione (lookup) ──────────────────────────────────────────────
 app.include_router(stati_router, prefix="/api/v1")
 app.include_router(regioni_router, prefix="/api/v1")
@@ -100,6 +110,10 @@ app.include_router(tipi_indirizzo_router, prefix="/api/v1")
 app.include_router(bande_router, prefix="/api/v1")
 app.include_router(ruoli_contatto_router, prefix="/api/v1")
 app.include_router(ruoli_banda_router, prefix="/api/v1")
+app.include_router(sezioni_rendiconto_router, prefix="/api/v1")
+app.include_router(voci_rendiconto_router, prefix="/api/v1")
+app.include_router(sottovoci_rendiconto_router, prefix="/api/v1")
+app.include_router(nature_flusso_router, prefix="/api/v1")
 
 # ── Repository documentale (file) ────────────────────────────────────────────
 app.include_router(documenti_router, prefix="/api/v1")

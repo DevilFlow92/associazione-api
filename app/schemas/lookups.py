@@ -140,3 +140,55 @@ class RuoloBandaUpdate(LookupUpdate):
 
 class RuoloBandaResponse(LookupResponse):
     pass
+
+
+# ── SezioneRendiconto ────────────────────────────────────────────────────────
+class SezioneRendicontoCreate(LookupCreate):
+    pass
+
+
+class SezioneRendicontoUpdate(LookupUpdate):
+    pass
+
+
+class SezioneRendicontoResponse(LookupResponse):
+    pass
+
+
+# ── VoceRendiconto ───────────────────────────────────────────────────────────
+class VoceRendicontoCreate(LookupCreate):
+    pass
+
+
+class VoceRendicontoUpdate(LookupUpdate):
+    pass
+
+
+class VoceRendicontoResponse(LookupResponse):
+    pass
+
+
+# ── SottovoceRendiconto ──────────────────────────────────────────────────────
+class SottovoceRendicontoCreate(LookupCreate):
+    pass
+
+
+class SottovoceRendicontoUpdate(LookupUpdate):
+    pass
+
+
+class SottovoceRendicontoResponse(LookupResponse):
+    pass
+
+
+# ── NaturaFlusso ─────────────────────────────────────────────────────────────
+class NaturaFlussoCreate(LookupCreate):
+    pass
+
+
+class NaturaFlussoUpdate(LookupUpdate):
+    pass
+
+
+class NaturaFlussoResponse(LookupResponse):
+    pass

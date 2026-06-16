@@ -80,3 +80,26 @@ class RuoloContatto(LookupBase):
 
 class RuoloBanda(LookupBase):
     __tablename__ = "ruoli_banda"
+
+
+# ── Contabilità (Pass 2b) ────────────────────────────────────────────────────
+class SezioneRendiconto(LookupBase):
+    __tablename__ = "sezioni_rendiconto"
+
+
+class VoceRendiconto(LookupBase):
+    __tablename__ = "voci_rendiconto"
+
+    # Legacy D_VoceRendiconto.Descrizione è VARCHAR(255).
+    descrizione: Mapped[str] = mapped_column(String(255))
+
+
+class SottovoceRendiconto(LookupBase):
+    __tablename__ = "sottovoci_rendiconto"
+
+    # Legacy D_SottovoceRendiconto.Descrizione è VARCHAR(255).
+    descrizione: Mapped[str] = mapped_column(String(255))
+
+
+class NaturaFlusso(LookupBase):
+    __tablename__ = "nature_flusso"
