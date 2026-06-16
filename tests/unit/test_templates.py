@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 from httpx import AsyncClient
 
@@ -80,4 +82,28 @@ async def test_delete_template(client: AsyncClient):
     assert response.status_code == 204
 
     response = await client.get(f"/api/v1/templates/{template_id}")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_download_template(client: AsyncClient):
+    upload = await client.post(
+        "/api/v1/templates/?tipo=altro&nome=Scaricabile",
+        files=[pdf_file()],
+    )
+    template_id = upload.json()["id"]
+    response = await client.get(f"/api/v1/templates/{template_id}/download")
+    assert response.status_code == 200
+    assert response.content == b"%PDF-1.4 test template content"
+
+
+@pytest.mark.asyncio
+async def test_download_template_missing_file(client: AsyncClient):
+    upload = await client.post(
+        "/api/v1/templates/?tipo=altro&nome=Fantasma",
+        files=[pdf_file()],
+    )
+    data = upload.json()
+    os.remove(data["file_path"])  # il file sparisce ma la riga DB resta
+    response = await client.get(f"/api/v1/templates/{data['id']}/download")
     assert response.status_code == 404

@@ -217,5 +217,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Uploaded files (user data — persisted via a Docker volume, never committed)
+uploads/
+
 # Legacy components
 legacy_db/

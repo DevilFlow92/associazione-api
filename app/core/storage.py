@@ -28,10 +28,19 @@ async def save_upload(file: UploadFile, tipo: str) -> tuple[str, str, int]:
     return str(file_path), checksum, len(content)
 
 
+def file_exists(file_path: str) -> bool:
+    """True se il file referenziato esiste ancora sul disco."""
+    return Path(file_path).is_file()
+
+
 def delete_file(file_path: str) -> None:
     path = Path(file_path)
     if path.exists():
         path.unlink()
+    # Rimuove la cartella del tipo se è rimasta vuota, per evitare debris.
+    parent = path.parent
+    if parent != UPLOAD_DIR and parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()
 
 
 def validate_pdf(content: bytes) -> bool:

@@ -4,8 +4,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 from fastapi import UploadFile
 
 from app.core.storage import delete_file, save_upload, validate_pdf
-from app.exceptions.documento import DocumentoTipoNonValidoError
-from app.exceptions.template import TemplateNotFoundError
+from app.exceptions.template import TemplateNotFoundError, TemplateTipoNonValidoError
 from app.models.template import TipoTemplate
 from app.repositories.template_repository import TemplateRepository
 from app.schemas.template import TemplateResponse, TemplateUpdate
@@ -44,11 +43,11 @@ class TemplateService:
         descrizione: str | None = None,
     ) -> TemplateResponse:
         if file.content_type not in MIME_TYPES_ACCETTATI:
-            raise DocumentoTipoNonValidoError(file.content_type or "unknown")
+            raise TemplateTipoNonValidoError(file.content_type or "unknown")
 
         content = await file.read()
         if not validate_pdf(content):
-            raise DocumentoTipoNonValidoError(file.content_type or "unknown")
+            raise TemplateTipoNonValidoError(file.content_type or "unknown")
 
         await file.seek(0)
         file_path, checksum, dimensione = await save_upload(

@@ -6,8 +6,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.exceptions.documento import DocumentoTipoNonValidoError
-from app.exceptions.template import TemplateNotFoundError
+from app.core.storage import file_exists
+from app.exceptions.template import TemplateNotFoundError, TemplateTipoNonValidoError
 from app.models.template import TipoTemplate
 from app.repositories.template_repository import TemplateRepository
 from app.schemas.template import TemplateResponse, TemplateUpdate
@@ -51,7 +51,7 @@ async def upload_template(
 ) -> TemplateResponse:
     try:
         return await service.upload(file, tipo, nome, descrizione)
-    except DocumentoTipoNonValidoError as e:
+    except TemplateTipoNonValidoError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         ) from e
@@ -78,6 +78,10 @@ async def download_template(
         t = await service.get_by_id(template_id)
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    if not file_exists(t.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
+        )
     return FileResponse(path=t.file_path, media_type=t.mime_type, filename=t.nome)
 
 

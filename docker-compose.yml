@@ -19,6 +19,9 @@ services:
       APP_ENV: development
       APP_DEBUG: "true"
       SECRET_KEY: changeme
+    volumes:
+      # File caricati: cartella condivisa host↔container e persistente tra i build.
+      - ./uploads:/app/uploads
     depends_on:
       - db
 

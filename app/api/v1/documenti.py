@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.storage import file_exists
 from app.exceptions.documento import DocumentoNotFoundError, DocumentoTipoNonValidoError
 from app.models.documento import TipoDocumento
 from app.repositories.documento_repository import DocumentoRepository
@@ -72,6 +73,10 @@ async def download_documento(
         doc = await service.get_by_id(documento_id)
     except DocumentoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    if not file_exists(doc.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
+        )
     return FileResponse(path=doc.file_path, media_type=doc.mime_type, filename=doc.nome)
 
 
