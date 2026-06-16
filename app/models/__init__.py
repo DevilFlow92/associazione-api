@@ -14,6 +14,8 @@ from app.models.lookups import (  # noqa: F401
     TipoIndirizzo,
 )
 from app.models.persona import Persona  # noqa: F401
-from app.models.relations import persone_indirizzi  # noqa: F401
+from app.models.relations import bande_indirizzi, persone_indirizzi  # noqa: F401
+from app.models.ricevuta import Ricevuta  # noqa: F401
+from app.models.servizio import Servizio  # noqa: F401
 from app.models.socio import Socio  # noqa: F401
 from app.models.template import Template  # noqa: F401

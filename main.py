@@ -12,8 +12,10 @@ from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.province import router as province_router
 from app.api.v1.regioni import router as regioni_router
+from app.api.v1.ricevute import router as ricevute_router
 from app.api.v1.ruoli_banda import router as ruoli_banda_router
 from app.api.v1.ruoli_contatto import router as ruoli_contatto_router
+from app.api.v1.servizi import router as servizi_router
 from app.api.v1.soci import router as soci_router
 from app.api.v1.stati import router as stati_router
 from app.api.v1.strumenti import router as strumenti_router
@@ -83,6 +85,10 @@ app.include_router(indirizzi_router, prefix="/api/v1")
 app.include_router(contatti_router, prefix="/api/v1")
 app.include_router(soci_router, prefix="/api/v1")
 app.include_router(esterni_router, prefix="/api/v1")
+
+# ── Eventi & ricevute ────────────────────────────────────────────────────────
+app.include_router(servizi_router, prefix="/api/v1")
+app.include_router(ricevute_router, prefix="/api/v1")
 
 # ── Tabelle dimensione (lookup) ──────────────────────────────────────────────
 app.include_router(stati_router, prefix="/api/v1")

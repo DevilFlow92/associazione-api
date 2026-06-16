@@ -6,9 +6,10 @@ from sqlalchemy import ForeignKey, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.relations import persone_indirizzi
+from app.models.relations import bande_indirizzi, persone_indirizzi
 
 if TYPE_CHECKING:
+    from app.models.lookups import Banda
     from app.models.persona import Persona
 
 
@@ -30,4 +31,7 @@ class Indirizzo(Base):
 
     persone: Mapped[list[Persona]] = relationship(
         secondary=persone_indirizzi, back_populates="indirizzi"
+    )
+    bande: Mapped[list[Banda]] = relationship(
+        secondary=bande_indirizzi, back_populates="indirizzi"
     )

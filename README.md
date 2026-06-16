@@ -31,6 +31,8 @@ app/
 │   ├── contatti.py      # Contacts router
 │   ├── soci.py          # Members router
 │   ├── esterni.py       # Externals router
+│   ├── servizi.py       # Events router (filterable by year)
+│   ├── ricevute.py      # Receipts router
 │   ├── stati.py …       # Lookup routers (states, regions, provinces,
 │   │                    #   municipalities, instruments, address types,
 │   │                    #   bands, contact/band roles)
@@ -63,11 +65,16 @@ anagrafica entities — **Persona**, **Indirizzo**, **Contatto**, **Socio**,
 **Esterno** — are backed by **dimension (lookup) tables** (`Stato`, `Regione`,
 `Provincia`, `Comune`, `Strumento`, `TipoIndirizzo`, `Banda`, `RuoloContatto`,
 `RuoloBanda`). A person can hold several addresses (many-to-many via
-`persone_indirizzi`). The 9 lookup tables share a generic CRUD stack
-(`repositories/lookup.py`, `services/lookup.py`) to avoid duplication.
+`persone_indirizzi`); a band can hold several addresses too (`bande_indirizzi`).
+The 9 lookup tables share a generic CRUD stack (`repositories/lookup.py`,
+`services/lookup.py`) to avoid duplication.
 
-> Services, receipts and accounting (`Servizio`, `Ricevuta`, contabilità) are
-> planned for a follow-up pass.
+Events and receipts are modelled by **Servizio** (T_Servizi) and **Ricevuta**
+(T_Ricevute): a service/event happens at an address for a band in a given year,
+and receipts link a service to an external performer.
+
+> Accounting (contabilità — `VoceContabilita`, `FlussoCassa` and the rendiconto
+> lookups) is planned for a follow-up pass.
 
 ## API endpoints
 
@@ -99,6 +106,19 @@ Each exposes standard CRUD under its prefix (`/indirizzi`, `/contatti`, `/soci`,
 `Socio` and `Esterno` require an existing `persona_id` (404 otherwise) and reject
 duplicate codes (409). `Contatto` requires an existing `persona_id`.
 
+### Servizi · Ricevute (events & receipts)
+
+Standard CRUD under `/servizi` and `/ricevute`. In addition:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/servizi/?anno={anno}` | List events, filterable by year (paginated) |
+| `GET` | `/ricevute/servizio/{servizio_id}` | Receipts for an event (paginated) |
+
+`Servizio` requires an existing `indirizzo_id` (404), and cannot be deleted while
+it has receipts (409). `Ricevuta` requires an existing `servizio_id` and
+`esterno_id` (404 otherwise).
+
 ### Tabelle dimensione (lookups)
 
 Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
@@ -112,6 +132,14 @@ Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 | `POST` | `/{lookup}/` | Create an entry (409 on duplicate code) |
 | `PATCH` | `/{lookup}/{codice}` | Update an entry |
 | `DELETE` | `/{lookup}/{codice}` | Delete an entry (204) |
+
+`Banda` additionally manages its addresses (many-to-many):
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/bande/{codice}/indirizzi` | List a band's addresses |
+| `PUT` | `/bande/{codice}/indirizzi/{indirizzo_id}` | Link an address to a band |
+| `DELETE` | `/bande/{codice}/indirizzi/{indirizzo_id}` | Unlink an address (204) |
 
 ### Documenti
 

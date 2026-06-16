@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, SmallInteger, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.relations import bande_indirizzi
+
+if TYPE_CHECKING:
+    from app.models.indirizzo import Indirizzo
 
 
 class LookupBase(Base):
@@ -62,6 +68,10 @@ class TipoIndirizzo(LookupBase):
 
 class Banda(LookupBase):
     __tablename__ = "bande"
+
+    indirizzi: Mapped[list[Indirizzo]] = relationship(
+        secondary=bande_indirizzi, back_populates="bande"
+    )
 
 
 class RuoloContatto(LookupBase):
