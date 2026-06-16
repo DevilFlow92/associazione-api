@@ -31,6 +31,7 @@ app/
 │   ├── contatti.py      # Contacts router
 │   ├── soci.py          # Members router
 │   ├── esterni.py       # Externals router
+│   ├── iscrizioni.py    # Annual subscriptions router
 │   ├── servizi.py       # Events router (filterable by year)
 │   ├── ricevute.py      # Receipts router
 │   ├── voci_contabilita.py  # Accounting items router
@@ -38,9 +39,11 @@ app/
 │   ├── stati.py …       # Lookup routers (states, regions, provinces,
 │   │                    #   municipalities, instruments, address types,
 │   │                    #   bands, contact/band roles, rendiconto sections/
-│   │                    #   items/sub-items, cash-flow natures)
+│   │                    #   items/sub-items, cash-flow natures,
+│   │                    #   document types, score types, subscription states)
 │   ├── documenti.py     # Documents router (file repository)
-│   └── templates.py     # Templates router (file repository)
+│   ├── spartiti.py      # Scores router
+│   └── templates.py     # Templates router
 ├── core/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── database.py      # Async engine & session factory
@@ -68,14 +71,34 @@ anagrafica entities — **Persona**, **Indirizzo**, **Contatto**, **Socio**,
 **Esterno** — are backed by **dimension (lookup) tables** (`Stato`, `Regione`,
 `Provincia`, `Comune`, `Strumento`, `TipoIndirizzo`, `Banda`, `RuoloContatto`,
 `RuoloBanda`, plus the rendiconto lookups `SezioneRendiconto`, `VoceRendiconto`,
-`SottovoceRendiconto`, `NaturaFlusso`). A person can hold several addresses
-(many-to-many via `persone_indirizzi`); a band can hold several addresses too
-(`bande_indirizzi`). The 13 lookup tables share a generic CRUD stack
-(`repositories/lookup.py`, `services/lookup.py`) to avoid duplication.
+`SottovoceRendiconto`, `NaturaFlusso`, and the documentary lookups
+`TipoDocumento`, `TipoSpartito`, `StatoIscrizione`). A person can hold several
+addresses (many-to-many via `persone_indirizzi`); a band can hold several
+addresses too (`bande_indirizzi`). All 16 lookup tables share a generic CRUD
+stack (`repositories/lookup.py`, `services/lookup.py`) to avoid duplication.
+
+**Iscrizione** models a member's annual subscription: each socio must subscribe
+once per year (unique constraint on `socio_id` + `anno`), with a participation
+quota, a payment state, and optional references to the membership document and
+the receipt issued for the payment.
 
 Events and receipts are modelled by **Servizio** (T_Servizi) and **Ricevuta**
-(T_Ricevute): a service/event happens at an address for a band in a given year,
-and receipts link a service to an external performer.
+(T_Ricevute). A receipt can cover either an external performer's fee for a
+service (`servizio_id` + `esterno_id`) or a member's annual subscription quota
+(both fields null, referenced from `Iscrizione`).
+
+**Spartito** archives a musical score: it links to a `Documento` (the PDF file),
+a score type (marcia festiva, inno religioso, …), an optional instrument (null
+means a single PDF containing all parts), and optional physical location
+(scaffale / ripiano / cartella).
+
+**Documento** is a pure file archive — a PDF repository decoupled from the
+membership model, classified by `TipoDocumento`. Other aggregates (Spartito,
+Iscrizione, Ricevuta, Template) reference documents by FK.
+
+**Template** is a lightweight metadata record pointing to a `Documento`. It is
+the foundation of a future dynamic-document system (field configurator + frontend
+renderer for receipts, annual reports, etc.).
 
 Accounting (contabilità) is modelled by **VoceContabilita** (S_VoceContabilita —
 a band's chart-of-accounts line, classified by rendiconto section/item/sub-item)
@@ -99,18 +122,22 @@ Base prefix: `/api/v1`
 | `PUT` | `/persone/{id}/indirizzi/{indirizzo_id}` | Link an address to a person |
 | `DELETE` | `/persone/{id}/indirizzi/{indirizzo_id}` | Unlink an address (204) |
 
-### Indirizzi · Contatti · Soci · Esterni
+### Indirizzi · Contatti · Soci · Esterni · Iscrizioni
 
 Each exposes standard CRUD under its prefix (`/indirizzi`, `/contatti`, `/soci`,
-`/esterni`): `GET /` (paginated list), `GET /{id}`, `POST /`, `PATCH /{id}`,
-`DELETE /{id}` (204). In addition:
+`/esterni`, `/iscrizioni`): `GET /` (paginated list), `GET /{id}`, `POST /`,
+`PATCH /{id}`, `DELETE /{id}` (204). In addition:
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/contatti/persona/{persona_id}` | Contacts for a person (paginated) |
+| `GET` | `/iscrizioni/?socio_id={id}` | Subscriptions for a member (paginated) |
+| `GET` | `/iscrizioni/?anno={anno}` | Subscriptions for a given year (paginated) |
 
 `Socio` and `Esterno` require an existing `persona_id` (404 otherwise) and reject
 duplicate codes (409). `Contatto` requires an existing `persona_id`.
+`Iscrizione` requires an existing `socio_id` (404) and rejects duplicate
+`(socio_id, anno)` pairs (409 — one subscription per member per year).
 
 ### Servizi · Ricevute (events & receipts)
 
@@ -122,8 +149,9 @@ Standard CRUD under `/servizi` and `/ricevute`. In addition:
 | `GET` | `/ricevute/servizio/{servizio_id}` | Receipts for an event (paginated) |
 
 `Servizio` requires an existing `indirizzo_id` (404), and cannot be deleted while
-it has receipts (409). `Ricevuta` requires an existing `servizio_id` and
-`esterno_id` (404 otherwise).
+it has receipts (409). `Ricevuta` supports two use cases: an external
+performer's fee (`servizio_id` + `esterno_id`, both validated if provided) and a
+member's subscription receipt (both omitted, referenced from `Iscrizione`).
 
 ### Contabilità (accounting)
 
@@ -142,7 +170,8 @@ A `VoceContabilita` cannot be deleted while it has cash movements (409). A
 Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 `/regioni`, `/province`, `/comuni`, `/strumenti`, `/tipi-indirizzo`, `/bande`,
 `/ruoli-contatto`, `/ruoli-banda`, `/sezioni-rendiconto`, `/voci-rendiconto`,
-`/sottovoci-rendiconto`, `/nature-flusso`.
+`/sottovoci-rendiconto`, `/nature-flusso`, `/tipi-documento`, `/tipi-spartito`,
+`/stati-iscrizione`.
 
 | Method | Path | Description |
 |---|---|---|
@@ -162,25 +191,44 @@ Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 
 ### Documenti
 
+A pure file archive — PDF documents classified by `tipo_documento_codice`,
+decoupled from the membership model.
+
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/documenti/` | List documents, filterable by type (paginated) |
-| `GET` | `/documenti/socio/{socio_id}` | Get all documents for a member |
+| `GET` | `/documenti/` | List documents (paginated, filterable by `tipo_documento_codice`) |
 | `GET` | `/documenti/{id}` | Get a document by ID |
-| `POST` | `/documenti/` | Upload a PDF document |
-| `GET` | `/documenti/{id}/download` | Download a document |
-| `DELETE` | `/documenti/{id}` | Delete a document (204) |
+| `POST` | `/documenti/?tipo_documento_codice={codice}` | Upload a PDF document |
+| `GET` | `/documenti/{id}/download` | Download a document (404 if file missing) |
+| `DELETE` | `/documenti/{id}` | Delete a document and its file (204) |
+
+### Spartiti
+
+Archives musical scores. Each spartito links to a `Documento` (the PDF), a score
+type, and optionally an instrument (`strumento_codice` null = single PDF with all
+parts) and physical location.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/spartiti/` | List scores (paginated, filterable by `tipo_spartito_codice` / `strumento_codice`) |
+| `GET` | `/spartiti/{id}` | Get a score by ID |
+| `POST` | `/spartiti/` | Create a score record |
+| `PATCH` | `/spartiti/{id}` | Update score metadata |
+| `DELETE` | `/spartiti/{id}` | Delete a score record (204) |
 
 ### Templates
 
+Lightweight metadata pointing to a `Documento`. Foundation of the future
+dynamic-document system (field configurator + frontend renderer).
+
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/templates/` | List templates, filterable by type (paginated) |
+| `GET` | `/templates/` | List templates (paginated, filterable by `documento_id`) |
 | `GET` | `/templates/{id}` | Get a template by ID |
-| `POST` | `/templates/` | Upload a PDF template |
-| `PATCH` | `/templates/{id}` | Update template metadata |
-| `GET` | `/templates/{id}/download` | Download a template |
-| `DELETE` | `/templates/{id}` | Delete a template (204) |
+| `POST` | `/templates/` | Create a template (JSON: `documento_id`, `nome`, `descrizione`) |
+| `PATCH` | `/templates/{id}` | Update template name / description |
+| `GET` | `/templates/{id}/download` | Download the linked document's file (404 if missing) |
+| `DELETE` | `/templates/{id}` | Delete a template record (204; document is preserved) |
 
 ### Health
 
@@ -339,6 +387,10 @@ The RBAC model is association-configurable, meaning each banda can decide which 
 
 ### Other planned features
 
+- **Dynamic document system** — a field configurator and frontend renderer built
+  on top of the `Template` model. Will support receipts (for members and
+  externals), annual financial reports populated from contabilità data, and other
+  document types. Planned as a separate repository linked to this API.
 - Bulk import of members and externals from Excel files (via async worker)
 - Event management — processioni, concerti, prove — with attendance tracking
 - Receipt generation for externals and event revenues
