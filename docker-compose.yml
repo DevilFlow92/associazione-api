@@ -5,20 +5,34 @@ services:
       POSTGRES_USER: associazione
       POSTGRES_PASSWORD: associazione
       POSTGRES_DB: associazione_db
+      # Password dei ruoli a privilegio minimo creati da db/01-roles.sh.
+      APP_RW_PASSWORD: app_rw
+      APP_RO_PASSWORD: app_ro
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Provisioning ruoli DB (eseguito una sola volta al primo init del volume).
+      - ./db:/docker-entrypoint-initdb.d:ro
 
   api:
     build: .
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://associazione:associazione@db:5432/associazione_db
+      # A runtime l'API usa il ruolo a privilegio minimo `app_rw` (solo DML).
+      # Le migrazioni Alembic (DDL) vanno eseguite con l'owner `associazione`.
+      DATABASE_URL: postgresql+asyncpg://app_rw:app_rw@db:5432/associazione_db
+      # URL del proprietario, usato per `alembic upgrade head` (DDL).
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://associazione:associazione@db:5432/associazione_db
       APP_ENV: development
       APP_DEBUG: "true"
-      SECRET_KEY: changeme
+    env_file:
+      # File decifrato da SOPS prima di avviare i container:
+      #   sops --decrypt --input-type dotenv --output-type dotenv .secrets.enc.env > .secrets.env
+      #   docker compose up -d
+      - path: .secrets.env
+        required: false
     volumes:
       # File caricati: cartella condivisa host↔container e persistente tra i build.
       - ./uploads:/app/uploads

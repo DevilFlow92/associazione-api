@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 import app.models  # noqa: F401
+from app.api.deps import get_current_user
+from app.api.v1.auth import router as auth_router
 from app.api.v1.bande import router as bande_router
 from app.api.v1.comuni import router as comuni_router
 from app.api.v1.contatti import router as contatti_router
@@ -12,10 +14,12 @@ from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.iscrizioni import router as iscrizioni_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
+from app.api.v1.permessi import router as permessi_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.province import router as province_router
 from app.api.v1.regioni import router as regioni_router
 from app.api.v1.ricevute import router as ricevute_router
+from app.api.v1.ruoli import router as ruoli_router
 from app.api.v1.ruoli_banda import router as ruoli_banda_router
 from app.api.v1.ruoli_contatto import router as ruoli_contatto_router
 from app.api.v1.servizi import router as servizi_router
@@ -30,11 +34,18 @@ from app.api.v1.templates import router as template_router
 from app.api.v1.tipi_documento import router as tipi_documento_router
 from app.api.v1.tipi_indirizzo import router as tipi_indirizzo_router
 from app.api.v1.tipi_spartito import router as tipi_spartito_router
+from app.api.v1.utenti import router as utenti_router
 from app.api.v1.voci_contabilita import router as voci_contabilita_router
 from app.api.v1.voci_rendiconto import router as voci_rendiconto_router
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestMiddleware
+from app.exceptions.auth import (
+    InactiveUserError,
+    InvalidCredentialsError,
+    InvalidTokenError,
+    PermissionDeniedError,
+)
 from app.exceptions.lookup import LookupDuplicateCodiceError, LookupNotFoundError
 
 # Configura logging prima di tutto il resto.
@@ -90,44 +101,82 @@ async def integrity_error_handler(
     )
 
 
+# Errori di autenticazione/autorizzazione → 401/403. I router gestiscono già
+# i casi inline, ma questi handler coprono le eccezioni propagate dai service.
+@app.exception_handler(InvalidCredentialsError)
+async def invalid_credentials_handler(
+    request: Request, exc: InvalidCredentialsError
+) -> JSONResponse:
+    return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+
+@app.exception_handler(InvalidTokenError)
+async def invalid_token_handler(
+    request: Request, exc: InvalidTokenError
+) -> JSONResponse:
+    return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+
+@app.exception_handler(InactiveUserError)
+async def inactive_user_handler(
+    request: Request, exc: InactiveUserError
+) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
+@app.exception_handler(PermissionDeniedError)
+async def permission_denied_handler(
+    request: Request, exc: PermissionDeniedError
+) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
+# ── Autenticazione & RBAC ────────────────────────────────────────────────────
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(utenti_router, prefix="/api/v1")
+app.include_router(ruoli_router, prefix="/api/v1")
+app.include_router(permessi_router, prefix="/api/v1")
+
+_auth = [Depends(get_current_user)]
+
 # ── Anagrafica (entità core) ─────────────────────────────────────────────────
-app.include_router(persone_router, prefix="/api/v1")
-app.include_router(indirizzi_router, prefix="/api/v1")
-app.include_router(contatti_router, prefix="/api/v1")
-app.include_router(soci_router, prefix="/api/v1")
-app.include_router(esterni_router, prefix="/api/v1")
-app.include_router(iscrizioni_router, prefix="/api/v1")
+app.include_router(persone_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(indirizzi_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(contatti_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(soci_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(esterni_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(iscrizioni_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Eventi & ricevute ────────────────────────────────────────────────────────
-app.include_router(servizi_router, prefix="/api/v1")
-app.include_router(ricevute_router, prefix="/api/v1")
+app.include_router(servizi_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(ricevute_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Contabilità ──────────────────────────────────────────────────────────────
-app.include_router(voci_contabilita_router, prefix="/api/v1")
-app.include_router(flussi_cassa_router, prefix="/api/v1")
+app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(flussi_cassa_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Tabelle dimensione (lookup) ──────────────────────────────────────────────
-app.include_router(stati_router, prefix="/api/v1")
-app.include_router(regioni_router, prefix="/api/v1")
-app.include_router(province_router, prefix="/api/v1")
-app.include_router(comuni_router, prefix="/api/v1")
-app.include_router(strumenti_router, prefix="/api/v1")
-app.include_router(tipi_indirizzo_router, prefix="/api/v1")
-app.include_router(bande_router, prefix="/api/v1")
-app.include_router(ruoli_contatto_router, prefix="/api/v1")
-app.include_router(ruoli_banda_router, prefix="/api/v1")
-app.include_router(sezioni_rendiconto_router, prefix="/api/v1")
-app.include_router(voci_rendiconto_router, prefix="/api/v1")
-app.include_router(sottovoci_rendiconto_router, prefix="/api/v1")
-app.include_router(nature_flusso_router, prefix="/api/v1")
-app.include_router(tipi_documento_router, prefix="/api/v1")
-app.include_router(tipi_spartito_router, prefix="/api/v1")
-app.include_router(stati_iscrizione_router, prefix="/api/v1")
+app.include_router(stati_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(regioni_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(province_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(comuni_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(strumenti_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(tipi_indirizzo_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(bande_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(ruoli_contatto_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(ruoli_banda_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(sezioni_rendiconto_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(voci_rendiconto_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(sottovoci_rendiconto_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(nature_flusso_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(tipi_documento_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(tipi_spartito_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(stati_iscrizione_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Archivio documentale (file) ──────────────────────────────────────────────
-app.include_router(documenti_router, prefix="/api/v1")
-app.include_router(template_router, prefix="/api/v1")
-app.include_router(spartiti_router, prefix="/api/v1")
+app.include_router(documenti_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(template_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(spartiti_router, prefix="/api/v1", dependencies=_auth)
 
 
 @app.get("/health")

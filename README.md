@@ -25,8 +25,14 @@ REST API backend for music association management — members, annual subscripti
 
 ```text
 app/
-├── api/v1/
-│   ├── persone.py       # People (anagrafica) router + addresses (M2M)
+├── api/
+│   ├── deps.py          # Auth dependencies (current user, permission guards)
+│   └── v1/
+│       ├── auth.py      # Login/logout (sessions), JWT issuance, /me
+│       ├── utenti.py    # Users router (humans & service accounts)
+│       ├── ruoli.py     # Roles router (RBAC)
+│       ├── permessi.py  # Permissions catalogue (read-only)
+│       ├── persone.py   # People (anagrafica) router + addresses (M2M)
 │   ├── indirizzi.py     # Addresses router
 │   ├── contatti.py      # Contacts router
 │   ├── soci.py          # Members router
@@ -49,6 +55,7 @@ app/
 │   ├── database.py      # Async engine & session factory
 │   ├── logging.py       # Shim → associazione_toolkit.logging
 │   ├── middleware.py     # Request ID & timing middleware
+│   ├── security.py      # Password hashing, JWT, session tokens
 │   └── storage.py       # File upload & validation
 ├── exceptions/          # Domain-specific exceptions
 ├── models/              # SQLAlchemy models (lookups.py + entity modules)
@@ -230,6 +237,39 @@ dynamic-document system (field configurator + frontend renderer).
 | `GET` | `/templates/{id}/download` | Download the linked document's file (404 if missing) |
 | `DELETE` | `/templates/{id}` | Delete a template record (204; document is preserved) |
 
+### Autenticazione & RBAC
+
+Due piani di autenticazione distinti (vedi [Authentication & access](#authentication--multi-user-access)):
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/auth/login` | Login umano: apre una sessione server-side e imposta il cookie `session_token` |
+| `POST` | `/auth/logout` | Revoca la sessione corrente e cancella il cookie |
+| `POST` | `/auth/token` | Rilascia un JWT a un *service account* (macchina-a-macchina) |
+| `GET` | `/auth/me` | Profilo, ruoli e permessi dell'utente autenticato |
+
+Gestione utenti, ruoli e permessi (RBAC):
+
+| Method | Path | Description | Permesso |
+|---|---|---|---|
+| `GET` | `/utenti/` | Lista utenti (paginata) | `utenti:read` |
+| `GET` | `/utenti/{id}` | Dettaglio utente | `utenti:read` |
+| `POST` | `/utenti/` | Crea un utente (umano o service account) | `utenti:write` |
+| `PATCH` | `/utenti/{id}` | Aggiorna utente (stato, superuser, ruoli) | `utenti:write` |
+| `PUT` | `/utenti/{id}/password` | Imposta una nuova password | `utenti:write` |
+| `DELETE` | `/utenti/{id}` | Elimina un utente (204) | `utenti:write` |
+| `GET` | `/ruoli/` | Lista ruoli (paginata) | `ruoli:read` |
+| `GET` | `/ruoli/{id}` | Dettaglio ruolo coi suoi permessi | `ruoli:read` |
+| `POST` | `/ruoli/` | Crea un ruolo (409 su nome duplicato) | `ruoli:write` |
+| `PATCH` | `/ruoli/{id}` | Aggiorna ruolo / set di permessi | `ruoli:write` |
+| `DELETE` | `/ruoli/{id}` | Elimina un ruolo (204) | `ruoli:write` |
+| `GET` | `/permessi/` | Catalogo dei permessi disponibili | `ruoli:read` |
+
+I *superuser* bypassano il controllo dei permessi. Gli endpoint di dominio non
+sono ancora protetti dalle guardie RBAC: i permessi `anagrafica:*`,
+`contabilita:*`, `servizi:*`, `archivio:*` sono già definiti e pronti per essere
+applicati.
+
 ### Health
 
 | Method | Path |
@@ -316,10 +356,20 @@ This starts PostgreSQL 16 on port `5432` and the API on port `8000`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://user:password@localhost:5432/associazione_db` | Async PostgreSQL connection string |
+| `DATABASE_URL` | `postgresql+asyncpg://user:password@localhost:5432/associazione_db` | Async PostgreSQL connection string used by the API at runtime (least-privilege role in production) |
+| `MIGRATION_DATABASE_URL` | _(unset → falls back to `DATABASE_URL`)_ | Connection string used by Alembic for DDL — the schema-owner role |
 | `APP_ENV` | `development` | Environment name — controls log format (JSON in non-development) |
 | `APP_DEBUG` | `true` | Enables debug log level |
 | `SECRET_KEY` | `changeme` | Application secret key |
+| `JWT_SECRET_KEY` | `changeme` | HS256 signing key for service-account JWTs — **must** be overridden in production |
+| `JWT_ALGORITHM` | `HS256` | JWT signing algorithm |
+| `JWT_EXPIRE_MINUTES` | `10080` (7 days) | Lifetime of a service-account JWT |
+| `SESSION_EXPIRE_HOURS` | `12` | Lifetime of a human session |
+| `SESSION_COOKIE_NAME` | `session_token` | Name of the session cookie |
+| `SESSION_COOKIE_SECURE` | `false` | Mark the session cookie `Secure` (set `true` behind HTTPS) |
+| `BOOTSTRAP_ADMIN_PASSWORD` | `changeme` | Password for the seeded `admin@associazione.example` superuser (read by the auth migration) |
+| `APP_RW_PASSWORD` | `app_rw` | Password for the `app_rw` DB role (consumed by `db/01-roles.sh`) |
+| `APP_RO_PASSWORD` | `app_ro` | Password for the `app_ro` DB role (consumed by `db/01-roles.sh`) |
 
 ## Database migrations
 
@@ -362,28 +412,53 @@ GitHub Actions runs on every push and pull request to `main`:
 3. **Type check** — `mypy`
 4. **Tests** — `pytest`
 
-## Roadmap
+## Authentication & multi-user access
 
-### Authentication & multi-user access (coming soon)
-
-The API currently has no authentication layer. The planned design separates two distinct authentication planes:
+The API separates two distinct authentication planes. Credentials are managed
+natively (email + bcrypt password hash) — no external OAuth2 provider.
 
 **Machine-to-machine — JWT**
-Service accounts for workers, bots, and bulk import services authenticate via JWT tokens. Stateless, long-lived, scoped per service type (e.g. a Celery worker can write data but not manage users).
+Service accounts (`tipo = servizio`) for workers, bots, and bulk-import
+services obtain a signed HS256 JWT from `POST /auth/token` and present it as
+`Authorization: Bearer <jwt>`. Stateless and long-lived.
 
-**Human users — session-based**
-Two macro-roles with configurable permissions per association:
+**Human users — server-side sessions**
+Humans (`tipo = umano`) authenticate at `POST /auth/login`; the server opens a
+revocable session and returns an opaque token in the `session_token` cookie
+(only its SHA-256 hash is stored). `POST /auth/logout` revokes it. Sessions are
+revocable and expire after `SESSION_EXPIRE_HOURS`.
 
-- **Amministratori** — consiglio direttivo members, with per-carica permission sets (e.g. tesoriere gets contabilità access, segretario gets verbali and archivio parti, presidente gets everything)
-- **Soci standard** — minimal access, self-service only (event attendance)
+**RBAC — association-configurable**
+A single `Utente` principal (human or service) carries `Ruolo`s, and each role
+grants a set of `Permesso`s (`risorsa:azione`, e.g. `contabilita:read`). The
+mapping of permissions to roles is data, not code — each banda can decide which
+permissions a direttivo carica (tesoriere, segretario, presidente, …) gets.
+`superuser` accounts bypass the permission check entirely.
 
-Credentials are managed natively (email + bcrypt password hash) — no external OAuth2 provider.
+**Tables:** `utenti`, `ruoli`, `permessi`, `ruoli_permessi`, `utenti_ruoli`,
+`sessioni`.
 
-The RBAC model is association-configurable, meaning each banda can decide which permissions map to which direttivo role without code changes.
+**Bootstrap:** the auth migration seeds the permission catalogue, a global
+`superuser` role, and an `admin@associazione.example` superuser whose password
+comes from `BOOTSTRAP_ADMIN_PASSWORD` (default `changeme` — change it).
 
-**Planned tables:** `utenti`, `ruoli`, `permessi`, `ruoli_permessi`, `utenti_ruoli`
+### Database users (least-privilege roles)
 
----
+Database access is layered separately from the application login:
+
+| Role | Privileges | Used by |
+|---|---|---|
+| `associazione` (`POSTGRES_USER`) | Owner — full DDL | Alembic migrations (`MIGRATION_DATABASE_URL`) |
+| `app_rw` | DML only (SELECT/INSERT/UPDATE/DELETE) | The API at runtime (`DATABASE_URL`) |
+| `app_ro` | SELECT only | Reporting / analytics / export workers |
+
+`db/01-roles.sh` runs once at first database init (mounted into
+`docker-entrypoint-initdb.d`) to create the roles and grant privileges,
+including `ALTER DEFAULT PRIVILEGES` so future migration tables are covered
+automatically. Role passwords come from `APP_RW_PASSWORD` / `APP_RO_PASSWORD`.
+For an existing database, run the script's SQL manually as the schema owner.
+
+## Roadmap
 
 ### Other planned features
 

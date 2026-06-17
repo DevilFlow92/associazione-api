@@ -8,7 +8,11 @@ from app.core.config import settings
 from app.core.database import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("+asyncpg", ""))
+# Le migrazioni (DDL) usano l'URL del proprietario dello schema se fornito
+# (MIGRATION_DATABASE_URL), altrimenti l'URL applicativo. Alembic è sincrono:
+# rimuoviamo il driver async.
+migration_url = settings.migration_database_url or settings.database_url
+config.set_main_option("sqlalchemy.url", migration_url.replace("+asyncpg", ""))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

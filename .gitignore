@@ -156,6 +156,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+secrets/
+
+# SOPS — il file in chiaro non va mai committato; il file cifrato .secrets.enc.env sì
+.secrets.env
 
 # Spyder project settings
 .spyderproject
