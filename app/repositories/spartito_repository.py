@@ -15,6 +15,7 @@ class SpartitoRepository:
         self,
         tipo_spartito_codice: int | None = None,
         strumento_codice: int | None = None,
+        banda_codice: int | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[Spartito]:
@@ -23,6 +24,8 @@ class SpartitoRepository:
             stmt = stmt.where(Spartito.tipo_spartito_codice == tipo_spartito_codice)
         if strumento_codice is not None:
             stmt = stmt.where(Spartito.strumento_codice == strumento_codice)
+        if banda_codice is not None:
+            stmt = stmt.where(Spartito.banda_codice == banda_codice)
         stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -31,12 +34,15 @@ class SpartitoRepository:
         self,
         tipo_spartito_codice: int | None = None,
         strumento_codice: int | None = None,
+        banda_codice: int | None = None,
     ) -> int:
         stmt = select(func.count()).select_from(Spartito)
         if tipo_spartito_codice is not None:
             stmt = stmt.where(Spartito.tipo_spartito_codice == tipo_spartito_codice)
         if strumento_codice is not None:
             stmt = stmt.where(Spartito.strumento_codice == strumento_codice)
+        if banda_codice is not None:
+            stmt = stmt.where(Spartito.banda_codice == banda_codice)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

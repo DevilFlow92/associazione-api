@@ -17,12 +17,18 @@ class ServizioService:
         self.indirizzo_repo = indirizzo_repo
 
     async def get_all(
-        self, anno: int | None, params: PageParams
+        self,
+        anno: int | None,
+        params: PageParams,
+        banda_codice: int | None = None,
     ) -> PagedResponse[ServizioResponse]:
         servizi = await self.repo.get_all(
-            anno=anno, offset=params.offset, limit=params.limit
+            anno=anno,
+            banda_codice=banda_codice,
+            offset=params.offset,
+            limit=params.limit,
         )
-        total = await self.repo.count_all(anno=anno)
+        total = await self.repo.count_all(anno=anno, banda_codice=banda_codice)
         items = [ServizioResponse.model_validate(s) for s in servizi]
         return paginate(items, total, params)
 

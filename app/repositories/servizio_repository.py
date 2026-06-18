@@ -15,20 +15,27 @@ class ServizioRepository:
     async def get_all(
         self,
         anno: int | None = None,
+        banda_codice: int | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[Servizio]:
         stmt = select(Servizio)
         if anno is not None:
             stmt = stmt.where(Servizio.anno == anno)
+        if banda_codice is not None:
+            stmt = stmt.where(Servizio.banda_codice == banda_codice)
         stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_all(self, anno: int | None = None) -> int:
+    async def count_all(
+        self, anno: int | None = None, banda_codice: int | None = None
+    ) -> int:
         stmt = select(func.count()).select_from(Servizio)
         if anno is not None:
             stmt = stmt.where(Servizio.anno == anno)
+        if banda_codice is not None:
+            stmt = stmt.where(Servizio.banda_codice == banda_codice)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

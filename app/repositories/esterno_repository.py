@@ -11,13 +11,20 @@ class EsternoRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_all(self, offset: int = 0, limit: int = 20) -> list[Esterno]:
-        stmt = select(Esterno).offset(offset).limit(limit)
+    async def get_all(
+        self, offset: int = 0, limit: int = 20, banda_codice: int | None = None
+    ) -> list[Esterno]:
+        stmt = select(Esterno)
+        if banda_codice is not None:
+            stmt = stmt.where(Esterno.banda_codice == banda_codice)
+        stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_all(self) -> int:
+    async def count_all(self, banda_codice: int | None = None) -> int:
         stmt = select(func.count()).select_from(Esterno)
+        if banda_codice is not None:
+            stmt = stmt.where(Esterno.banda_codice == banda_codice)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

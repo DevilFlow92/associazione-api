@@ -17,9 +17,13 @@ class PersonaService:
         self.repo = repo
         self.indirizzo_repo = indirizzo_repo
 
-    async def get_all(self, params: PageParams) -> PagedResponse[PersonaResponse]:
-        persone = await self.repo.get_all(offset=params.offset, limit=params.limit)
-        total = await self.repo.count_all()
+    async def get_all(
+        self, params: PageParams, banda_codice: int | None = None
+    ) -> PagedResponse[PersonaResponse]:
+        persone = await self.repo.get_all(
+            offset=params.offset, limit=params.limit, banda_codice=banda_codice
+        )
+        total = await self.repo.count_all(banda_codice=banda_codice)
         items = [PersonaResponse.model_validate(p) for p in persone]
         return paginate(items, total, params)
 

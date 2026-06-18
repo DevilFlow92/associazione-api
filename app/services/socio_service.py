@@ -14,9 +14,13 @@ class SocioService:
         self.repo = repo
         self.persona_repo = persona_repo
 
-    async def get_all(self, params: PageParams) -> PagedResponse[SocioResponse]:
-        soci = await self.repo.get_all(offset=params.offset, limit=params.limit)
-        total = await self.repo.count_all()
+    async def get_all(
+        self, params: PageParams, banda_codice: int | None = None
+    ) -> PagedResponse[SocioResponse]:
+        soci = await self.repo.get_all(
+            offset=params.offset, limit=params.limit, banda_codice=banda_codice
+        )
+        total = await self.repo.count_all(banda_codice=banda_codice)
         items = [SocioResponse.model_validate(s) for s in soci]
         return paginate(items, total, params)
 

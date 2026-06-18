@@ -1,5 +1,5 @@
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -20,10 +20,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> ServizioService:
 @router.get("/", response_model=PagedResponse[ServizioResponse])
 async def list_servizi(
     anno: int | None = None,
+    banda_codice: int | None = Query(None),
     params: PageParams = Depends(),
     service: ServizioService = Depends(get_service),
 ) -> PagedResponse[ServizioResponse]:
-    return await service.get_all(anno, params)
+    return await service.get_all(anno, params, banda_codice=banda_codice)
 
 
 @router.get("/{servizio_id}", response_model=ServizioResponse)

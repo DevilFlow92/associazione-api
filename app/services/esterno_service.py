@@ -16,9 +16,13 @@ class EsternoService:
         self.repo = repo
         self.persona_repo = persona_repo
 
-    async def get_all(self, params: PageParams) -> PagedResponse[EsternoResponse]:
-        esterni = await self.repo.get_all(offset=params.offset, limit=params.limit)
-        total = await self.repo.count_all()
+    async def get_all(
+        self, params: PageParams, banda_codice: int | None = None
+    ) -> PagedResponse[EsternoResponse]:
+        esterni = await self.repo.get_all(
+            offset=params.offset, limit=params.limit, banda_codice=banda_codice
+        )
+        total = await self.repo.count_all(banda_codice=banda_codice)
         items = [EsternoResponse.model_validate(e) for e in esterni]
         return paginate(items, total, params)
 

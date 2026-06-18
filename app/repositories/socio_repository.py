@@ -11,13 +11,20 @@ class SocioRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_all(self, offset: int = 0, limit: int = 20) -> list[Socio]:
-        stmt = select(Socio).offset(offset).limit(limit)
+    async def get_all(
+        self, offset: int = 0, limit: int = 20, banda_codice: int | None = None
+    ) -> list[Socio]:
+        stmt = select(Socio)
+        if banda_codice is not None:
+            stmt = stmt.where(Socio.banda_codice == banda_codice)
+        stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_all(self) -> int:
+    async def count_all(self, banda_codice: int | None = None) -> int:
         stmt = select(func.count()).select_from(Socio)
+        if banda_codice is not None:
+            stmt = stmt.where(Socio.banda_codice == banda_codice)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

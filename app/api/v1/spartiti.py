@@ -19,10 +19,13 @@ def get_service(db: AsyncSession = Depends(get_db)) -> SpartitoService:
 async def list_spartiti(
     tipo_spartito_codice: int | None = Query(None),
     strumento_codice: int | None = Query(None),
+    banda_codice: int | None = Query(None),
     params: PageParams = Depends(),
     service: SpartitoService = Depends(get_service),
 ) -> PagedResponse[SpartitoResponse]:
-    return await service.get_all(tipo_spartito_codice, strumento_codice, params)
+    return await service.get_all(
+        tipo_spartito_codice, strumento_codice, params, banda_codice=banda_codice
+    )
 
 
 @router.get("/{spartito_id}", response_model=SpartitoResponse)
