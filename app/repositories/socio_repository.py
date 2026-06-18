@@ -8,7 +8,11 @@ from app.models.persona import Persona
 from app.models.socio import Socio
 from app.schemas.socio import SocioCreate, SocioUpdate
 
-_PERSONA_OPTS = selectinload(Socio.persona).selectinload(Persona.comune_nascita)
+_LOAD_OPTS = [
+    selectinload(Socio.persona).selectinload(Persona.comune_nascita),
+    selectinload(Socio.ruolo_banda),
+    selectinload(Socio.strumento),
+]
 
 
 class SocioRepository:
@@ -18,7 +22,7 @@ class SocioRepository:
     async def get_all(
         self, offset: int = 0, limit: int = 20, banda_codice: int | None = None
     ) -> list[Socio]:
-        stmt = select(Socio).options(_PERSONA_OPTS)
+        stmt = select(Socio).options(*_LOAD_OPTS)
         if banda_codice is not None:
             stmt = stmt.where(Socio.banda_codice == banda_codice)
         stmt = stmt.offset(offset).limit(limit)
@@ -33,7 +37,7 @@ class SocioRepository:
         return result.scalar_one()
 
     async def get_by_id(self, socio_id: int) -> Socio | None:
-        stmt = select(Socio).where(Socio.id == socio_id).options(_PERSONA_OPTS)
+        stmt = select(Socio).where(Socio.id == socio_id).options(*_LOAD_OPTS)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
