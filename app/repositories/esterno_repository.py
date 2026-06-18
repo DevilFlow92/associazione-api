@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.esterno import Esterno
 from app.schemas.esterno import EsternoCreate, EsternoUpdate
 
-_LOAD_OPTS = [selectinload(Esterno.strumento)]
+_LOAD_OPTS = [selectinload(Esterno.strumento), selectinload(Esterno.persona)]
 
 
 class EsternoRepository:
