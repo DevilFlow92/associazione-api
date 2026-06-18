@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.lookups import Strumento
     from app.models.persona import Persona
 
 
@@ -22,3 +23,6 @@ class Esterno(Base):
     persona_id: Mapped[int] = mapped_column(ForeignKey("persone.id"), nullable=False)
 
     persona: Mapped[Persona] = relationship(back_populates="esterni")
+    strumento: Mapped[Strumento] = relationship(
+        "Strumento", foreign_keys=[strumento_codice]
+    )
