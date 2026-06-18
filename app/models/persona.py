@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.contatto import Contatto
     from app.models.esterno import Esterno
     from app.models.indirizzo import Indirizzo
+    from app.models.lookups import Comune
     from app.models.socio import Socio
 
 
@@ -31,6 +32,10 @@ class Persona(Base):
     )
     data_nascita: Mapped[date | None] = mapped_column(Date, nullable=True)
     codice_fiscale: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    comune_nascita: Mapped[Comune | None] = relationship(
+        "Comune", foreign_keys=[comune_nascita_codice]
+    )
 
     contatti: Mapped[list[Contatto]] = relationship(
         back_populates="persona", cascade="all, delete-orphan"

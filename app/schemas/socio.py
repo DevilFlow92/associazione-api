@@ -1,6 +1,27 @@
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel
+
+
+class ComuneInSocio(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
+class PersonaInSocio(BaseModel):
+    id: int
+    nome: str | None = None
+    cognome: str | None = None
+    codice_fiscale: str | None = None
+    data_nascita: date | None = None
+    comune_nascita_codice: int | None = None
+    comune_nascita: ComuneInSocio | None = None
+
+    model_config = {"from_attributes": True}
 
 
 class SocioBase(BaseModel):
@@ -22,5 +43,6 @@ class SocioUpdate(BaseModel):
 class SocioResponse(SocioBase):
     id: int
     persona_id: int
+    persona: PersonaInSocio | None = None
 
     model_config = {"from_attributes": True}
