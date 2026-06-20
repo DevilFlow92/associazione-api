@@ -5,10 +5,18 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class TipoDocumentoInDocumento(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
 class DocumentoResponse(BaseModel):
     id: int
     nome: str
     tipo_documento_codice: int | None
+    tipo_documento: TipoDocumentoInDocumento | None = None
     mime_type: str
     dimensione_bytes: int
     checksum: str

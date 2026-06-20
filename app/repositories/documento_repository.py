@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.documento import Documento
+
+_LOAD_OPTS = [
+    selectinload(Documento.tipo_documento),
+]
 
 
 class DocumentoRepository:
@@ -16,7 +21,7 @@ class DocumentoRepository:
         offset: int = 0,
         limit: int = 20,
     ) -> list[Documento]:
-        stmt = select(Documento)
+        stmt = select(Documento).options(*_LOAD_OPTS)
         if tipo_documento_codice is not None:
             stmt = stmt.where(Documento.tipo_documento_codice == tipo_documento_codice)
         stmt = stmt.offset(offset).limit(limit)
@@ -31,7 +36,9 @@ class DocumentoRepository:
         return result.scalar_one()
 
     async def get_by_id(self, documento_id: int) -> Documento | None:
-        stmt = select(Documento).where(Documento.id == documento_id)
+        stmt = (
+            select(Documento).where(Documento.id == documento_id).options(*_LOAD_OPTS)
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -55,9 +62,12 @@ class DocumentoRepository:
             note=note,
         )
         self.db.add(documento)
+        await self.db.flush()
+        documento_id = documento.id
         await self.db.commit()
-        await self.db.refresh(documento)
-        return documento
+        result = await self.get_by_id(documento_id)
+        assert result is not None
+        return result
 
     async def delete(self, documento: Documento) -> None:
         await self.db.delete(documento)
