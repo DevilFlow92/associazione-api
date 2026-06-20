@@ -1,15 +1,26 @@
 from __future__ import annotations
 
+import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, SmallInteger, String
+from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, SmallInteger, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.iscrizione import Iscrizione
     from app.models.voce_contabilita import VoceContabilita
+
+
+class TipoFlussoCassa(enum.StrEnum):
+    MOVIMENTO = "MOVIMENTO"
+    SALDO_INIZIALE = "SALDO_INIZIALE"
+    TRASFERIMENTO_USCITA = "TRASFERIMENTO_USCITA"
+    TRASFERIMENTO_ENTRATA = "TRASFERIMENTO_ENTRATA"
+    AUTO_ISCRIZIONE = "AUTO_ISCRIZIONE"
 
 
 class FlussoCassa(Base):
@@ -27,5 +38,19 @@ class FlussoCassa(Base):
     natura_flusso_codice: Mapped[int] = mapped_column(
         SmallInteger, ForeignKey("nature_flusso.codice"), nullable=False
     )
+    tipo: Mapped[TipoFlussoCassa] = mapped_column(
+        Enum(TipoFlussoCassa, name="tipo_flusso_cassa"),
+        nullable=False,
+        default=TipoFlussoCassa.MOVIMENTO,
+        server_default=TipoFlussoCassa.MOVIMENTO.value,
+    )
+    iscrizione_id: Mapped[int | None] = mapped_column(
+        ForeignKey("iscrizioni.id", name="fk_flussi_cassa_iscrizione_id"),
+        nullable=True,
+    )
+    trasferimento_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True), nullable=True
+    )
 
     voce_contabilita: Mapped[VoceContabilita] = relationship(back_populates="flussi")
+    iscrizione: Mapped[Iscrizione | None] = relationship()
