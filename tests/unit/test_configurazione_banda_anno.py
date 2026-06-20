@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.lookups import SezioneRendiconto
 
 BASE = "/api/v1/configurazione-banda-anno"
 
@@ -120,3 +124,66 @@ async def test_list_filter_by_banda(client: AsyncClient):
     data = response.json()
     assert data["meta"]["total_items"] == 1
     assert data["items"][0]["banda_codice"] == 2
+
+
+# ── Seed tests ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_first_configurazione_seeds_voci(client: AsyncClient):
+    """Creating the first configurazione for a banda auto-seeds 4 voci."""
+    await create_cfg(client, banda_codice=1, anno=2024)
+    response = await client.get("/api/v1/voci-contabilita/?banda_codice=1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["meta"]["total_items"] == 4
+    names = {v["voce_contabilita"] for v in data["items"]}
+    assert names == {
+        "Quote associative",
+        "Saldo iniziale",
+        "Versamento in banca",
+        "Spese bancarie",
+    }
+    # Verify rendiconto classification of "Quote associative"
+    quote = next(
+        v for v in data["items"] if v["voce_contabilita"] == "Quote associative"
+    )
+    assert quote["sezione_rendiconto_codice"] == 2  # Entrate
+    assert quote["voce_rendiconto_codice"] == 2  # A) Entrate da attività …
+    assert quote["sottovoce_rendiconto_codice"] == 6  # 1) Entrate da quote …
+
+
+@pytest.mark.asyncio
+async def test_create_second_configurazione_does_not_reseed(client: AsyncClient):
+    """A second configurazione for the same banda does not duplicate the voci."""
+    await create_cfg(client, banda_codice=1, anno=2024)
+    await create_cfg(client, banda_codice=1, anno=2025)
+    response = await client.get("/api/v1/voci-contabilita/?banda_codice=1")
+    assert response.status_code == 200
+    # Still exactly 4 voci — no duplicates from the second create.
+    assert response.json()["meta"]["total_items"] == 4
+
+
+@pytest.mark.asyncio
+async def test_seed_missing_lookup_descrizione_raises(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """If a required sezione lookup is missing, create returns 422 and no
+    partial state (no voci and no configurazione) is left in the DB."""
+    # Remove the "Entrate" sezione so the lookup for "Quote associative" fails.
+    await db_session.execute(
+        delete(SezioneRendiconto).where(SezioneRendiconto.codice == 2)
+    )
+    await db_session.commit()
+
+    response = await client.post(f"{BASE}/", json=cfg_payload())
+    assert response.status_code == 422
+    assert "Entrate" in response.json()["detail"]
+
+    # No voci should have been inserted (transaction rolled back).
+    voci_response = await client.get("/api/v1/voci-contabilita/?banda_codice=1")
+    assert voci_response.json()["meta"]["total_items"] == 0
+
+    # No configurazione should have been inserted either.
+    cfg_response = await client.get(f"{BASE}/?banda_codice=1")
+    assert cfg_response.json()["meta"]["total_items"] == 0

@@ -8,6 +8,7 @@ from app.exceptions.configurazione_banda_anno import (
     ConfigurazioneBandaAnnoChiusaError,
     ConfigurazioneBandaAnnoDuplicateError,
     ConfigurazioneBandaAnnoNotFoundError,
+    RendicontoLookupNotFoundError,
 )
 from app.repositories.configurazione_banda_anno_repository import (
     ConfigurazioneBandaAnnoRepository,
@@ -90,6 +91,10 @@ async def create_configurazione(
         return await service.create(data)
     except ConfigurazioneBandaAnnoDuplicateError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except RendicontoLookupNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
 
 
 @router.patch(
