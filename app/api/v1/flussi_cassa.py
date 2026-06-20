@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.exceptions.flusso_cassa import FlussoCassaNotFoundError
 from app.exceptions.voce_contabilita import VoceContabilitaNotFoundError
+from app.repositories.configurazione_banda_anno_repository import (
+    ConfigurazioneBandaAnnoRepository,
+)
 from app.repositories.flusso_cassa_repository import FlussoCassaRepository
 from app.repositories.voce_contabilita_repository import VoceContabilitaRepository
 from app.schemas.flusso_cassa import (
@@ -18,7 +21,11 @@ router = APIRouter(prefix="/flussi-cassa", tags=["flussi-cassa"])
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> FlussoCassaService:
-    return FlussoCassaService(FlussoCassaRepository(db), VoceContabilitaRepository(db))
+    return FlussoCassaService(
+        FlussoCassaRepository(db),
+        VoceContabilitaRepository(db),
+        ConfigurazioneBandaAnnoRepository(db),
+    )
 
 
 @router.get("/", response_model=PagedResponse[FlussoCassaResponse])

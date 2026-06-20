@@ -19,6 +19,16 @@ class ConfigurazioneBandaAnnoChiusaError(Exception):
         )
 
 
+class AnnoGiaChiusoError(Exception):
+    def __init__(self, cfg_id: int) -> None:
+        super().__init__("Anno già chiuso")
+
+
+class AnnoGiaApertoError(Exception):
+    def __init__(self, cfg_id: int) -> None:
+        super().__init__("Anno già aperto")
+
+
 class RendicontoLookupNotFoundError(Exception):
     """Raised when a rendiconto lookup row cannot be found
     by descrizione during seeding."""

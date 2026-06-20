@@ -114,7 +114,18 @@ renderer for receipts, annual reports, etc.).
 Accounting (contabilità) is modelled by **VoceContabilita** (S_VoceContabilita —
 a band's chart-of-accounts line, classified by rendiconto section/item/sub-item)
 and **FlussoCassa** (T_FlussoCassa — cash movements against an accounting item,
-with a sign and a cash/bank nature).
+with a sign and a cash/bank nature). Every movement carries a `tipo`
+(`MOVIMENTO`, `SALDO_INIZIALE`, `TRASFERIMENTO_USCITA`, `TRASFERIMENTO_ENTRATA`,
+`AUTO_ISCRIZIONE`), an optional `iscrizione_id` FK (for auto-generated movements
+from a paid subscription), and an optional `trasferimento_id` UUID (a shared
+group key linking the two legs of a cassa↔banca transfer).
+
+**ConfigurazioneBandaAnno** holds the annual configuration for a band:
+opening balances, the expected membership quota, and a reference to the
+"quote associative" accounting item. Once the year is **closed**
+(`chiuso = True`), all mutations on `FlussoCassa` rows belonging to that
+(banda, anno) pair are blocked with `409`. The year is re-openable by a
+superuser via `POST /{id}/riapri`.
 
 ## API endpoints
 
@@ -182,6 +193,27 @@ Standard CRUD under `/voci-contabilita` and `/flussi-cassa`. In addition:
 
 A `VoceContabilita` cannot be deleted while it has cash movements (409). A
 `FlussoCassa` requires an existing `voce_contabilita_id` (404 otherwise).
+
+**Year-closure enforcement:** create, update, and delete on `FlussoCassa` are
+blocked with `409 Conflict` if the movement's `(banda, anno)` pair — derived
+from `voce_contabilita.banda_codice` and `data_registrazione.year` — is closed
+(`ConfigurazioneBandaAnno.chiuso = True`). For updates that change the year via
+`data_registrazione`, the destination year is also checked.
+
+#### Configurazione banda/anno
+
+Standard CRUD under `/configurazione-banda-anno`. In addition:
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/configurazione-banda-anno/?banda_codice={b}&anno={a}` | List, filterable by band and/or year | `contabilita:read` |
+| `GET` | `/configurazione-banda-anno/banda/{b}/anno/{a}` | Get by (banda, anno) | `contabilita:read` |
+| `POST` | `/configurazione-banda-anno/{id}/chiudi` | Close the year — sets `chiuso=True`, records timestamp and acting user. 409 if already closed. | `contabilita:write` |
+| `POST` | `/configurazione-banda-anno/{id}/riapri` | Reopen the year — clears closure fields. 409 if already open. | superuser only |
+
+Creating the first `ConfigurazioneBandaAnno` for a band automatically seeds 4
+minimum `VoceContabilita` rows (Quote associative, Saldo iniziale, Versamento in
+banca, Spese bancarie).
 
 ### Tabelle dimensione (lookups)
 

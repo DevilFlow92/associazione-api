@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 
 from app.exceptions.configurazione_banda_anno import (
+    AnnoGiaApertoError,
+    AnnoGiaChiusoError,
     ConfigurazioneBandaAnnoChiusaError,
     ConfigurazioneBandaAnnoDuplicateError,
     ConfigurazioneBandaAnnoNotFoundError,
@@ -146,3 +150,33 @@ class ConfigurazioneBandaAnnoService:
         if cfg.chiuso:
             raise ConfigurazioneBandaAnnoChiusaError(cfg_id)
         await self.repo.delete(cfg)
+
+    async def chiudi_anno(
+        self, cfg_id: int, utente_id: int
+    ) -> ConfigurazioneBandaAnnoResponse:
+        cfg = await self.repo.get_by_id(cfg_id)
+        if not cfg:
+            raise ConfigurazioneBandaAnnoNotFoundError(cfg_id)
+        if cfg.chiuso:
+            raise AnnoGiaChiusoError(cfg_id)
+        updated = await self.repo.set_chiusura(
+            cfg,
+            chiuso=True,
+            data_chiusura=datetime.now(),
+            chiuso_da_utente_id=utente_id,
+        )
+        return ConfigurazioneBandaAnnoResponse.model_validate(updated)
+
+    async def riapri_anno(self, cfg_id: int) -> ConfigurazioneBandaAnnoResponse:
+        cfg = await self.repo.get_by_id(cfg_id)
+        if not cfg:
+            raise ConfigurazioneBandaAnnoNotFoundError(cfg_id)
+        if not cfg.chiuso:
+            raise AnnoGiaApertoError(cfg_id)
+        updated = await self.repo.set_chiusura(
+            cfg,
+            chiuso=False,
+            data_chiusura=None,
+            chiuso_da_utente_id=None,
+        )
+        return ConfigurazioneBandaAnnoResponse.model_validate(updated)
