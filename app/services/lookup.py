@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 from pydantic import BaseModel as PydanticModel
 
@@ -25,9 +27,13 @@ class LookupService[ResponseT: PydanticModel]:
         self.response_model = response_model
         self.label = label
 
-    async def get_all(self, params: PageParams) -> PagedResponse[ResponseT]:
-        voci = await self.repo.get_all(offset=params.offset, limit=params.limit)
-        total = await self.repo.count_all()
+    async def get_all(
+        self, params: PageParams, filters: dict[str, Any] | None = None
+    ) -> PagedResponse[ResponseT]:
+        voci = await self.repo.get_all(
+            offset=params.offset, limit=params.limit, filters=filters
+        )
+        total = await self.repo.count_all(filters=filters)
         items = [self.response_model.model_validate(v) for v in voci]
         return paginate(items, total, params)
 
