@@ -81,8 +81,12 @@ anagrafica entities — **Persona**, **Indirizzo**, **Contatto**, **Socio**,
 `SottovoceRendiconto`, `NaturaFlusso`, and the documentary lookups
 `TipoDocumento`, `TipoSpartito`, `StatoIscrizione`). A person can hold several
 addresses (many-to-many via `persone_indirizzi`); a band can hold several
-addresses too (`bande_indirizzi`). All 16 lookup tables share a generic CRUD
-stack (`repositories/lookup.py`, `services/lookup.py`) to avoid duplication.
+addresses too (`bande_indirizzi`). Band membership (`banda_codice`) is held on
+**Persona** and inherited by **Socio** and **Esterno** through their person —
+there is no separate band column on those entities. All 16 lookup tables share a
+generic CRUD stack (`repositories/lookup.py`, `services/lookup.py`) to avoid
+duplication; the generic list supports optional equality filters (used e.g. by
+`/comuni/?provincia_codice=`).
 
 **Iscrizione** models a member's annual subscription: each socio must subscribe
 once per year (unique constraint on `socio_id` + `anno`), with a participation
@@ -120,7 +124,7 @@ Base prefix: `/api/v1`
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/persone/` | List people (paginated) |
+| `GET` | `/persone/` | List people (paginated, filterable by `banda_codice`) |
 | `GET` | `/persone/{id}` | Get a person by ID |
 | `POST` | `/persone/` | Create a new person |
 | `PATCH` | `/persone/{id}` | Update a person |
@@ -137,14 +141,19 @@ Each exposes standard CRUD under its prefix (`/indirizzi`, `/contatti`, `/soci`,
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/soci/?banda_codice={codice}` | Members of a band (paginated) |
+| `GET` | `/esterni/?banda_codice={codice}` | Externals of a band (paginated) |
 | `GET` | `/contatti/persona/{persona_id}` | Contacts for a person (paginated) |
 | `GET` | `/iscrizioni/?socio_id={id}` | Subscriptions for a member (paginated) |
 | `GET` | `/iscrizioni/?anno={anno}` | Subscriptions for a given year (paginated) |
 
 `Socio` and `Esterno` require an existing `persona_id` (404 otherwise) and reject
-duplicate codes (409). `Contatto` requires an existing `persona_id`.
-`Iscrizione` requires an existing `socio_id` (404) and rejects duplicate
-`(socio_id, anno)` pairs (409 — one subscription per member per year).
+duplicate codes (409). Band membership lives on `Persona` (`banda_codice`): soci
+and esterni inherit it through their person, so the `banda_codice` filter joins
+`Persona`, and a member's code is unique *within its band*. `Contatto` requires an
+existing `persona_id`. `Iscrizione` requires an existing `socio_id` (404) and
+rejects duplicate `(socio_id, anno)` pairs (409 — one subscription per member per
+year).
 
 ### Servizi · Ricevute (events & receipts)
 
@@ -187,6 +196,9 @@ Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 | `POST` | `/{lookup}/` | Create an entry (409 on duplicate code) |
 | `PATCH` | `/{lookup}/{codice}` | Update an entry |
 | `DELETE` | `/{lookup}/{codice}` | Delete an entry (204) |
+
+`GET /comuni/` additionally accepts a `provincia_codice` query parameter to
+restrict municipalities to a single province (e.g. `/comuni/?provincia_codice=64`).
 
 `Banda` additionally manages its addresses (many-to-many):
 
@@ -265,10 +277,12 @@ Gestione utenti, ruoli e permessi (RBAC):
 | `DELETE` | `/ruoli/{id}` | Elimina un ruolo (204) | `ruoli:write` |
 | `GET` | `/permessi/` | Catalogo dei permessi disponibili | `ruoli:read` |
 
-I *superuser* bypassano il controllo dei permessi. Gli endpoint di dominio non
-sono ancora protetti dalle guardie RBAC: i permessi `anagrafica:*`,
-`contabilita:*`, `servizi:*`, `archivio:*` sono già definiti e pronti per essere
-applicati.
+I *superuser* bypassano il controllo dei permessi. Tutti gli endpoint di dominio
+(anagrafica, servizi/ricevute, contabilità, archivio e tabelle dimensione)
+**richiedono autenticazione** (`Depends(get_current_user)`): senza una sessione o
+un JWT valido rispondono `401`. Non sono però ancora protetti dalle guardie di
+permesso più granulari: i permessi `anagrafica:*`, `contabilita:*`, `servizi:*`,
+`archivio:*` sono già definiti e pronti per essere applicati per-risorsa.
 
 ### Health
 
@@ -367,7 +381,7 @@ This starts PostgreSQL 16 on port `5432` and the API on port `8000`.
 | `SESSION_EXPIRE_HOURS` | `12` | Lifetime of a human session |
 | `SESSION_COOKIE_NAME` | `session_token` | Name of the session cookie |
 | `SESSION_COOKIE_SECURE` | `false` | Mark the session cookie `Secure` (set `true` behind HTTPS) |
-| `BOOTSTRAP_ADMIN_PASSWORD` | `changeme` | Password for the seeded `admin@associazione.example` superuser (read by the auth migration) |
+| `BOOTSTRAP_ADMIN_PASSWORD` | `changeme` | Password for the seeded `admin@cosequences.com` superuser (read by the auth migration) |
 | `APP_RW_PASSWORD` | `app_rw` | Password for the `app_rw` DB role (consumed by `db/01-roles.sh`) |
 | `APP_RO_PASSWORD` | `app_ro` | Password for the `app_ro` DB role (consumed by `db/01-roles.sh`) |
 
@@ -439,7 +453,7 @@ permissions a direttivo carica (tesoriere, segretario, presidente, …) gets.
 `sessioni`.
 
 **Bootstrap:** the auth migration seeds the permission catalogue, a global
-`superuser` role, and an `admin@associazione.example` superuser whose password
+`superuser` role, and an `admin@cosequences.com` superuser whose password
 comes from `BOOTSTRAP_ADMIN_PASSWORD` (default `changeme` — change it).
 
 ### Database users (least-privilege roles)
