@@ -40,7 +40,6 @@ class PersonaInSocio(BaseModel):
 
 class SocioBase(BaseModel):
     codice_socio: str
-    banda_codice: int
     ruolo_banda_codice: int
     strumento_codice: int | None = None
 
@@ -51,7 +50,6 @@ class SocioCreate(SocioBase):
 
 class SocioUpdate(BaseModel):
     codice_socio: str | None = None
-    banda_codice: int | None = None
     ruolo_banda_codice: int | None = None
     strumento_codice: int | None = None
 

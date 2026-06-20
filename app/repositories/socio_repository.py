@@ -24,7 +24,7 @@ class SocioRepository:
     ) -> list[Socio]:
         stmt = select(Socio).options(*_LOAD_OPTS)
         if banda_codice is not None:
-            stmt = stmt.where(Socio.banda_codice == banda_codice)
+            stmt = stmt.join(Persona).where(Persona.banda_codice == banda_codice)
         stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -32,7 +32,7 @@ class SocioRepository:
     async def count_all(self, banda_codice: int | None = None) -> int:
         stmt = select(func.count()).select_from(Socio)
         if banda_codice is not None:
-            stmt = stmt.where(Socio.banda_codice == banda_codice)
+            stmt = stmt.join(Persona).where(Persona.banda_codice == banda_codice)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
@@ -42,9 +42,13 @@ class SocioRepository:
         return result.scalar_one_or_none()
 
     async def get_by_codice(self, codice_socio: str, banda_codice: int) -> Socio | None:
-        stmt = select(Socio).where(
-            Socio.codice_socio == codice_socio,
-            Socio.banda_codice == banda_codice,
+        stmt = (
+            select(Socio)
+            .join(Persona)
+            .where(
+                Socio.codice_socio == codice_socio,
+                Persona.banda_codice == banda_codice,
+            )
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()

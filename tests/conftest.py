@@ -5,7 +5,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import app.models  # noqa: F401
+from app.api.deps import get_current_user
 from app.core.database import Base, get_db
+from app.models.utente import TipoUtente, Utente
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
@@ -30,11 +32,25 @@ async def db_session() -> AsyncSession:
 
 
 @pytest.fixture
-async def client(db_session: AsyncSession) -> AsyncClient:
+async def client(
+    db_session: AsyncSession, request: pytest.FixtureRequest
+) -> AsyncClient:
     async def override_get_db():
         yield db_session
 
+    async def override_get_current_user():
+        return Utente(
+            id=1, tipo=TipoUtente.UMANO, email="test@example.com", superuser=True
+        )
+
     app.dependency_overrides[get_db] = override_get_db
+    # I router delle entità sono protetti da ``get_current_user``. Per i test
+    # funzionali sostituiamo il principal con un superuser, così da esercitare
+    # gli endpoint senza autenticazione reale. Il modulo ``test_auth`` verifica
+    # il meccanismo di autenticazione stesso e quindi mantiene la dipendenza
+    # originale.
+    if request.module.__name__ != "tests.unit.test_auth":
+        app.dependency_overrides[get_current_user] = override_get_current_user
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:

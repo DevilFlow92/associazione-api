@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.esterno import Esterno
+from app.models.persona import Persona
 from app.schemas.esterno import EsternoCreate, EsternoUpdate
 
 _LOAD_OPTS = [selectinload(Esterno.strumento), selectinload(Esterno.persona)]
@@ -19,7 +20,7 @@ class EsternoRepository:
     ) -> list[Esterno]:
         stmt = select(Esterno).options(*_LOAD_OPTS)
         if banda_codice is not None:
-            stmt = stmt.where(Esterno.banda_codice == banda_codice)
+            stmt = stmt.join(Persona).where(Persona.banda_codice == banda_codice)
         stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -27,7 +28,7 @@ class EsternoRepository:
     async def count_all(self, banda_codice: int | None = None) -> int:
         stmt = select(func.count()).select_from(Esterno)
         if banda_codice is not None:
-            stmt = stmt.where(Esterno.banda_codice == banda_codice)
+            stmt = stmt.join(Persona).where(Persona.banda_codice == banda_codice)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

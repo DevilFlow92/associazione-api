@@ -34,9 +34,11 @@ class SocioService:
         persona = await self.persona_repo.get_by_id(data.persona_id)
         if not persona:
             raise PersonaNotFoundError(data.persona_id)
-        existing = await self.repo.get_by_codice(data.codice_socio, data.banda_codice)
+        existing = await self.repo.get_by_codice(
+            data.codice_socio, persona.banda_codice
+        )
         if existing:
-            raise SocioDuplicateCodiceError(data.codice_socio, data.banda_codice)
+            raise SocioDuplicateCodiceError(data.codice_socio, persona.banda_codice)
         socio = await self.repo.create(data)
         return SocioResponse.model_validate(socio)
 
@@ -45,7 +47,7 @@ class SocioService:
         if not socio:
             raise SocioNotFoundError(socio_id)
         codice = data.codice_socio or socio.codice_socio
-        banda = data.banda_codice or socio.banda_codice
+        banda = socio.persona.banda_codice
         existing = await self.repo.get_by_codice(codice, banda)
         if existing and existing.id != socio_id:
             raise SocioDuplicateCodiceError(codice, banda)

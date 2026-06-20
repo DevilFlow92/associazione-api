@@ -16,7 +16,6 @@ def socio_payload(persona_id: int, **overrides) -> dict:
     payload = {
         "persona_id": persona_id,
         "codice_socio": "S001",
-        "banda_codice": 1,
         "ruolo_banda_codice": 10,
     }
     payload.update(overrides)

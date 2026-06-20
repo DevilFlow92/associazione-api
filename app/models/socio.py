@@ -19,9 +19,6 @@ class Socio(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     codice_socio: Mapped[str] = mapped_column(String(5))
     persona_id: Mapped[int] = mapped_column(ForeignKey("persone.id"), nullable=False)
-    banda_codice: Mapped[int] = mapped_column(
-        SmallInteger, ForeignKey("bande.codice"), nullable=False
-    )
     ruolo_banda_codice: Mapped[int] = mapped_column(
         SmallInteger, ForeignKey("ruoli_banda.codice"), nullable=False
     )
