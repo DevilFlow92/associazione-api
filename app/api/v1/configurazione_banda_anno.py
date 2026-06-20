@@ -2,14 +2,17 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_permission
+from app.api.deps import require_permission, require_superuser
 from app.core.database import get_db
 from app.exceptions.configurazione_banda_anno import (
+    AnnoGiaApertoError,
+    AnnoGiaChiusoError,
     ConfigurazioneBandaAnnoChiusaError,
     ConfigurazioneBandaAnnoDuplicateError,
     ConfigurazioneBandaAnnoNotFoundError,
     RendicontoLookupNotFoundError,
 )
+from app.models.utente import Utente
 from app.repositories.configurazione_banda_anno_repository import (
     ConfigurazioneBandaAnnoRepository,
 )
@@ -129,4 +132,38 @@ async def delete_configurazione(
     except ConfigurazioneBandaAnnoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ConfigurazioneBandaAnnoChiusaError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.post(
+    "/{cfg_id}/chiudi",
+    response_model=ConfigurazioneBandaAnnoResponse,
+)
+async def chiudi_anno(
+    cfg_id: int,
+    current_user: Utente = Depends(require_permission("contabilita:write")),
+    service: ConfigurazioneBandaAnnoService = Depends(get_service),
+) -> ConfigurazioneBandaAnnoResponse:
+    try:
+        return await service.chiudi_anno(cfg_id, current_user.id)
+    except ConfigurazioneBandaAnnoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except AnnoGiaChiusoError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.post(
+    "/{cfg_id}/riapri",
+    response_model=ConfigurazioneBandaAnnoResponse,
+)
+async def riapri_anno(
+    cfg_id: int,
+    _: Utente = Depends(require_superuser),
+    service: ConfigurazioneBandaAnnoService = Depends(get_service),
+) -> ConfigurazioneBandaAnnoResponse:
+    try:
+        return await service.riapri_anno(cfg_id)
+    except ConfigurazioneBandaAnnoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except AnnoGiaApertoError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e

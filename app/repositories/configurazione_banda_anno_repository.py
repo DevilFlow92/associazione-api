@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -138,6 +140,29 @@ class ConfigurazioneBandaAnnoRepository:
     ) -> ConfigurazioneBandaAnno:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(cfg, field, value)
+        await self.db.commit()
+        await self.db.refresh(cfg)
+        return await self.get_by_id(cfg.id)  # type: ignore[return-value]
+
+    async def is_anno_chiuso(self, banda_codice: int, anno: int) -> bool:
+        stmt = select(ConfigurazioneBandaAnno.chiuso).where(
+            ConfigurazioneBandaAnno.banda_codice == banda_codice,
+            ConfigurazioneBandaAnno.anno == anno,
+        )
+        result = await self.db.execute(stmt)
+        chiuso = result.scalar_one_or_none()
+        return bool(chiuso)
+
+    async def set_chiusura(
+        self,
+        cfg: ConfigurazioneBandaAnno,
+        chiuso: bool,
+        data_chiusura: datetime | None,
+        chiuso_da_utente_id: int | None,
+    ) -> ConfigurazioneBandaAnno:
+        cfg.chiuso = chiuso
+        cfg.data_chiusura = data_chiusura
+        cfg.chiuso_da_utente_id = chiuso_da_utente_id
         await self.db.commit()
         await self.db.refresh(cfg)
         return await self.get_by_id(cfg.id)  # type: ignore[return-value]

@@ -7,6 +7,8 @@ from httpx import AsyncClient
 
 from app.models.flusso_cassa import TipoFlussoCassa
 
+CFG_BASE = "/api/v1/configurazione-banda-anno"
+
 
 async def create_voce(client: AsyncClient) -> dict:
     response = await client.post(
@@ -177,3 +179,95 @@ async def test_flusso_cassa_optional_trasferimento_id(client: AsyncClient):
     )
     assert response.status_code == 201
     assert response.json()["trasferimento_id"] == tid
+
+
+# ── Anno chiuso enforcement tests ────────────────────────────────────────────
+
+
+async def _create_cfg_and_close(
+    client: AsyncClient, banda_codice: int, anno: int
+) -> dict:
+    """Create a ConfigurazioneBandaAnno and close it via /chiudi."""
+    cfg_resp = await client.post(
+        f"{CFG_BASE}/",
+        json={"banda_codice": banda_codice, "anno": anno},
+    )
+    assert cfg_resp.status_code == 201, cfg_resp.text
+    cfg = cfg_resp.json()
+    close_resp = await client.post(f"{CFG_BASE}/{cfg['id']}/chiudi")
+    assert close_resp.status_code == 200, close_resp.text
+    return close_resp.json()
+
+
+@pytest.mark.asyncio
+async def test_create_flusso_blocked_when_anno_chiuso(client: AsyncClient):
+    voce = await create_voce(client)
+    # The voce was seeded for banda_codice=1; close anno 2026
+    await _create_cfg_and_close(client, banda_codice=1, anno=2026)
+    response = await client.post(
+        "/api/v1/flussi-cassa/",
+        json=flusso_payload(voce["id"], data_registrazione="2026-03-01T00:00:00"),
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_flusso_blocked_when_anno_chiuso(client: AsyncClient):
+    voce = await create_voce(client)
+    created = await client.post(
+        "/api/v1/flussi-cassa/",
+        json=flusso_payload(voce["id"], data_registrazione="2026-03-01T00:00:00"),
+    )
+    assert created.status_code == 201
+    flusso_id = created.json()["id"]
+    await _create_cfg_and_close(client, banda_codice=1, anno=2026)
+    response = await client.patch(
+        f"/api/v1/flussi-cassa/{flusso_id}", json={"importo": 99.0}
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_flusso_blocked_when_anno_chiuso(client: AsyncClient):
+    voce = await create_voce(client)
+    created = await client.post(
+        "/api/v1/flussi-cassa/",
+        json=flusso_payload(voce["id"], data_registrazione="2026-03-01T00:00:00"),
+    )
+    assert created.status_code == 201
+    flusso_id = created.json()["id"]
+    await _create_cfg_and_close(client, banda_codice=1, anno=2026)
+    response = await client.delete(f"/api/v1/flussi-cassa/{flusso_id}")
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_flusso_works_for_different_anno(client: AsyncClient):
+    voce = await create_voce(client)
+    await _create_cfg_and_close(client, banda_codice=1, anno=2024)
+    # 2025 is open — should succeed
+    response = await client.post(
+        "/api/v1/flussi-cassa/",
+        json=flusso_payload(voce["id"], data_registrazione="2025-06-01T00:00:00"),
+    )
+    assert response.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_update_data_to_chiuso_anno_blocked(client: AsyncClient):
+    voce = await create_voce(client)
+    # Create flusso in 2025 (open)
+    created = await client.post(
+        "/api/v1/flussi-cassa/",
+        json=flusso_payload(voce["id"], data_registrazione="2025-06-01T00:00:00"),
+    )
+    assert created.status_code == 201
+    flusso_id = created.json()["id"]
+    # Close 2024
+    await _create_cfg_and_close(client, banda_codice=1, anno=2024)
+    # Try to move flusso into the closed year
+    response = await client.patch(
+        f"/api/v1/flussi-cassa/{flusso_id}",
+        json={"data_registrazione": "2024-12-31T00:00:00"},
+    )
+    assert response.status_code == 409

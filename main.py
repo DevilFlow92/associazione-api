@@ -50,6 +50,7 @@ from app.exceptions.auth import (
     InvalidTokenError,
     PermissionDeniedError,
 )
+from app.exceptions.flusso_cassa import AnnoChiusoError
 from app.exceptions.lookup import LookupDuplicateCodiceError, LookupNotFoundError
 
 # Configura logging prima di tutto il resto.
@@ -80,6 +81,11 @@ app.add_middleware(
 
 # Le tabelle dimensione (lookup) condividono due eccezioni generiche: le
 # mappiamo in modo centralizzato così i 9 router restano minimali.
+@app.exception_handler(AnnoChiusoError)
+async def anno_chiuso_handler(request: Request, exc: AnnoChiusoError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
 @app.exception_handler(LookupNotFoundError)
 async def lookup_not_found_handler(
     request: Request, exc: LookupNotFoundError

@@ -5,7 +5,9 @@ from httpx import AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.models.lookups import SezioneRendiconto
+from app.models.utente import TipoUtente, Utente
 
 BASE = "/api/v1/configurazione-banda-anno"
 
@@ -162,6 +164,72 @@ async def test_create_second_configurazione_does_not_reseed(client: AsyncClient)
     assert response.status_code == 200
     # Still exactly 4 voci — no duplicates from the second create.
     assert response.json()["meta"]["total_items"] == 4
+
+
+# ── Chiudi / Riapri tests ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_chiudi_anno_sets_fields(client: AsyncClient):
+    cfg = await create_cfg(client)
+    response = await client.post(f"{BASE}/{cfg['id']}/chiudi")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["chiuso"] is True
+    assert data["data_chiusura"] is not None
+    assert data["chiuso_da_utente_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_chiudi_anno_already_closed_409(client: AsyncClient):
+    cfg = await create_cfg(client)
+    await client.post(f"{BASE}/{cfg['id']}/chiudi")
+    response = await client.post(f"{BASE}/{cfg['id']}/chiudi")
+    assert response.status_code == 409
+    assert "chiuso" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_riapri_anno_superuser_ok(client: AsyncClient):
+    cfg = await create_cfg(client)
+    await client.post(f"{BASE}/{cfg['id']}/chiudi")
+    response = await client.post(f"{BASE}/{cfg['id']}/riapri")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["chiuso"] is False
+    assert data["data_chiusura"] is None
+    assert data["chiuso_da_utente_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_riapri_anno_non_superuser_forbidden(client: AsyncClient):
+    from main import app
+
+    cfg = await create_cfg(client)
+    await client.post(f"{BASE}/{cfg['id']}/chiudi")
+
+    saved = dict(app.dependency_overrides)
+
+    async def non_super():
+        return Utente(
+            id=99, tipo=TipoUtente.UMANO, email="user@example.com", superuser=False
+        )
+
+    app.dependency_overrides[get_current_user] = non_super
+    try:
+        response = await client.post(f"{BASE}/{cfg['id']}/riapri")
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(saved)
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_riapri_anno_already_open_409(client: AsyncClient):
+    cfg = await create_cfg(client)
+    response = await client.post(f"{BASE}/{cfg['id']}/riapri")
+    assert response.status_code == 409
+    assert "aperto" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
