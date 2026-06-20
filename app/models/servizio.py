@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.indirizzo import Indirizzo
     from app.models.ricevuta import Ricevuta
 
 
@@ -27,4 +28,7 @@ class Servizio(Base):
     )
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    indirizzo: Mapped[Indirizzo] = relationship(
+        "Indirizzo", foreign_keys=[indirizzo_id]
+    )
     ricevute: Mapped[list[Ricevuta]] = relationship(back_populates="servizio")

@@ -2,10 +2,19 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.models.indirizzo import Indirizzo
+from app.models.lookups import Comune
 from app.models.ricevuta import Ricevuta
 from app.models.servizio import Servizio
 from app.schemas.servizio import ServizioCreate, ServizioUpdate
+
+_LOAD_OPTS = [
+    selectinload(Servizio.indirizzo)
+    .selectinload(Indirizzo.comune)
+    .selectinload(Comune.provincia),
+]
 
 
 class ServizioRepository:
@@ -19,7 +28,7 @@ class ServizioRepository:
         offset: int = 0,
         limit: int = 20,
     ) -> list[Servizio]:
-        stmt = select(Servizio)
+        stmt = select(Servizio).options(*_LOAD_OPTS)
         if anno is not None:
             stmt = stmt.where(Servizio.anno == anno)
         if banda_codice is not None:
@@ -40,7 +49,7 @@ class ServizioRepository:
         return result.scalar_one()
 
     async def get_by_id(self, servizio_id: int) -> Servizio | None:
-        stmt = select(Servizio).where(Servizio.id == servizio_id)
+        stmt = select(Servizio).where(Servizio.id == servizio_id).options(*_LOAD_OPTS)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -55,16 +64,21 @@ class ServizioRepository:
     async def create(self, data: ServizioCreate) -> Servizio:
         servizio = Servizio(**data.model_dump())
         self.db.add(servizio)
+        await self.db.flush()
+        servizio_id = servizio.id
         await self.db.commit()
-        await self.db.refresh(servizio)
-        return servizio
+        result = await self.get_by_id(servizio_id)
+        assert result is not None
+        return result
 
     async def update(self, servizio: Servizio, data: ServizioUpdate) -> Servizio:
+        servizio_id = servizio.id
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(servizio, field, value)
         await self.db.commit()
-        await self.db.refresh(servizio)
-        return servizio
+        result = await self.get_by_id(servizio_id)
+        assert result is not None
+        return result
 
     async def delete(self, servizio: Servizio) -> None:
         await self.db.delete(servizio)

@@ -161,7 +161,7 @@ Standard CRUD under `/servizi` and `/ricevute`. In addition:
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/servizi/?anno={anno}` | List events, filterable by year (paginated) |
+| `GET` | `/servizi/?anno={anno}&banda_codice={codice}` | List events, filterable by year and/or band (paginated) |
 | `GET` | `/ricevute/servizio/{servizio_id}` | Receipts for an event (paginated) |
 
 `Servizio` requires an existing `indirizzo_id` (404), and cannot be deleted while
@@ -197,8 +197,10 @@ Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 | `PATCH` | `/{lookup}/{codice}` | Update an entry |
 | `DELETE` | `/{lookup}/{codice}` | Delete an entry (204) |
 
-`GET /comuni/` additionally accepts a `provincia_codice` query parameter to
-restrict municipalities to a single province (e.g. `/comuni/?provincia_codice=64`).
+The geographic lookups accept a hierarchy filter on their list endpoint:
+`GET /regioni/?stato_codice=`, `GET /province/?regione_codice=`, and
+`GET /comuni/?provincia_codice=` each restrict results to the parent entity
+(e.g. `/comuni/?provincia_codice=64`).
 
 `Banda` additionally manages its addresses (many-to-many):
 
@@ -217,7 +219,7 @@ decoupled from the membership model.
 |---|---|---|
 | `GET` | `/documenti/` | List documents (paginated, filterable by `tipo_documento_codice`) |
 | `GET` | `/documenti/{id}` | Get a document by ID |
-| `POST` | `/documenti/?tipo_documento_codice={codice}` | Upload a PDF document |
+| `POST` | `/documenti/?tipo_documento_codice={codice}&note={note}` | Upload a PDF document (optional `note`) |
 | `GET` | `/documenti/{id}/download` | Download a document (404 if file missing) |
 | `DELETE` | `/documenti/{id}` | Delete a document and its file (204) |
 
@@ -229,7 +231,7 @@ parts) and physical location.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/spartiti/` | List scores (paginated, filterable by `tipo_spartito_codice` / `strumento_codice`) |
+| `GET` | `/spartiti/` | List scores (paginated, filterable by `tipo_spartito_codice` / `strumento_codice` / `banda_codice`) |
 | `GET` | `/spartiti/{id}` | Get a score by ID |
 | `POST` | `/spartiti/` | Create a score record |
 | `PATCH` | `/spartiti/{id}` | Update score metadata |

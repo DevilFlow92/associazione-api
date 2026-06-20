@@ -9,7 +9,7 @@ from app.core.database import Base
 from app.models.relations import bande_indirizzi, persone_indirizzi
 
 if TYPE_CHECKING:
-    from app.models.lookups import Banda
+    from app.models.lookups import Banda, Comune
     from app.models.persona import Persona
 
 
@@ -29,6 +29,7 @@ class Indirizzo(Base):
     numero_civico: Mapped[str | None] = mapped_column(String(10), nullable=True)
     interno: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    comune: Mapped[Comune | None] = relationship("Comune", foreign_keys=[comune_codice])
     persone: Mapped[list[Persona]] = relationship(
         secondary=persone_indirizzi, back_populates="indirizzi"
     )

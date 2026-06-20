@@ -57,6 +57,10 @@ class Comune(LookupBase):
         SmallInteger, ForeignKey("province.codice"), nullable=True
     )
 
+    provincia: Mapped[Provincia | None] = relationship(
+        "Provincia", foreign_keys=[provincia_codice]
+    )
+
 
 class Strumento(LookupBase):
     __tablename__ = "strumenti"

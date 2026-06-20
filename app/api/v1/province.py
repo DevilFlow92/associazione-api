@@ -1,5 +1,5 @@
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -20,9 +20,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> LookupService[ProvinciaRe
 @router.get("/", response_model=PagedResponse[ProvinciaResponse])
 async def list_province(
     params: PageParams = Depends(),
+    regione_codice: int | None = Query(None),
     service: LookupService[ProvinciaResponse] = Depends(get_service),
 ) -> PagedResponse[ProvinciaResponse]:
-    return await service.get_all(params)
+    filters = {"regione_codice": regione_codice} if regione_codice is not None else None
+    return await service.get_all(params, filters=filters)
 
 
 @router.get("/{codice}", response_model=ProvinciaResponse)
