@@ -29,6 +29,6 @@ class Documento(Base):
     checksum: Mapped[str] = mapped_column(String(64))
     caricato_il: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(UTC),
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
