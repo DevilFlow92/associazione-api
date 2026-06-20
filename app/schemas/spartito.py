@@ -25,6 +25,7 @@ class DocumentoInSpartito(BaseModel):
 
 
 class SpartitoBase(BaseModel):
+    banda_codice: int
     tipo_spartito_codice: int
     strumento_codice: int | None = None
     documento_id: int
@@ -38,6 +39,7 @@ class SpartitoCreate(SpartitoBase):
 
 
 class SpartitoUpdate(BaseModel):
+    banda_codice: int | None = None
     tipo_spartito_codice: int | None = None
     strumento_codice: int | None = None
     documento_id: int | None = None

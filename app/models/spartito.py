@@ -23,6 +23,9 @@ class Spartito(Base):
     __tablename__ = "spartiti"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    banda_codice: Mapped[int] = mapped_column(
+        SmallInteger, ForeignKey("bande.codice"), nullable=False
+    )
     tipo_spartito_codice: Mapped[int] = mapped_column(
         SmallInteger, ForeignKey("tipi_spartito.codice"), nullable=False
     )

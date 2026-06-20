@@ -16,6 +16,7 @@ async def upload_documento(client: AsyncClient, filename: str = "s.pdf") -> dict
 
 def spartito_payload(tipo_spartito_codice: int, documento_id: int, **overrides) -> dict:
     payload = {
+        "banda_codice": 1,
         "tipo_spartito_codice": tipo_spartito_codice,
         "documento_id": documento_id,
     }
