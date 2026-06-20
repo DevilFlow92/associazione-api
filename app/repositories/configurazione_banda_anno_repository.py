@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.configurazione_banda_anno import ConfigurazioneBandaAnno
+from app.models.lookups import SezioneRendiconto, SottovoceRendiconto, VoceRendiconto
+from app.models.voce_contabilita import VoceContabilita
 from app.schemas.configurazione_banda_anno import (
     ConfigurazioneBandaAnnoCreate,
     ConfigurazioneBandaAnnoUpdate,
@@ -76,6 +78,50 @@ class ConfigurazioneBandaAnnoRepository:
             )
         )
         return bool((await self.db.execute(stmt)).scalar_one())
+
+    async def count_voci_contabilita(self, banda_codice: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(VoceContabilita)
+            .where(VoceContabilita.banda_codice == banda_codice)
+        )
+        return (await self.db.execute(stmt)).scalar_one()
+
+    async def lookup_sezione_codice(self, descrizione: str) -> int | None:
+        stmt = select(SezioneRendiconto.codice).where(
+            func.lower(SezioneRendiconto.descrizione) == descrizione.lower()
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def lookup_voce_codice(self, descrizione: str) -> int | None:
+        stmt = select(VoceRendiconto.codice).where(
+            func.lower(VoceRendiconto.descrizione) == descrizione.lower()
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def lookup_sottovoce_codice(self, descrizione: str) -> int | None:
+        stmt = select(SottovoceRendiconto.codice).where(
+            func.lower(SottovoceRendiconto.descrizione) == descrizione.lower()
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    def add_voce_no_commit(
+        self,
+        banda_codice: int,
+        voce_contabilita: str,
+        sezione_rendiconto_codice: int,
+        voce_rendiconto_codice: int,
+        sottovoce_rendiconto_codice: int,
+    ) -> None:
+        self.db.add(
+            VoceContabilita(
+                banda_codice=banda_codice,
+                voce_contabilita=voce_contabilita,
+                sezione_rendiconto_codice=sezione_rendiconto_codice,
+                voce_rendiconto_codice=voce_rendiconto_codice,
+                sottovoce_rendiconto_codice=sottovoce_rendiconto_codice,
+            )
+        )
 
     async def create(
         self, data: ConfigurazioneBandaAnnoCreate

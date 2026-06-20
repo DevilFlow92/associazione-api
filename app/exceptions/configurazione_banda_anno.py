@@ -17,3 +17,14 @@ class ConfigurazioneBandaAnnoChiusaError(Exception):
         super().__init__(
             f"Configurazione con id {cfg_id} non modificabile: l'anno è chiuso"
         )
+
+
+class RendicontoLookupNotFoundError(Exception):
+    """Raised when a rendiconto lookup row cannot be found
+    by descrizione during seeding."""
+
+    def __init__(self, table: str, descrizione: str) -> None:
+        super().__init__(
+            f"Lookup '{descrizione}' non trovata nella tabella {table}: "
+            "impossibile eseguire il seed delle voci contabilità"
+        )
