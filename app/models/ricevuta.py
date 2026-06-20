@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.esterno import Esterno
     from app.models.servizio import Servizio
 
 
@@ -38,3 +39,4 @@ class Ricevuta(Base):
     note_fuori_stampa: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     servizio: Mapped[Servizio | None] = relationship(back_populates="ricevute")
+    esterno: Mapped[Esterno | None] = relationship("Esterno", foreign_keys=[esterno_id])

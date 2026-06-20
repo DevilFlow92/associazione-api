@@ -168,6 +168,8 @@ Standard CRUD under `/servizi` and `/ricevute`. In addition:
 it has receipts (409). `Ricevuta` supports two use cases: an external
 performer's fee (`servizio_id` + `esterno_id`, both validated if provided) and a
 member's subscription receipt (both omitted, referenced from `Iscrizione`).
+Receipt responses embed the related `esterno` (with its `persona`), eager-loaded
+to avoid N+1 queries.
 
 ### Contabilità (accounting)
 

@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.models.esterno import Esterno
 from app.models.ricevuta import Ricevuta
 from app.schemas.ricevuta import RicevutaCreate, RicevutaUpdate
+
+_LOAD_OPTS = [
+    selectinload(Ricevuta.esterno).selectinload(Esterno.persona),
+]
 
 
 class RicevutaRepository:
@@ -12,7 +18,7 @@ class RicevutaRepository:
         self.db = db
 
     async def get_all(self, offset: int = 0, limit: int = 20) -> list[Ricevuta]:
-        stmt = select(Ricevuta).offset(offset).limit(limit)
+        stmt = select(Ricevuta).options(*_LOAD_OPTS).offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -22,7 +28,7 @@ class RicevutaRepository:
         return result.scalar_one()
 
     async def get_by_id(self, ricevuta_id: int) -> Ricevuta | None:
-        stmt = select(Ricevuta).where(Ricevuta.id == ricevuta_id)
+        stmt = select(Ricevuta).where(Ricevuta.id == ricevuta_id).options(*_LOAD_OPTS)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -32,6 +38,7 @@ class RicevutaRepository:
         stmt = (
             select(Ricevuta)
             .where(Ricevuta.servizio_id == servizio_id)
+            .options(*_LOAD_OPTS)
             .offset(offset)
             .limit(limit)
         )
@@ -50,16 +57,21 @@ class RicevutaRepository:
     async def create(self, data: RicevutaCreate) -> Ricevuta:
         ricevuta = Ricevuta(**data.model_dump())
         self.db.add(ricevuta)
+        await self.db.flush()
+        ricevuta_id = ricevuta.id
         await self.db.commit()
-        await self.db.refresh(ricevuta)
-        return ricevuta
+        result = await self.get_by_id(ricevuta_id)
+        assert result is not None
+        return result
 
     async def update(self, ricevuta: Ricevuta, data: RicevutaUpdate) -> Ricevuta:
+        ricevuta_id = ricevuta.id
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(ricevuta, field, value)
         await self.db.commit()
-        await self.db.refresh(ricevuta)
-        return ricevuta
+        result = await self.get_by_id(ricevuta_id)
+        assert result is not None
+        return result
 
     async def delete(self, ricevuta: Ricevuta) -> None:
         await self.db.delete(ricevuta)

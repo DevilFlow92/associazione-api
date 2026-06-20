@@ -5,6 +5,22 @@ from pydantic import BaseModel
 from app.schemas._types import TzNaiveDatetime
 
 
+class PersonaInRicevuta(BaseModel):
+    id: int
+    nome: str | None = None
+    cognome: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class EsternoInRicevuta(BaseModel):
+    id: int
+    codice_esterno: str
+    persona: PersonaInRicevuta | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class RicevutaBase(BaseModel):
     data_ricevuta: TzNaiveDatetime
     importo: float
@@ -33,5 +49,6 @@ class RicevutaResponse(RicevutaBase):
     servizio_id: int | None
     esterno_id: int | None
     documento_id: int | None
+    esterno: EsternoInRicevuta | None = None
 
     model_config = {"from_attributes": True}
