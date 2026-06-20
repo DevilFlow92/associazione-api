@@ -8,6 +8,9 @@ from app.api.deps import get_current_user
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bande import router as bande_router
 from app.api.v1.comuni import router as comuni_router
+from app.api.v1.configurazione_banda_anno import (
+    router as configurazione_banda_anno_router,
+)
 from app.api.v1.contatti import router as contatti_router
 from app.api.v1.documenti import router as documenti_router
 from app.api.v1.esterni import router as esterni_router
@@ -162,6 +165,9 @@ app.include_router(ricevute_router, prefix="/api/v1", dependencies=_auth)
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(flussi_cassa_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(
+    configurazione_banda_anno_router, prefix="/api/v1", dependencies=_auth
+)
 
 # ── Tabelle dimensione (lookup) ──────────────────────────────────────────────
 app.include_router(stati_router, prefix="/api/v1", dependencies=_auth)
