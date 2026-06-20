@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel
+
+from app.schemas._types import TzNaiveDatetime
 
 
 class ProvinciaInServizio(BaseModel):
@@ -34,7 +34,7 @@ class ServizioBase(BaseModel):
     banda_codice: int
     anno: int
     descrizione_servizio: str
-    data_servizio: datetime
+    data_servizio: TzNaiveDatetime
     indirizzo_id: int
     note: str | None = None
 
@@ -47,7 +47,7 @@ class ServizioUpdate(BaseModel):
     banda_codice: int | None = None
     anno: int | None = None
     descrizione_servizio: str | None = None
-    data_servizio: datetime | None = None
+    data_servizio: TzNaiveDatetime | None = None
     indirizzo_id: int | None = None
     note: str | None = None
 

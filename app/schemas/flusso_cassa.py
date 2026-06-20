@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel
+
+from app.schemas._types import TzNaiveDatetime
 
 
 class FlussoCassaBase(BaseModel):
-    data_registrazione: datetime
+    data_registrazione: TzNaiveDatetime
     descrizione_operazione: str
     note: str | None = None
     importo: float | None = None
@@ -19,7 +19,7 @@ class FlussoCassaCreate(FlussoCassaBase):
 
 
 class FlussoCassaUpdate(BaseModel):
-    data_registrazione: datetime | None = None
+    data_registrazione: TzNaiveDatetime | None = None
     descrizione_operazione: str | None = None
     note: str | None = None
     importo: float | None = None

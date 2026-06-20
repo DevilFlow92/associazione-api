@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel
+
+from app.schemas._types import TzNaiveDatetime
 
 
 class RicevutaBase(BaseModel):
-    data_ricevuta: datetime
+    data_ricevuta: TzNaiveDatetime
     importo: float
     note_in_stampa: str | None = None
     note_fuori_stampa: str | None = None
@@ -19,7 +19,7 @@ class RicevutaCreate(RicevutaBase):
 
 
 class RicevutaUpdate(BaseModel):
-    data_ricevuta: datetime | None = None
+    data_ricevuta: TzNaiveDatetime | None = None
     importo: float | None = None
     note_in_stampa: str | None = None
     note_fuori_stampa: str | None = None
