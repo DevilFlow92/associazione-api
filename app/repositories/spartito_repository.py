@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.spartito import Spartito
 from app.schemas.spartito import SpartitoCreate, SpartitoUpdate
+
+_LOAD_OPTS = [
+    selectinload(Spartito.tipo_spartito),
+    selectinload(Spartito.strumento),
+    selectinload(Spartito.documento),
+]
 
 
 class SpartitoRepository:
@@ -19,7 +26,7 @@ class SpartitoRepository:
         offset: int = 0,
         limit: int = 20,
     ) -> list[Spartito]:
-        stmt = select(Spartito)
+        stmt = select(Spartito).options(*_LOAD_OPTS)
         if tipo_spartito_codice is not None:
             stmt = stmt.where(Spartito.tipo_spartito_codice == tipo_spartito_codice)
         if strumento_codice is not None:
@@ -47,23 +54,28 @@ class SpartitoRepository:
         return result.scalar_one()
 
     async def get_by_id(self, spartito_id: int) -> Spartito | None:
-        stmt = select(Spartito).where(Spartito.id == spartito_id)
+        stmt = select(Spartito).where(Spartito.id == spartito_id).options(*_LOAD_OPTS)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def create(self, data: SpartitoCreate) -> Spartito:
         spartito = Spartito(**data.model_dump())
         self.db.add(spartito)
+        await self.db.flush()
+        spartito_id = spartito.id
         await self.db.commit()
-        await self.db.refresh(spartito)
-        return spartito
+        result = await self.get_by_id(spartito_id)
+        assert result is not None
+        return result
 
     async def update(self, spartito: Spartito, data: SpartitoUpdate) -> Spartito:
+        spartito_id = spartito.id
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(spartito, field, value)
         await self.db.commit()
-        await self.db.refresh(spartito)
-        return spartito
+        result = await self.get_by_id(spartito_id)
+        assert result is not None
+        return result
 
     async def delete(self, spartito: Spartito) -> None:
         await self.db.delete(spartito)

@@ -3,6 +3,27 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class TipoSpartitoInSpartito(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
+class StrumentoInSpartito(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
+class DocumentoInSpartito(BaseModel):
+    id: int
+    nome: str
+
+    model_config = {"from_attributes": True}
+
+
 class SpartitoBase(BaseModel):
     tipo_spartito_codice: int
     strumento_codice: int | None = None
@@ -27,5 +48,8 @@ class SpartitoUpdate(BaseModel):
 
 class SpartitoResponse(SpartitoBase):
     id: int
+    tipo_spartito: TipoSpartitoInSpartito | None = None
+    strumento: StrumentoInSpartito | None = None
+    documento: DocumentoInSpartito | None = None
 
     model_config = {"from_attributes": True}
