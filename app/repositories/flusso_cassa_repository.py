@@ -28,6 +28,11 @@ class FlussoCassaRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_iscrizione_id(self, iscrizione_id: int) -> FlussoCassa | None:
+        stmt = select(FlussoCassa).where(FlussoCassa.iscrizione_id == iscrizione_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_other_leg_by_trasferimento_id(
         self, trasferimento_id: UUID, exclude_id: int
     ) -> FlussoCassa | None:
@@ -82,6 +87,11 @@ class FlussoCassaRepository:
     def add_no_commit(self, flusso: FlussoCassa) -> None:
         """Accoda un insert senza fare commit (per inserimenti atomici a coppie)."""
         self.db.add(flusso)
+
+    def update_no_commit(self, flusso: FlussoCassa, **fields) -> None:
+        """Applica aggiornamenti di campo senza fare commit."""
+        for field, value in fields.items():
+            setattr(flusso, field, value)
 
     async def delete_no_commit(self, flusso: FlussoCassa) -> None:
         """Accoda una delete senza fare commit (per cancellazioni atomiche)."""

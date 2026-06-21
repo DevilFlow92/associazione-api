@@ -56,6 +56,7 @@ from app.exceptions.flusso_cassa import (
     NaturaFlussoNotFoundError,
     TrasferimentoNaturaUgualeError,
 )
+from app.exceptions.iscrizione import ConfigurazioneContabileMancanteError
 from app.exceptions.lookup import LookupDuplicateCodiceError, LookupNotFoundError
 
 # Configura logging prima di tutto il resto.
@@ -89,6 +90,13 @@ app.add_middleware(
 @app.exception_handler(AnnoChiusoError)
 async def anno_chiuso_handler(request: Request, exc: AnnoChiusoError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(ConfigurazioneContabileMancanteError)
+async def configurazione_contabile_mancante_handler(
+    request: Request, exc: ConfigurazioneContabileMancanteError
+) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
 @app.exception_handler(TrasferimentoNaturaUgualeError)

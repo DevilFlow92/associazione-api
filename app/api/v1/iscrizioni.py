@@ -5,7 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.exceptions.iscrizione import IscrizioneNotFoundError
 from app.exceptions.socio import SocioNotFoundError
+from app.models.lookups import NaturaFlusso, StatoIscrizione
+from app.repositories.configurazione_banda_anno_repository import (
+    ConfigurazioneBandaAnnoRepository,
+)
+from app.repositories.flusso_cassa_repository import FlussoCassaRepository
 from app.repositories.iscrizione_repository import IscrizioneRepository
+from app.repositories.lookup import LookupRepository
 from app.repositories.socio_repository import SocioRepository
 from app.schemas.iscrizione import (
     IscrizioneCreate,
@@ -18,7 +24,14 @@ router = APIRouter(prefix="/iscrizioni", tags=["iscrizioni"])
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> IscrizioneService:
-    return IscrizioneService(IscrizioneRepository(db), SocioRepository(db))
+    return IscrizioneService(
+        repo=IscrizioneRepository(db),
+        socio_repo=SocioRepository(db),
+        flusso_repo=FlussoCassaRepository(db),
+        cfg_repo=ConfigurazioneBandaAnnoRepository(db),
+        stato_iscrizione_repo=LookupRepository(db, StatoIscrizione),
+        natura_flusso_repo=LookupRepository(db, NaturaFlusso),
+    )
 
 
 @router.get("/", response_model=PagedResponse[IscrizioneResponse])
