@@ -48,6 +48,13 @@ class LookupRepository[ModelT: LookupBase]:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_descrizione_ilike(self, descrizione: str) -> ModelT | None:
+        stmt = select(self.model).where(
+            func.lower(self.model.descrizione) == descrizione.lower()
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def create(self, data: PydanticModel) -> ModelT:
         obj = self.model(**data.model_dump())
         self.db.add(obj)
