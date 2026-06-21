@@ -271,3 +271,145 @@ async def test_update_data_to_chiuso_anno_blocked(client: AsyncClient):
         json={"data_registrazione": "2024-12-31T00:00:00"},
     )
     assert response.status_code == 409
+
+
+# ── Trasferimenti atomici cassa↔banca ────────────────────────────────────────
+
+TRASF_BASE = "/api/v1/flussi-cassa/trasferimenti/"
+
+
+async def _create_natura(client: AsyncClient, codice: int, descrizione: str) -> dict:
+    resp = await client.post(
+        "/api/v1/nature-flusso/",
+        json={"codice": codice, "descrizione": descrizione},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_nature_cassa_banca(client: AsyncClient) -> None:
+    await _create_natura(client, 1, "Cassa")
+    await _create_natura(client, 2, "Banca")
+
+
+def trasferimento_payload(voce_id: int, **overrides) -> dict:
+    payload = {
+        "data_registrazione": "2026-02-01T00:00:00",
+        "importo": 195.00,
+        "natura_da_codice": 1,
+        "natura_a_codice": 2,
+        "voce_contabilita_id": voce_id,
+        "descrizione_operazione": "Versamento in banca",
+        "note": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_crea_trasferimento_ok(client: AsyncClient):
+    voce = await create_voce(client)
+    await _create_nature_cassa_banca(client)
+    response = await client.post(TRASF_BASE, json=trasferimento_payload(voce["id"]))
+    assert response.status_code == 201, response.text
+    flussi = response.json()["flussi"]
+    assert len(flussi) == 2
+    uscita, entrata = flussi
+    # Stessa coppia: identico trasferimento_id e importo, segno/tipo opposti.
+    assert uscita["trasferimento_id"] is not None
+    assert uscita["trasferimento_id"] == entrata["trasferimento_id"]
+    assert uscita["importo"] == entrata["importo"] == 195.00
+    assert uscita["tipo"] == TipoFlussoCassa.TRASFERIMENTO_USCITA
+    assert uscita["segno"] == "-"
+    assert uscita["natura_flusso_codice"] == 1
+    assert entrata["tipo"] == TipoFlussoCassa.TRASFERIMENTO_ENTRATA
+    assert entrata["segno"] == "+"
+    assert entrata["natura_flusso_codice"] == 2
+
+
+@pytest.mark.asyncio
+async def test_crea_trasferimento_natura_uguale_422(client: AsyncClient):
+    voce = await create_voce(client)
+    await _create_nature_cassa_banca(client)
+    response = await client.post(
+        TRASF_BASE,
+        json=trasferimento_payload(voce["id"], natura_da_codice=1, natura_a_codice=1),
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_crea_trasferimento_voce_non_trovata_404(client: AsyncClient):
+    await _create_nature_cassa_banca(client)
+    response = await client.post(TRASF_BASE, json=trasferimento_payload(999))
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_crea_trasferimento_anno_chiuso_409(client: AsyncClient):
+    voce = await create_voce(client)
+    await _create_nature_cassa_banca(client)
+    await _create_cfg_and_close(client, banda_codice=1, anno=2026)
+    response = await client.post(
+        TRASF_BASE,
+        json=trasferimento_payload(
+            voce["id"], data_registrazione="2026-02-01T00:00:00"
+        ),
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("importo", [0, -100])
+async def test_crea_trasferimento_importo_zero_o_negativo_422(
+    client: AsyncClient, importo: int
+):
+    voce = await create_voce(client)
+    await _create_nature_cassa_banca(client)
+    response = await client.post(
+        TRASF_BASE, json=trasferimento_payload(voce["id"], importo=importo)
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delete_uscita_elimina_anche_entrata(client: AsyncClient):
+    voce = await create_voce(client)
+    await _create_nature_cassa_banca(client)
+    created = await client.post(TRASF_BASE, json=trasferimento_payload(voce["id"]))
+    uscita, entrata = created.json()["flussi"]
+
+    response = await client.delete(f"/api/v1/flussi-cassa/{uscita['id']}")
+    assert response.status_code == 204
+    assert (await client.get(f"/api/v1/flussi-cassa/{uscita['id']}")).status_code == 404
+    assert (
+        await client.get(f"/api/v1/flussi-cassa/{entrata['id']}")
+    ).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_entrata_elimina_anche_uscita(client: AsyncClient):
+    voce = await create_voce(client)
+    await _create_nature_cassa_banca(client)
+    created = await client.post(TRASF_BASE, json=trasferimento_payload(voce["id"]))
+    uscita, entrata = created.json()["flussi"]
+
+    response = await client.delete(f"/api/v1/flussi-cassa/{entrata['id']}")
+    assert response.status_code == 204
+    assert (
+        await client.get(f"/api/v1/flussi-cassa/{entrata['id']}")
+    ).status_code == 404
+    assert (await client.get(f"/api/v1/flussi-cassa/{uscita['id']}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_flusso_trasferimento_409(client: AsyncClient):
+    voce = await create_voce(client)
+    await _create_nature_cassa_banca(client)
+    created = await client.post(TRASF_BASE, json=trasferimento_payload(voce["id"]))
+    uscita = created.json()["flussi"][0]
+
+    response = await client.patch(
+        f"/api/v1/flussi-cassa/{uscita['id']}", json={"importo": 10.0}
+    )
+    assert response.status_code == 409

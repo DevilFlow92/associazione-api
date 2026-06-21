@@ -50,7 +50,12 @@ from app.exceptions.auth import (
     InvalidTokenError,
     PermissionDeniedError,
 )
-from app.exceptions.flusso_cassa import AnnoChiusoError
+from app.exceptions.flusso_cassa import (
+    AnnoChiusoError,
+    FlussoTrasferimentoNonModificabileError,
+    NaturaFlussoNotFoundError,
+    TrasferimentoNaturaUgualeError,
+)
 from app.exceptions.lookup import LookupDuplicateCodiceError, LookupNotFoundError
 
 # Configura logging prima di tutto il resto.
@@ -83,6 +88,27 @@ app.add_middleware(
 # mappiamo in modo centralizzato così i 9 router restano minimali.
 @app.exception_handler(AnnoChiusoError)
 async def anno_chiuso_handler(request: Request, exc: AnnoChiusoError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(TrasferimentoNaturaUgualeError)
+async def trasferimento_natura_uguale_handler(
+    request: Request, exc: TrasferimentoNaturaUgualeError
+) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+@app.exception_handler(NaturaFlussoNotFoundError)
+async def natura_flusso_not_found_handler(
+    request: Request, exc: NaturaFlussoNotFoundError
+) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+@app.exception_handler(FlussoTrasferimentoNonModificabileError)
+async def flusso_trasferimento_non_modificabile_handler(
+    request: Request, exc: FlussoTrasferimentoNonModificabileError
+) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 

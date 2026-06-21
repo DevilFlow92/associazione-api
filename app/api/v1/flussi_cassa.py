@@ -2,18 +2,23 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.flusso_cassa import FlussoCassaNotFoundError
 from app.exceptions.voce_contabilita import VoceContabilitaNotFoundError
+from app.models.lookups import NaturaFlusso
 from app.repositories.configurazione_banda_anno_repository import (
     ConfigurazioneBandaAnnoRepository,
 )
 from app.repositories.flusso_cassa_repository import FlussoCassaRepository
+from app.repositories.lookup import LookupRepository
 from app.repositories.voce_contabilita_repository import VoceContabilitaRepository
 from app.schemas.flusso_cassa import (
     FlussoCassaCreate,
     FlussoCassaResponse,
     FlussoCassaUpdate,
+    TrasferimentoCreate,
+    TrasferimentoResponse,
 )
 from app.services.flusso_cassa_service import FlussoCassaService
 
@@ -25,6 +30,7 @@ def get_service(db: AsyncSession = Depends(get_db)) -> FlussoCassaService:
         FlussoCassaRepository(db),
         VoceContabilitaRepository(db),
         ConfigurazioneBandaAnnoRepository(db),
+        LookupRepository(db, NaturaFlusso),
     )
 
 
@@ -49,6 +55,27 @@ async def get_flussi_voce_contabilita(
         return await service.get_by_voce(voce_contabilita_id, params)
     except VoceContabilitaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+# Registrato PRIMA delle rotte dinamiche ``/{flusso_id}`` per evitare conflitti
+# di path.
+@router.post(
+    "/trasferimenti/",
+    response_model=TrasferimentoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
+async def crea_trasferimento(
+    data: TrasferimentoCreate,
+    service: FlussoCassaService = Depends(get_service),
+) -> TrasferimentoResponse:
+    try:
+        flussi = await service.crea_trasferimento(data)
+    except VoceContabilitaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return TrasferimentoResponse(
+        flussi=[FlussoCassaResponse.model_validate(f) for f in flussi]
+    )
 
 
 @router.get("/{flusso_id}", response_model=FlussoCassaResponse)
