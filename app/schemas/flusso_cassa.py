@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.flusso_cassa import TipoFlussoCassa
 from app.schemas._types import TzNaiveDatetime
@@ -41,3 +42,23 @@ class FlussoCassaResponse(FlussoCassaBase):
     voce_contabilita_id: int
 
     model_config = {"from_attributes": True}
+
+
+class TrasferimentoCreate(BaseModel):
+    """Entry-point per il trasferimento atomico cassa↔banca.
+
+    Genera due ``FlussoCassa`` correlati (uscita + entrata) condividendo lo
+    stesso ``trasferimento_id``; vedi ``FlussoCassaService.crea_trasferimento``.
+    """
+
+    data_registrazione: TzNaiveDatetime
+    importo: Decimal = Field(gt=0)
+    natura_da_codice: int
+    natura_a_codice: int
+    voce_contabilita_id: int
+    descrizione_operazione: str
+    note: str | None = None
+
+
+class TrasferimentoResponse(BaseModel):
+    flussi: list[FlussoCassaResponse]

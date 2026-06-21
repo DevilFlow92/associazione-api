@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +25,17 @@ class FlussoCassaRepository:
 
     async def get_by_id(self, flusso_id: int) -> FlussoCassa | None:
         stmt = select(FlussoCassa).where(FlussoCassa.id == flusso_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_other_leg_by_trasferimento_id(
+        self, trasferimento_id: UUID, exclude_id: int
+    ) -> FlussoCassa | None:
+        """Restituisce l'altra gamba di un trasferimento (stesso UUID, id diverso)."""
+        stmt = select(FlussoCassa).where(
+            FlussoCassa.trasferimento_id == trasferimento_id,
+            FlussoCassa.id != exclude_id,
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -64,3 +77,18 @@ class FlussoCassaRepository:
     async def delete(self, flusso: FlussoCassa) -> None:
         await self.db.delete(flusso)
         await self.db.commit()
+
+    # ── Operazioni transazionali (commit gestito dal service) ────────────────
+    def add_no_commit(self, flusso: FlussoCassa) -> None:
+        """Accoda un insert senza fare commit (per inserimenti atomici a coppie)."""
+        self.db.add(flusso)
+
+    async def delete_no_commit(self, flusso: FlussoCassa) -> None:
+        """Accoda una delete senza fare commit (per cancellazioni atomiche)."""
+        await self.db.delete(flusso)
+
+    async def commit(self) -> None:
+        await self.db.commit()
+
+    async def refresh(self, flusso: FlussoCassa) -> None:
+        await self.db.refresh(flusso)
