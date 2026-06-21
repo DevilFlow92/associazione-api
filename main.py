@@ -22,6 +22,7 @@ from app.api.v1.permessi import router as permessi_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.province import router as province_router
 from app.api.v1.regioni import router as regioni_router
+from app.api.v1.rendiconto import router as rendiconto_router
 from app.api.v1.ricevute import router as ricevute_router
 from app.api.v1.ruoli import router as ruoli_router
 from app.api.v1.ruoli_banda import router as ruoli_banda_router
@@ -205,6 +206,7 @@ app.include_router(ricevute_router, prefix="/api/v1", dependencies=_auth)
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(flussi_cassa_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(rendiconto_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(
     configurazione_banda_anno_router, prefix="/api/v1", dependencies=_auth
 )
