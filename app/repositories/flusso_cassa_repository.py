@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.flusso_cassa import FlussoCassa
+from app.models.lookups import NaturaFlusso
+from app.models.voce_contabilita import VoceContabilita
 from app.schemas.flusso_cassa import FlussoCassaCreate, FlussoCassaUpdate
 
 
@@ -102,3 +105,66 @@ class FlussoCassaRepository:
 
     async def refresh(self, flusso: FlussoCassa) -> None:
         await self.db.refresh(flusso)
+
+    # ── Rendiconto aggregation ────────────────────────────────────────────────
+
+    async def get_aggregati_per_rendiconto(
+        self, banda_codice: int, anno: int
+    ) -> list[tuple[int, int, int, Decimal]]:
+        """One row per flusso:
+        (sezione_cod, voce_cod, sottovoce_cod, importo_signed)."""
+        stmt = (
+            select(
+                VoceContabilita.sezione_rendiconto_codice,
+                VoceContabilita.voce_rendiconto_codice,
+                VoceContabilita.sottovoce_rendiconto_codice,
+                FlussoCassa.importo,
+                FlussoCassa.segno,
+            )
+            .join(
+                VoceContabilita, FlussoCassa.voce_contabilita_id == VoceContabilita.id
+            )
+            .where(
+                VoceContabilita.banda_codice == banda_codice,
+                extract("year", FlussoCassa.data_registrazione) == anno,
+            )
+        )
+        result = await self.db.execute(stmt)
+        rows: list[tuple[int, int, int, Decimal]] = []
+        for sez_cod, voce_cod, sv_cod, importo, segno in result:
+            if importo is not None:
+                amount = Decimal(str(importo))
+                rows.append(
+                    (sez_cod, voce_cod, sv_cod, amount if segno == "+" else -amount)
+                )
+        return rows
+
+    async def get_aggregati_per_natura(
+        self, banda_codice: int, anno: int
+    ) -> dict[str, Decimal]:
+        """Returns {natura_descrizione.lower():
+        signed_sum} for saldo_finale computation."""
+        stmt = (
+            select(
+                NaturaFlusso.descrizione,
+                FlussoCassa.importo,
+                FlussoCassa.segno,
+            )
+            .join(
+                VoceContabilita, FlussoCassa.voce_contabilita_id == VoceContabilita.id
+            )
+            .join(NaturaFlusso, FlussoCassa.natura_flusso_codice == NaturaFlusso.codice)
+            .where(
+                VoceContabilita.banda_codice == banda_codice,
+                extract("year", FlussoCassa.data_registrazione) == anno,
+            )
+        )
+        result = await self.db.execute(stmt)
+        natura_dict: dict[str, Decimal] = {}
+        for descrizione, importo, segno in result:
+            if importo is not None:
+                key = descrizione.lower()
+                amount = Decimal(str(importo))
+                signed = amount if segno == "+" else -amount
+                natura_dict[key] = natura_dict.get(key, Decimal(0)) + signed
+        return natura_dict
