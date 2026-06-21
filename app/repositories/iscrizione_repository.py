@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.iscrizione import Iscrizione
+from app.models.lookups import StatoIscrizione
+from app.models.persona import Persona
 from app.models.socio import Socio
 from app.schemas.iscrizione import IscrizioneCreate, IscrizioneUpdate
 
@@ -52,6 +56,40 @@ class IscrizioneRepository:
         stmt = _with_rels().where(Iscrizione.id == iscrizione_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_quote_versate_per_anno(
+        self, banda_codice: int, anno: int
+    ) -> dict[int, Decimal]:
+        """Somma delle quote pagate per socio nell'anno indicato.
+
+        Considera solo le iscrizioni con stato ``Pagata`` (match
+        case-insensitive sulla descrizione) dei soci appartenenti alla banda.
+        Restituisce ``{socio_id: totale_quota_pagata}``.
+        """
+        stmt = (
+            select(
+                Iscrizione.socio_id,
+                func.sum(Iscrizione.quota_partecipazione),
+            )
+            .join(Socio, Iscrizione.socio_id == Socio.id)
+            .join(Persona, Socio.persona_id == Persona.id)
+            .join(
+                StatoIscrizione,
+                Iscrizione.stato_iscrizione_codice == StatoIscrizione.codice,
+            )
+            .where(
+                Iscrizione.anno == anno,
+                Persona.banda_codice == banda_codice,
+                func.lower(StatoIscrizione.descrizione) == "pagata",
+            )
+            .group_by(Iscrizione.socio_id)
+        )
+        result = await self.db.execute(stmt)
+        return {
+            socio_id: Decimal(str(totale))
+            for socio_id, totale in result
+            if totale is not None
+        }
 
     async def create(self, data: IscrizioneCreate) -> Iscrizione:
         iscrizione = Iscrizione(**data.model_dump())

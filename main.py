@@ -7,6 +7,7 @@ import app.models  # noqa: F401
 from app.api.deps import get_current_user
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bande import router as bande_router
+from app.api.v1.check_quote import router as check_quote_router
 from app.api.v1.comuni import router as comuni_router
 from app.api.v1.configurazione_banda_anno import (
     router as configurazione_banda_anno_router,
@@ -207,6 +208,7 @@ app.include_router(ricevute_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(flussi_cassa_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(rendiconto_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(check_quote_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(
     configurazione_banda_anno_router, prefix="/api/v1", dependencies=_auth
 )
