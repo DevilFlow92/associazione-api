@@ -41,6 +41,19 @@ class SocioRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_all_by_banda(self, banda_codice: int) -> list[Socio]:
+        """Tutti i soci della banda, con persona caricata, ordinati per
+        cognome e nome."""
+        stmt = (
+            select(Socio)
+            .options(*_LOAD_OPTS)
+            .join(Persona)
+            .where(Persona.banda_codice == banda_codice)
+            .order_by(Persona.cognome, Persona.nome)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_by_codice(self, codice_socio: str, banda_codice: int) -> Socio | None:
         stmt = (
             select(Socio)
