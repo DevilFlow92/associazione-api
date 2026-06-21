@@ -32,6 +32,9 @@ dependencies = [
     "email-validator>=2.3.0",
     # ── File handling ─────────────────────────────────────────────────────
     "pypdf>=6.13.0",
+    # ── Export (rendiconto PDF/XLSX) ──────────────────────────────────────
+    "reportlab>=4.2.0",
+    "openpyxl>=3.1.0",
     # NOTE: python-json-logger removed — logging is now handled by
     # associazione_toolkit.logging (structlog-based, included via toolkit).
     "pyjwt>=2.10.0",
