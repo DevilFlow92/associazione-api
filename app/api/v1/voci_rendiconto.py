@@ -1,5 +1,5 @@
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -28,9 +28,11 @@ def get_service(
 @router.get("/", response_model=PagedResponse[VoceRendicontoResponse])
 async def list_voci_rendiconto(
     params: PageParams = Depends(),
+    sezione_codice: int | None = Query(None),
     service: LookupService[VoceRendicontoResponse] = Depends(get_service),
 ) -> PagedResponse[VoceRendicontoResponse]:
-    return await service.get_all(params)
+    filters = {"sezione_codice": sezione_codice} if sezione_codice is not None else None
+    return await service.get_all(params, filters=filters)
 
 
 @router.get("/{codice}", response_model=VoceRendicontoResponse)

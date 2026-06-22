@@ -1,10 +1,11 @@
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.lookups import SottovoceRendiconto
-from app.repositories.lookup import LookupRepository
+from app.repositories.sottovoce_rendiconto_repository import (
+    SottovoceRendicontoRepository,
+)
 from app.schemas.lookups import (
     SottovoceRendicontoCreate,
     SottovoceRendicontoResponse,
@@ -19,7 +20,7 @@ def get_service(
     db: AsyncSession = Depends(get_db),
 ) -> LookupService[SottovoceRendicontoResponse]:
     return LookupService(
-        LookupRepository(db, SottovoceRendiconto),
+        SottovoceRendicontoRepository(db),
         SottovoceRendicontoResponse,
         "Sottovoce rendiconto",
     )
@@ -28,9 +29,11 @@ def get_service(
 @router.get("/", response_model=PagedResponse[SottovoceRendicontoResponse])
 async def list_sottovoci_rendiconto(
     params: PageParams = Depends(),
+    voce_codice: int | None = Query(None),
     service: LookupService[SottovoceRendicontoResponse] = Depends(get_service),
 ) -> PagedResponse[SottovoceRendicontoResponse]:
-    return await service.get_all(params)
+    filters = {"voce_codice": voce_codice} if voce_codice is not None else None
+    return await service.get_all(params, filters=filters)
 
 
 @router.get("/{codice}", response_model=SottovoceRendicontoResponse)

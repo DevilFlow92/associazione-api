@@ -23,7 +23,32 @@ class VoceContabilitaUpdate(BaseModel):
     sottovoce_rendiconto_codice: int | None = None
 
 
+class SezioneRendicontoInVoce(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
+class VoceRendicontoInVoce(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
+class SottovoceRendicontoInVoce(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
 class VoceContabilitaResponse(VoceContabilitaBase):
     id: int
+
+    sezione_rendiconto: SezioneRendicontoInVoce | None = None
+    voce_rendiconto: VoceRendicontoInVoce | None = None
+    sottovoce_rendiconto: SottovoceRendicontoInVoce | None = None
 
     model_config = {"from_attributes": True}

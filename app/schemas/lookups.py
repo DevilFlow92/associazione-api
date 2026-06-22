@@ -157,15 +157,15 @@ class SezioneRendicontoResponse(LookupResponse):
 
 # ── VoceRendiconto ───────────────────────────────────────────────────────────
 class VoceRendicontoCreate(LookupCreate):
-    pass
+    sezione_codice: int
 
 
 class VoceRendicontoUpdate(LookupUpdate):
-    pass
+    sezione_codice: int | None = None
 
 
 class VoceRendicontoResponse(LookupResponse):
-    pass
+    sezione_codice: int
 
 
 # ── SottovoceRendiconto ──────────────────────────────────────────────────────

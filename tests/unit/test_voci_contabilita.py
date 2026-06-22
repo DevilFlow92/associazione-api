@@ -33,6 +33,33 @@ async def test_create_voce_contabilita(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_voce_contabilita_includes_nested_lookups(client: AsyncClient):
+    # Codici presenti nel seed dei lookup (vedi conftest.seed_rendiconto_lookups).
+    voce = await create_voce(
+        client,
+        sezione_rendiconto_codice=2,
+        voce_rendiconto_codice=2,
+        sottovoce_rendiconto_codice=6,
+    )
+
+    response = await client.get(f"/api/v1/voci-contabilita/{voce['id']}")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["sezione_rendiconto"] == {"codice": 2, "descrizione": "Entrate"}
+    assert data["voce_rendiconto"]["codice"] == 2
+    assert (
+        data["voce_rendiconto"]["descrizione"]
+        == "A) Entrate da attività di interesse generale"
+    )
+    assert data["sottovoce_rendiconto"]["codice"] == 6
+    assert (
+        data["sottovoce_rendiconto"]["descrizione"]
+        == "1) Entrate da quote associative e apporti dei fondatori"
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_voce_contabilita_not_found(client: AsyncClient):
     response = await client.get("/api/v1/voci-contabilita/999")
     assert response.status_code == 404
