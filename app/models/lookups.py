@@ -6,7 +6,7 @@ from sqlalchemy import ForeignKey, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.relations import bande_indirizzi
+from app.models.relations import bande_indirizzi, voci_sottovoci_rendiconto
 
 if TYPE_CHECKING:
     from app.models.indirizzo import Indirizzo
@@ -96,6 +96,20 @@ class VoceRendiconto(LookupBase):
 
     # Legacy D_VoceRendiconto.Descrizione è VARCHAR(255).
     descrizione: Mapped[str] = mapped_column(String(255))
+    # Ogni voce appartiene a una sezione (Uscite/Entrate/…). La gerarchia, nel
+    # modello legacy, viveva solo implicitamente nelle voci di contabilità.
+    sezione_codice: Mapped[int] = mapped_column(
+        SmallInteger, ForeignKey("sezioni_rendiconto.codice"), nullable=False
+    )
+
+    sezione: Mapped[SezioneRendiconto] = relationship(
+        "SezioneRendiconto", foreign_keys=[sezione_codice]
+    )
+    sottovoci: Mapped[list[SottovoceRendiconto]] = relationship(
+        "SottovoceRendiconto",
+        secondary=voci_sottovoci_rendiconto,
+        back_populates="voci",
+    )
 
 
 class SottovoceRendiconto(LookupBase):
@@ -103,6 +117,12 @@ class SottovoceRendiconto(LookupBase):
 
     # Legacy D_SottovoceRendiconto.Descrizione è VARCHAR(255).
     descrizione: Mapped[str] = mapped_column(String(255))
+
+    voci: Mapped[list[VoceRendiconto]] = relationship(
+        "VoceRendiconto",
+        secondary=voci_sottovoci_rendiconto,
+        back_populates="sottovoci",
+    )
 
 
 class NaturaFlusso(LookupBase):

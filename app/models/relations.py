@@ -21,6 +21,29 @@ bande_indirizzi = Table(
     Column("indirizzo_id", Integer, ForeignKey("indirizzi.id"), primary_key=True),
 )
 
+# Relazione molti-a-molti tra voci e sottovoci del rendiconto.
+# Le sottovoci "generiche" di uscita (Materie prime, Servizi, Godimento beni di
+# terzi, Personale, Uscite diverse) sono condivise da più voci (A/B/E Uscite):
+# il legame voce↔sottovoce non è quindi una semplice FK 1:N ma una tabella
+# ponte. ``ondelete="CASCADE"`` rimuove i link quando una voce o una sottovoce
+# viene cancellata.
+voci_sottovoci_rendiconto = Table(
+    "voci_sottovoci_rendiconto",
+    Base.metadata,
+    Column(
+        "voce_codice",
+        SmallInteger,
+        ForeignKey("voci_rendiconto.codice", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "sottovoce_codice",
+        SmallInteger,
+        ForeignKey("sottovoci_rendiconto.codice", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
 # ── RBAC: assegnazioni molti-a-molti ─────────────────────────────────────────
 # Quali permessi concede un ruolo. Il modello RBAC è configurabile per
 # associazione: ogni banda decide quali permessi mappare ai ruoli del direttivo
