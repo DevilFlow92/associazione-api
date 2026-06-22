@@ -1,5 +1,3 @@
-import os
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,7 +14,9 @@ class Settings(BaseSettings):
     secret_key: str = "changeme"
 
     # Database
-    database_url: str = os.environ["DATABASE_URL"]
+    database_url: str = (
+        "postgresql+asyncpg://user:password@localhost:5432/associazione_db"
+    )
     # URL usato per le migrazioni (DDL). In produzione punta al proprietario
     # dello schema, distinto dal ruolo a privilegio minimo dell'app a runtime.
     # Se non impostato, ricade su ``database_url``.
