@@ -10,7 +10,7 @@ from app.repositories.configurazione_banda_anno_repository import (
 from app.repositories.flusso_cassa_repository import FlussoCassaRepository
 from app.repositories.lookup import LookupRepository
 from app.repositories.voce_contabilita_repository import VoceContabilitaRepository
-from app.schemas.rendiconto import RendicontoResponse
+from app.schemas.rendiconto import RendicontoMensileResponse, RendicontoResponse
 from app.services.rendiconto_service import RendicontoService
 from app.utils.export_rendiconto import (
     render_rendiconto_pdf,
@@ -45,6 +45,19 @@ async def get_rendiconto(
     service: RendicontoService = Depends(get_service),
 ) -> RendicontoResponse:
     return await service.get_rendiconto(banda_codice, anno)
+
+
+@router.get(
+    "/rendiconto/mensile",
+    response_model=RendicontoMensileResponse,
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
+async def get_rendiconto_mensile(
+    banda_codice: int = Query(...),
+    anno: int = Query(...),
+    service: RendicontoService = Depends(get_service),
+) -> RendicontoMensileResponse:
+    return await service.get_rendiconto_mensile(banda_codice, anno)
 
 
 @router.get(

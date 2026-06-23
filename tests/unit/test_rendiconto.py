@@ -277,6 +277,93 @@ async def test_rendiconto_filter_per_banda_e_anno(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_rendiconto_mensile(client: AsyncClient):
+    """Monthly breakdown: correct per-month buckets, fuori-bilancio excluded,
+    reconciliation sum(entrate) == totali.entrate and sum(uscite) == totali.uscite."""
+    env = await setup_rendiconto_env(client)
+    voci = env["voci"]
+
+    voce_entrate_id = voci["Quote associative"]["id"]
+    voce_uscite_id = voci["Spese bancarie"]["id"]
+    voce_fb_id = voci["Saldo iniziale"]["id"]
+
+    # Gennaio: entrata 100, uscita 40
+    await client.post(
+        f"{FLUSSO_BASE}/",
+        json=flusso_payload(
+            voce_entrate_id,
+            importo=100.0,
+            segno="+",
+            data_registrazione="2026-01-10T00:00:00",
+        ),
+    )
+    await client.post(
+        f"{FLUSSO_BASE}/",
+        json=flusso_payload(
+            voce_uscite_id,
+            importo=40.0,
+            segno="-",
+            data_registrazione="2026-01-20T00:00:00",
+        ),
+    )
+    # Marzo: entrata 200
+    await client.post(
+        f"{FLUSSO_BASE}/",
+        json=flusso_payload(
+            voce_entrate_id,
+            importo=200.0,
+            segno="+",
+            data_registrazione="2026-03-05T00:00:00",
+        ),
+    )
+    # Fuori bilancio in gennaio: should NOT count
+    await client.post(
+        f"{FLUSSO_BASE}/",
+        json=flusso_payload(
+            voce_fb_id,
+            importo=50.0,
+            segno="+",
+            data_registrazione="2026-01-15T00:00:00",
+        ),
+    )
+
+    resp = await client.get(f"{REND_BASE}/mensile?banda_codice=1&anno=2026")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["banda_codice"] == 1
+    assert data["anno"] == 2026
+
+    mensile = data["mensile"]
+    assert len(mensile) == 12
+
+    by_mese = {item["mese"]: item for item in mensile}
+
+    jan = by_mese[1]
+    assert Decimal(jan["entrate"]) == Decimal("100")
+    assert Decimal(jan["uscite"]) == Decimal("40")
+
+    mar = by_mese[3]
+    assert Decimal(mar["entrate"]) == Decimal("200")
+    assert Decimal(mar["uscite"]) == Decimal("0")
+
+    for m in range(1, 13):
+        if m not in (1, 3):
+            assert Decimal(by_mese[m]["entrate"]) == Decimal("0")
+            assert Decimal(by_mese[m]["uscite"]) == Decimal("0")
+
+    # Reconciliation: sums must match the full rendiconto totali
+    full_resp = await client.get(f"{REND_BASE}/?banda_codice=1&anno=2026")
+    assert full_resp.status_code == 200
+    totali = full_resp.json()["totali"]
+
+    assert sum(Decimal(item["entrate"]) for item in mensile) == Decimal(
+        totali["entrate"]
+    )
+    assert sum(Decimal(item["uscite"]) for item in mensile) == Decimal(totali["uscite"])
+
+
+@pytest.mark.asyncio
 async def test_rendiconto_chiuso_flag(client: AsyncClient):
     """ConfigurazioneBandaAnno.chiuso=True is reflected in response.chiuso."""
     env = await setup_rendiconto_env(client)

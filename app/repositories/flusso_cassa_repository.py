@@ -139,6 +139,33 @@ class FlussoCassaRepository:
                 )
         return rows
 
+    async def get_aggregati_mensili(
+        self, banda_codice: int, anno: int
+    ) -> list[tuple[int, int, Decimal]]:
+        """One row per flusso: (mese, sezione_rendiconto_codice, importo_signed)."""
+        stmt = (
+            select(
+                extract("month", FlussoCassa.data_registrazione),
+                VoceContabilita.sezione_rendiconto_codice,
+                FlussoCassa.importo,
+                FlussoCassa.segno,
+            )
+            .join(
+                VoceContabilita, FlussoCassa.voce_contabilita_id == VoceContabilita.id
+            )
+            .where(
+                VoceContabilita.banda_codice == banda_codice,
+                extract("year", FlussoCassa.data_registrazione) == anno,
+            )
+        )
+        result = await self.db.execute(stmt)
+        rows: list[tuple[int, int, Decimal]] = []
+        for mese, sez_cod, importo, segno in result:
+            if importo is not None:
+                amount = Decimal(str(importo))
+                rows.append((int(mese), sez_cod, amount if segno == "+" else -amount))
+        return rows
+
     async def get_aggregati_per_natura(
         self, banda_codice: int, anno: int
     ) -> dict[str, Decimal]:
