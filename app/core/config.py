@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,6 +39,17 @@ class Settings(BaseSettings):
     # Marca il cookie come Secure (solo HTTPS). In sviluppo locale via HTTP va
     # disattivato, altrimenti il browser non lo invia.
     session_cookie_secure: bool = False
+
+    @field_validator("database_url", "migration_database_url")
+    @classmethod
+    def _force_async_driver(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if v.startswith("postgres://"):
+            v = "postgresql://" + v[len("postgres://") :]
+        if v.startswith("postgresql://"):
+            v = "postgresql+asyncpg://" + v[len("postgresql://") :]
+        return v
 
 
 settings = Settings()
