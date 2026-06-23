@@ -10,6 +10,8 @@ from app.repositories.flusso_cassa_repository import FlussoCassaRepository
 from app.repositories.lookup import LookupRepository
 from app.repositories.voce_contabilita_repository import VoceContabilitaRepository
 from app.schemas.rendiconto import (
+    RendicontoMensileItem,
+    RendicontoMensileResponse,
     RendicontoResponse,
     RendicontoTotali,
     SezioneRendicontoAggregato,
@@ -162,4 +164,35 @@ class RendicontoService:
                 saldo_finale_cassa=saldo_finale_cassa,
                 saldo_finale_banca=saldo_finale_banca,
             ),
+        )
+
+    async def get_rendiconto_mensile(
+        self, banda_codice: int, anno: int
+    ) -> RendicontoMensileResponse:
+        all_sezioni = {s.codice: s for s in await self.sezione_repo.get_all(limit=1000)}
+        fuori_bilancio_codici = {
+            codice
+            for codice, sez in all_sezioni.items()
+            if sez.descrizione.lower() == "fuori bilancio"
+        }
+
+        per_mese: dict[int, list[Decimal]] = {
+            m: [Decimal(0), Decimal(0)] for m in range(1, 13)
+        }
+
+        rows = await self.flusso_repo.get_aggregati_mensili(banda_codice, anno)
+        for mese, sez_cod, importo_signed in rows:
+            if sez_cod in fuori_bilancio_codici:
+                continue
+            if importo_signed > 0:
+                per_mese[mese][0] += importo_signed
+            elif importo_signed < 0:
+                per_mese[mese][1] += -importo_signed
+
+        mensile = [
+            RendicontoMensileItem(mese=m, entrate=per_mese[m][0], uscite=per_mese[m][1])
+            for m in range(1, 13)
+        ]
+        return RendicontoMensileResponse(
+            banda_codice=banda_codice, anno=anno, mensile=mensile
         )

@@ -41,3 +41,15 @@ class RendicontoResponse(BaseModel):
     saldo_iniziale_banca: Decimal
     sezioni: list[SezioneRendicontoAggregato]
     totali: RendicontoTotali
+
+
+class RendicontoMensileItem(BaseModel):
+    mese: int
+    entrate: Decimal
+    uscite: Decimal
+
+
+class RendicontoMensileResponse(BaseModel):
+    banda_codice: int
+    anno: int
+    mensile: list[RendicontoMensileItem]
