@@ -96,6 +96,21 @@ async def test_download_documento(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_preview_documento_inline(client: AsyncClient):
+    upload = await client.post("/api/v1/documenti/", files=[pdf_file("anteprima.pdf")])
+    doc_id = upload.json()["id"]
+    response = await client.get(f"/api/v1/documenti/{doc_id}/preview")
+    assert response.status_code == 200
+    assert response.headers["content-disposition"].lower().startswith("inline")
+
+
+@pytest.mark.asyncio
+async def test_preview_documento_not_found(client: AsyncClient):
+    response = await client.get("/api/v1/documenti/999/preview")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_download_documento_missing_file(client: AsyncClient):
     upload = await client.post("/api/v1/documenti/", files=[pdf_file("fantasma.pdf")])
     data = upload.json()
