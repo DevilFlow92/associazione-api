@@ -7,7 +7,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-    )
+        env_ignore_nonexistent=True,
+    )  # type: ignore
 
     # App
     app_env: str = "development"
