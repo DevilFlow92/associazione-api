@@ -37,7 +37,8 @@ class Settings(BaseSettings):
     session_cookie_name: str = "session_token"
     # Marca il cookie come Secure (solo HTTPS). In sviluppo locale via HTTP va
     # disattivato, altrimenti il browser non lo invia.
-    session_cookie_secure: bool = False
+    session_cookie_secure: bool = True
+    session_cookie_samesite: str = "none"
 
     @field_validator("database_url", "migration_database_url")
     @classmethod
