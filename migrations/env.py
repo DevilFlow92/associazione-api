@@ -12,7 +12,6 @@ config = context.config
 # (MIGRATION_DATABASE_URL), altrimenti l'URL applicativo. Alembic è sincrono:
 # rimuoviamo il driver async.
 migration_url = settings.migration_database_url or settings.database_url
-print(f"DEBUG migration_url={migration_url!r}", flush=True)
 if migration_url is None:
     raise ValueError("DATABASE_URL is not set — check Railway Variables")
 config.set_main_option("sqlalchemy.url", migration_url.replace("+asyncpg", ""))
