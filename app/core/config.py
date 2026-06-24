@@ -15,9 +15,7 @@ class Settings(BaseSettings):
     secret_key: str = "changeme"
 
     # Database
-    database_url: str = (
-        "postgresql+asyncpg://user:password@localhost:5432/associazione_db"
-    )
+    database_url: str | None = None
     # URL usato per le migrazioni (DDL). In produzione punta al proprietario
     # dello schema, distinto dal ruolo a privilegio minimo dell'app a runtime.
     # Se non impostato, ricade su ``database_url``.
