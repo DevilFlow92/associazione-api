@@ -44,9 +44,10 @@ class Settings(BaseSettings):
     def _force_async_driver(cls, v: str | None) -> str | None:
         if v is None:
             return v
+        v = v.strip()  # rimuove newline e spazi
         if v.startswith("postgres://"):
-            v = "postgresql://" + v[len("postgres://") :]
-        if v.startswith("postgresql://"):
+            v = "postgresql+asyncpg://" + v[len("postgres://") :]
+        elif v.startswith("postgresql://"):
             v = "postgresql+asyncpg://" + v[len("postgresql://") :]
         return v
 
