@@ -227,3 +227,5 @@ uploads/
 # Legacy components
 legacy_db/
 scripts/
+test.db
+test.db-journal

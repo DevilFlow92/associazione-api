@@ -49,10 +49,10 @@ async def client(
     # gli endpoint senza autenticazione reale. Il modulo ``test_auth`` verifica
     # il meccanismo di autenticazione stesso e quindi mantiene la dipendenza
     # originale.
-    if request.module.__name__ != "tests.unit.test_auth":
+    if not request.module.__name__.endswith("test_auth"):
         app.dependency_overrides[get_current_user] = override_get_current_user
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="https://test"
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
