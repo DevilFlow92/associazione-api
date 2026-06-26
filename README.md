@@ -202,14 +202,14 @@ from `voce_contabilita.banda_codice` and `data_registrazione.year` — is closed
 
 #### Configurazione banda/anno
 
-Standard CRUD under `/configurazione-banda-anno`. In addition:
+Standard CRUD under `/configurazioni-banda-anno`. In addition:
 
 | Method | Path | Description | Permission |
 |---|---|---|---|
-| `GET` | `/configurazione-banda-anno/?banda_codice={b}&anno={a}` | List, filterable by band and/or year | `contabilita:read` |
-| `GET` | `/configurazione-banda-anno/banda/{b}/anno/{a}` | Get by (banda, anno) | `contabilita:read` |
-| `POST` | `/configurazione-banda-anno/{id}/chiudi` | Close the year — sets `chiuso=True`, records timestamp and acting user. 409 if already closed. | `contabilita:write` |
-| `POST` | `/configurazione-banda-anno/{id}/riapri` | Reopen the year — clears closure fields. 409 if already open. | superuser only |
+| `GET` | `/configurazioni-banda-anno/?banda_codice={b}&anno={a}` | List, filterable by band and/or year | `contabilita:read` |
+| `GET` | `/configurazioni-banda-anno/banda/{b}/anno/{a}` | Get by (banda, anno) | `contabilita:read` |
+| `POST` | `/configurazioni-banda-anno/{id}/chiudi` | Close the year — sets `chiuso=True`, records timestamp and acting user. 409 if already closed. | `contabilita:write` |
+| `POST` | `/configurazioni-banda-anno/{id}/riapri` | Reopen the year — clears closure fields. 409 if already open. | superuser only |
 
 Creating the first `ConfigurazioneBandaAnno` for a band automatically seeds 4
 minimum `VoceContabilita` rows (Quote associative, Saldo iniziale, Versamento in

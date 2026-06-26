@@ -7,7 +7,7 @@ from httpx import AsyncClient
 
 from app.models.flusso_cassa import TipoFlussoCassa
 
-CFG_BASE = "/api/v1/configurazione-banda-anno"
+CFG_BASE = "/api/v1/configurazioni-banda-anno"
 
 
 async def create_voce(client: AsyncClient) -> dict:
