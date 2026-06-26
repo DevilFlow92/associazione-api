@@ -12,6 +12,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.iscrizione import Iscrizione
+    from app.models.lookups import NaturaFlusso
     from app.models.voce_contabilita import VoceContabilita
 
 
@@ -52,5 +53,12 @@ class FlussoCassa(Base):
         Uuid(as_uuid=True), nullable=True
     )
 
-    voce_contabilita: Mapped[VoceContabilita] = relationship(back_populates="flussi")
+    voce_contabilita: Mapped[VoceContabilita] = relationship(
+        back_populates="flussi", lazy="selectin"
+    )
+    natura_flusso: Mapped[NaturaFlusso] = relationship(
+        "NaturaFlusso",
+        foreign_keys=[natura_flusso_codice],
+        lazy="selectin",
+    )
     iscrizione: Mapped[Iscrizione | None] = relationship()

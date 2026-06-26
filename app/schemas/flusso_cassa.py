@@ -9,6 +9,31 @@ from app.models.flusso_cassa import TipoFlussoCassa
 from app.schemas._types import TzNaiveDatetime
 
 
+class RendicontoRefInFlusso(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
+class NaturaFlussoInFlusso(BaseModel):
+    codice: int
+    descrizione: str
+
+    model_config = {"from_attributes": True}
+
+
+class VoceContabilitaInFlusso(BaseModel):
+    id: int
+    voce_contabilita: str
+    sezione_rendiconto_codice: int
+    sezione_rendiconto: RendicontoRefInFlusso | None = None
+    voce_rendiconto: RendicontoRefInFlusso | None = None
+    sottovoce_rendiconto: RendicontoRefInFlusso | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class FlussoCassaBase(BaseModel):
     data_registrazione: TzNaiveDatetime
     descrizione_operazione: str
@@ -40,6 +65,8 @@ class FlussoCassaUpdate(BaseModel):
 class FlussoCassaResponse(FlussoCassaBase):
     id: int
     voce_contabilita_id: int
+    voce_contabilita: VoceContabilitaInFlusso | None = None
+    natura_flusso: NaturaFlussoInFlusso | None = None
 
     model_config = {"from_attributes": True}
 
