@@ -25,6 +25,7 @@ class PersonaInEsterno(BaseModel):
 class EsternoBase(BaseModel):
     codice_esterno: str
     strumento_codice: int
+    attivo: bool = True
 
 
 class EsternoCreate(EsternoBase):
@@ -34,6 +35,7 @@ class EsternoCreate(EsternoBase):
 class EsternoUpdate(BaseModel):
     codice_esterno: str | None = None
     strumento_codice: int | None = None
+    attivo: bool | None = None
 
 
 class EsternoResponse(EsternoBase):
