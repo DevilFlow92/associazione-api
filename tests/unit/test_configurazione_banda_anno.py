@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 from app.models.lookups import SezioneRendiconto
 from app.models.utente import TipoUtente, Utente
 
-BASE = "/api/v1/configurazione-banda-anno"
+BASE = "/api/v1/configurazioni-banda-anno"
 
 
 def cfg_payload(**overrides) -> dict:

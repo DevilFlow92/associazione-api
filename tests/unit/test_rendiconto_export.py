@@ -9,7 +9,7 @@ from httpx import AsyncClient
 
 from app.utils.export_rendiconto import format_euro
 
-CFG_BASE = "/api/v1/configurazione-banda-anno"
+CFG_BASE = "/api/v1/configurazioni-banda-anno"
 FLUSSO_BASE = "/api/v1/flussi-cassa"
 PDF_URL = "/api/v1/contabilita/rendiconto/export/pdf"
 XLSX_URL = "/api/v1/contabilita/rendiconto/export/xlsx"

@@ -26,8 +26,8 @@ from app.services.configurazione_banda_anno_service import (
 )
 
 router = APIRouter(
-    prefix="/configurazione-banda-anno",
-    tags=["configurazione-banda-anno"],
+    prefix="/configurazioni-banda-anno",
+    tags=["configurazioni-banda-anno"],
 )
 
 

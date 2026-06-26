@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from httpx import AsyncClient
 
-CFG_BASE = "/api/v1/configurazione-banda-anno"
+CFG_BASE = "/api/v1/configurazioni-banda-anno"
 FLUSSO_BASE = "/api/v1/flussi-cassa"
 REND_BASE = "/api/v1/contabilita/rendiconto"
 

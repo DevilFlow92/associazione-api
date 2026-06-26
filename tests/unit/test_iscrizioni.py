@@ -126,7 +126,7 @@ async def test_delete_iscrizione(client: AsyncClient):
 
 # ── Auto-flusso lifecycle ─────────────────────────────────────────────────────
 
-CFG_BASE = "/api/v1/configurazione-banda-anno"
+CFG_BASE = "/api/v1/configurazioni-banda-anno"
 
 
 async def setup_pagata_env(client: AsyncClient, anno: int = 2026) -> tuple[dict, int]:
