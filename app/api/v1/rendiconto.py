@@ -3,7 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
 from app.core.database import get_db
-from app.models.lookups import SezioneRendiconto, SottovoceRendiconto, VoceRendiconto
+from app.models.lookups import (
+    Banda,
+    SezioneRendiconto,
+    SottovoceRendiconto,
+    VoceRendiconto,
+)
 from app.repositories.configurazione_banda_anno_repository import (
     ConfigurazioneBandaAnnoRepository,
 )
@@ -31,6 +36,7 @@ def get_service(db: AsyncSession = Depends(get_db)) -> RendicontoService:
         sezione_repo=LookupRepository(db, SezioneRendiconto),
         voce_rendiconto_repo=LookupRepository(db, VoceRendiconto),
         sottovoce_repo=LookupRepository(db, SottovoceRendiconto),
+        banda_repo=LookupRepository(db, Banda),
     )
 
 
