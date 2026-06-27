@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 import app.models  # noqa: F401
 from app.api.deps import get_current_user
 from app.api.v1.auth import router as auth_router
+from app.api.v1.bande import public_router as bande_public_router
 from app.api.v1.bande import router as bande_router
 from app.api.v1.check_quote import router as check_quote_router
 from app.api.v1.comuni import router as comuni_router
@@ -220,6 +221,7 @@ app.include_router(province_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(comuni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(strumenti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(tipi_indirizzo_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(bande_public_router, prefix="/api/v1")  # no auth — registration flow
 app.include_router(bande_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(ruoli_contatto_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(ruoli_banda_router, prefix="/api/v1", dependencies=_auth)

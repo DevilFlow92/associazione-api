@@ -99,3 +99,16 @@ async def remove_indirizzo_banda(
         await service.remove_indirizzo(codice, indirizzo_id)
     except IndirizzoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+# ── Public subset (no auth) ──────────────────────────────────────────────────
+public_router = APIRouter(prefix="/bande", tags=["bande"])
+
+
+@public_router.get("/public", response_model=PagedResponse[BandaResponse])
+async def list_bande_public(
+    params: PageParams = Depends(),
+    service: LookupService[BandaResponse] = Depends(get_service),
+) -> PagedResponse[BandaResponse]:
+    """Public endpoint — no auth required. Used by the self-registration flow."""
+    return await service.get_all(params)
