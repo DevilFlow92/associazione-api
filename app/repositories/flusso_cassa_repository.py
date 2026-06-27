@@ -147,7 +147,10 @@ class FlussoCassaRepository:
             )
         )
         result = await self.db.execute(stmt)
-        return result.all()
+        rows: list[tuple[int, str, int, str, int, str]] = []
+        for sez_cod, sez_desc, voce_cod, voce_desc, sv_cod, sv_desc in result:
+            rows.append((sez_cod, sez_desc, voce_cod, voce_desc, sv_cod, sv_desc))
+        return rows
 
     # ── Rendiconto aggregation ────────────────────────────────────────────────
 
