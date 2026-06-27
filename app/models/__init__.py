@@ -23,6 +23,7 @@ from app.models.lookups import (  # noqa: F401
     TipoSpartito,
     VoceRendiconto,
 )
+from app.models.password_reset_token import PasswordResetToken  # noqa: F401
 from app.models.permesso import Permesso  # noqa: F401
 from app.models.persona import Persona  # noqa: F401
 from app.models.relations import (  # noqa: F401

@@ -40,6 +40,7 @@ dependencies = [
     # associazione_toolkit.logging (structlog-based, included via toolkit).
     "pyjwt>=2.10.0",
     "bcrypt>=4.2.0",
+    "resend>=2.0.0",
 ]
 
 [tool.ruff]
