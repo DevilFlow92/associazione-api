@@ -19,6 +19,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
+    KeepTogether,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -96,13 +97,6 @@ def render_rendiconto_pdf(data: RendicontoResponse) -> bytes:
         alignment=TA_CENTER,
         spaceAfter=2,
     )
-    stato_style = ParagraphStyle(
-        "RendStato",
-        parent=base["Normal"],
-        fontSize=10,
-        alignment=TA_RIGHT,
-        fontName="Helvetica-Oblique",
-    )
     sez_label = ParagraphStyle(
         "SezLabel", parent=base["Normal"], fontSize=12, fontName="Helvetica-Bold"
     )
@@ -130,15 +124,13 @@ def render_rendiconto_pdf(data: RendicontoResponse) -> bytes:
         "SvAmount", parent=base["Normal"], fontSize=9, alignment=TA_RIGHT
     )
 
-    stato_txt = "chiuso" if data.chiuso else "aperto"
     usable = doc.width
     label_w = usable * 0.74
     amount_w = usable - label_w
 
     elements: list = []
     elements.append(Paragraph(f"Rendiconto Anno {data.anno}", title_style))
-    elements.append(Paragraph(f"Banda {data.banda_codice}", subtitle_style))
-    elements.append(Paragraph(f"Stato: {stato_txt}", stato_style))
+    elements.append(Paragraph(data.banda_nome, subtitle_style))
     elements.append(Spacer(1, 8))
 
     # ── Saldi iniziali ────────────────────────────────────────────────────
@@ -195,8 +187,13 @@ def render_rendiconto_pdf(data: RendicontoResponse) -> bytes:
                 ]
             )
         )
-        elements.append(sez_tbl)
-        elements.append(Spacer(1, 10))
+
+        sez_elements = [sez_tbl, Spacer(1, 10)]
+
+        if "entrate" in sezione.descrizione.lower():
+            elements.append(KeepTogether(sez_elements))
+        else:
+            elements.extend(sez_elements)
 
     # ── Totali generali ───────────────────────────────────────────────────
     elements.append(Spacer(1, 6))
@@ -261,9 +258,8 @@ def render_rendiconto_xlsx(data: RendicontoResponse) -> bytes:
     c.font = title_font
     c.alignment = center
 
-    # Row 2 — banda + stato
-    stato_txt = "chiuso" if data.chiuso else "aperto"
-    ws["A2"] = f"Banda {data.banda_codice} — Stato: {stato_txt}"
+    # Row 2 — banda
+    ws["A2"] = data.banda_nome
 
     # Row 3 vuota → saldi iniziali sulle righe 4-5
     def _euro_cell(row: int, col: int, value: Decimal) -> None:

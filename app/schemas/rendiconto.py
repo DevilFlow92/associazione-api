@@ -35,6 +35,7 @@ class RendicontoTotali(BaseModel):
 
 class RendicontoResponse(BaseModel):
     banda_codice: int
+    banda_nome: str = ""
     anno: int
     chiuso: bool
     saldo_iniziale_cassa: Decimal

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.models.lookups import SezioneRendiconto, SottovoceRendiconto, VoceRendiconto
+from app.models.lookups import (
+    Banda,
+    SezioneRendiconto,
+    SottovoceRendiconto,
+    VoceRendiconto,
+)
 from app.repositories.configurazione_banda_anno_repository import (
     ConfigurazioneBandaAnnoRepository,
 )
@@ -29,6 +34,7 @@ class RendicontoService:
         sezione_repo: LookupRepository[SezioneRendiconto],
         voce_rendiconto_repo: LookupRepository[VoceRendiconto],
         sottovoce_repo: LookupRepository[SottovoceRendiconto],
+        banda_repo: LookupRepository[Banda],
     ) -> None:
         self.flusso_repo = flusso_repo
         self.cfg_repo = cfg_repo
@@ -36,6 +42,7 @@ class RendicontoService:
         self.sezione_repo = sezione_repo
         self.voce_rendiconto_repo = voce_rendiconto_repo
         self.sottovoce_repo = sottovoce_repo
+        self.banda_repo = banda_repo
 
     async def get_rendiconto(self, banda_codice: int, anno: int) -> RendicontoResponse:
         cfg = await self.cfg_repo.get_by_banda_anno(banda_codice, anno)
@@ -46,6 +53,9 @@ class RendicontoService:
             Decimal(str(cfg.saldo_iniziale_banca)) if cfg else Decimal(0)
         )
         chiuso = cfg.chiuso if cfg else False
+
+        banda = await self.banda_repo.get_by_codice(banda_codice)
+        banda_nome = banda.descrizione if banda else f"Banda {banda_codice}"
 
         # Full Modello D skeleton from lookup tables (all sezioni/voci/sottovoci)
         struttura = await self.flusso_repo.get_struttura_rendiconto()
@@ -139,6 +149,7 @@ class RendicontoService:
 
         return RendicontoResponse(
             banda_codice=banda_codice,
+            banda_nome=banda_nome,
             anno=anno,
             chiuso=chiuso,
             saldo_iniziale_cassa=saldo_iniziale_cassa,
