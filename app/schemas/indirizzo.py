@@ -27,7 +27,14 @@ class IndirizzoUpdate(BaseModel):
     interno: str | None = None
 
 
+class ComuneNested(BaseModel):
+    codice: int
+    descrizione: str
+    model_config = {"from_attributes": True}
+
+
 class IndirizzoResponse(IndirizzoBase):
     id: int
+    comune: ComuneNested | None = None
 
     model_config = {"from_attributes": True}

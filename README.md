@@ -179,6 +179,11 @@ existing `persona_id`. `Iscrizione` requires an existing `socio_id` (404) and
 rejects duplicate `(socio_id, anno)` pairs (409 — one subscription per member per
 year).
 
+`IndirizzoResponse` embeds a nested `comune` object (`{ codice, descrizione }`)
+eager-loaded via `selectinload`, so callers receive the city name without an extra
+lookup. This applies to all indirizzo endpoints and to the person's address list
+(`GET /persone/{id}/indirizzi`).
+
 ### Servizi · Ricevute (events & receipts)
 
 Standard CRUD under `/servizi` and `/ricevute`. In addition:
