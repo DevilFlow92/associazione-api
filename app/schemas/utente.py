@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, computed_field
 
 from app.models.utente import TipoUtente
 from app.schemas.ruolo import RuoloResponse
@@ -43,5 +43,17 @@ class UtenteResponse(UtenteBase):
     superuser: bool
     creato_il: datetime
     ruoli: list[RuoloResponse]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def permessi(self) -> list[str]:
+        seen: set[str] = set()
+        result: list[str] = []
+        for ruolo in self.ruoli:
+            for p in ruolo.permessi:
+                if p.codice not in seen:
+                    seen.add(p.codice)
+                    result.append(p.codice)
+        return result
 
     model_config = {"from_attributes": True}
