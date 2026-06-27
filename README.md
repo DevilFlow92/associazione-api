@@ -28,28 +28,42 @@ app/
 ├── api/
 │   ├── deps.py          # Auth dependencies (current user, permission guards)
 │   └── v1/
-│       ├── auth.py      # Login/logout (sessions), JWT issuance, /me
-│       ├── utenti.py    # Users router (humans & service accounts)
-│       ├── ruoli.py     # Roles router (RBAC)
-│       ├── permessi.py  # Permissions catalogue (read-only)
-│       ├── persone.py   # People (anagrafica) router + addresses (M2M)
-│   ├── indirizzi.py     # Addresses router
-│   ├── contatti.py      # Contacts router
-│   ├── soci.py          # Members router
-│   ├── esterni.py       # Externals router
-│   ├── iscrizioni.py    # Annual subscriptions router
-│   ├── servizi.py       # Events router (filterable by year)
-│   ├── ricevute.py      # Receipts router
-│   ├── voci_contabilita.py  # Accounting items router
-│   ├── flussi_cassa.py  # Cash-flow movements router
-│   ├── stati.py …       # Lookup routers (states, regions, provinces,
-│   │                    #   municipalities, instruments, address types,
-│   │                    #   bands, contact/band roles, rendiconto sections/
-│   │                    #   items/sub-items, cash-flow natures,
-│   │                    #   document types, score types, subscription states)
-│   ├── documenti.py     # Documents router (file repository)
-│   ├── spartiti.py      # Scores router
-│   └── templates.py     # Templates router
+│       ├── auth.py                        # Login/logout (sessions), JWT issuance, /me
+│       ├── utenti.py                      # Users router (humans & service accounts)
+│       ├── ruoli.py                       # Roles router (RBAC)
+│       ├── permessi.py                    # Permissions catalogue (read-only)
+│       ├── persone.py                     # People (anagrafica) router + addresses (M2M)
+│       ├── indirizzi.py                   # Addresses router
+│       ├── contatti.py                    # Contacts router
+│       ├── soci.py                        # Members router
+│       ├── esterni.py                     # Externals router
+│       ├── iscrizioni.py                  # Annual subscriptions router
+│       ├── servizi.py                     # Events router (filterable by year)
+│       ├── ricevute.py                    # Receipts router
+│       ├── voci_contabilita.py            # Accounting items router
+│       ├── flussi_cassa.py                # Cash-flow movements router
+│       ├── configurazione_banda_anno.py   # Annual band configuration router (year closure)
+│       ├── rendiconto.py                  # Accounting statements & exports (PDF/XLSX)
+│       ├── check_quote.py                 # Membership quota verification
+│       ├── stati.py                       # Lookup routers: states, regions, provinces,
+│       ├── regioni.py                     #   municipalities, instruments, address types,
+│       ├── province.py                    #   bands, contact/band roles, rendiconto
+│       ├── comuni.py                      #   sections/items/sub-items, cash-flow natures,
+│       ├── strumenti.py                   #   document types, score types, subscription
+│       ├── tipi_indirizzo.py              #   states, band roles, contact roles
+│       ├── bande.py                       # Bands router (with address M2M)
+│       ├── ruoli_contatto.py              # Contact roles lookup
+│       ├── ruoli_banda.py                 # Band roles lookup
+│       ├── sezioni_rendiconto.py          # Accounting sections lookup
+│       ├── voci_rendiconto.py             # Accounting items lookup
+│       ├── sottovoci_rendiconto.py        # Accounting sub-items lookup
+│       ├── nature_flusso.py               # Cash-flow natures lookup
+│       ├── tipi_documento.py              # Document types lookup
+│       ├── tipi_spartito.py               # Score types lookup
+│       ├── stati_iscrizione.py            # Subscription states lookup
+│       ├── documenti.py                   # Documents router (file repository)
+│       ├── spartiti.py                    # Scores router
+│       └── templates.py                   # Templates router
 ├── core/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── database.py      # Async engine & session factory
@@ -75,14 +89,13 @@ The architecture follows a layered pattern: **Router → Service → Repository 
 
 The schema mirrors the association's legacy database (`legacy_db/`). Core
 anagrafica entities — **Persona**, **Indirizzo**, **Contatto**, **Socio**,
-**Esterno** — are backed by **dimension (lookup) tables** (`Stato`, `Regione`,
-`Provincia`, `Comune`, `Strumento`, `TipoIndirizzo`, `Banda`, `RuoloContatto`,
-`RuoloBanda`, plus the rendiconto lookups `SezioneRendiconto`, `VoceRendiconto`,
-`SottovoceRendiconto`, `NaturaFlusso`, and the documentary lookups
-`TipoDocumento`, `TipoSpartito`, `StatoIscrizione`). A person can hold several
-addresses (many-to-many via `persone_indirizzi`); a band can hold several
-addresses too (`bande_indirizzi`). Band membership (`banda_codice`) is held on
-**Persona** and inherited by **Socio** and **Esterno** through their person —
+**Esterno** — are backed by **dimension (lookup) tables**: geographic (`Stato`, `Regione`,
+`Provincia`, `Comune`), organizational (`Banda`, `Strumento`, `TipoIndirizzo`,
+`RuoloBanda`, `RuoloContatto`), accounting (`SezioneRendiconto`, `VoceRendiconto`,
+`SottovoceRendiconto`, `NaturaFlusso`), and documentary (`TipoDocumento`, `TipoSpartito`,
+`StatoIscrizione`). A person can hold several addresses (many-to-many via `persone_indirizzi`);
+a band can hold several addresses too (`bande_indirizzi`). Band membership (`banda_codice`)
+is held on **Persona** and inherited by **Socio** and **Esterno** through their person —
 there is no separate band column on those entities. All 16 lookup tables share a
 generic CRUD stack (`repositories/lookup.py`, `services/lookup.py`) to avoid
 duplication; the generic list supports optional equality filters (used e.g. by
@@ -186,10 +199,21 @@ to avoid N+1 queries.
 
 Standard CRUD under `/voci-contabilita` and `/flussi-cassa`. In addition:
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/voci-contabilita/?banda_codice={codice}` | Accounting items, filterable by band |
-| `GET` | `/flussi-cassa/voce-contabilita/{voce_id}` | Cash movements for an accounting item |
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/voci-contabilita/?banda_codice={codice}` | Accounting items, filterable by band | — |
+| `GET` | `/flussi-cassa/` | List cash movements (paginated) | — |
+| `GET` | `/flussi-cassa/{flusso_id}` | Get a cash movement | — |
+| `GET` | `/flussi-cassa/voce-contabilita/{voce_id}` | Cash movements for an accounting item (paginated) | — |
+| `POST` | `/flussi-cassa/` | Create a cash movement | — |
+| `PATCH` | `/flussi-cassa/{flusso_id}` | Update a cash movement | — |
+| `DELETE` | `/flussi-cassa/{flusso_id}` | Delete a cash movement (204) | — |
+| `POST` | `/flussi-cassa/trasferimenti/` | Create a bank transfer (pair of movements) | `contabilita:write` |
+| `GET` | `/contabilita/check-quote/?banda_codice={b}&anno={a}` | Verify quota balances | `contabilita:read` |
+| `GET` | `/contabilita/rendiconto/?banda_codice={b}&anno={a}` | Get accounting statement | `contabilita:read` |
+| `GET` | `/contabilita/rendiconto/mensile?banda_codice={b}&anno={a}` | Get monthly breakdown | `contabilita:read` |
+| `GET` | `/contabilita/rendiconto/export/pdf?banda_codice={b}&anno={a}` | Export statement as PDF | `contabilita:read` |
+| `GET` | `/contabilita/rendiconto/export/xlsx?banda_codice={b}&anno={a}` | Export statement as Excel | `contabilita:read` |
 
 A `VoceContabilita` cannot be deleted while it has cash movements (409). A
 `FlussoCassa` requires an existing `voce_contabilita_id` (404 otherwise).
@@ -199,6 +223,10 @@ blocked with `409 Conflict` if the movement's `(banda, anno)` pair — derived
 from `voce_contabilita.banda_codice` and `data_registrazione.year` — is closed
 (`ConfigurazioneBandaAnno.chiuso = True`). For updates that change the year via
 `data_registrazione`, the destination year is also checked.
+
+**Trasferimenti (bank transfers):** the POST `/flussi-cassa/trasferimenti/` endpoint
+creates a pair of balanced cash movements representing a transfer between accounts
+(e.g. cassa ↔ banca), sharing a `trasferimento_id` UUID to link them.
 
 #### Configurazione banda/anno
 
@@ -254,7 +282,8 @@ decoupled from the membership model.
 | `GET` | `/documenti/` | List documents (paginated, filterable by `tipo_documento_codice`) |
 | `GET` | `/documenti/{id}` | Get a document by ID |
 | `POST` | `/documenti/?tipo_documento_codice={codice}&note={note}` | Upload a PDF document (optional `note`) |
-| `GET` | `/documenti/{id}/download` | Download a document (404 if file missing) |
+| `GET` | `/documenti/{id}/download` | Download a document as attachment (404 if file missing) |
+| `GET` | `/documenti/{id}/preview` | Preview a document inline (404 if file missing) |
 | `DELETE` | `/documenti/{id}` | Delete a document and its file (204) |
 
 ### Spartiti
@@ -313,12 +342,39 @@ Gestione utenti, ruoli e permessi (RBAC):
 | `DELETE` | `/ruoli/{id}` | Elimina un ruolo (204) | `ruoli:write` |
 | `GET` | `/permessi/` | Catalogo dei permessi disponibili | `ruoli:read` |
 
-I *superuser* bypassano il controllo dei permessi. Tutti gli endpoint di dominio
-(anagrafica, servizi/ricevute, contabilità, archivio e tabelle dimensione)
-**richiedono autenticazione** (`Depends(get_current_user)`): senza una sessione o
-un JWT valido rispondono `401`. Non sono però ancora protetti dalle guardie di
-permesso più granulari: i permessi `anagrafica:*`, `contabilita:*`, `servizi:*`,
-`archivio:*` sono già definiti e pronti per essere applicati per-risorsa.
+#### Catalogo permessi disponibili
+
+Il sistema RBAC include i seguenti permessi atomici nella forma `risorsa:azione`:
+
+| Permesso | Descrizione |
+|---|---|
+| `utenti:read` | Visualizzare utenti |
+| `utenti:write` | Gestire utenti |
+| `ruoli:read` | Visualizzare ruoli e permessi |
+| `ruoli:write` | Gestire ruoli e permessi |
+| `anagrafica:read` | Visualizzare anagrafica (persone, soci, esterni) |
+| `anagrafica:write` | Gestire anagrafica |
+| `iscrizioni:read` | Visualizzare iscrizioni |
+| `iscrizioni:write` | Gestire iscrizioni |
+| `contabilita:read` | Visualizzare contabilità |
+| `contabilita:write` | Gestire contabilità |
+| `servizi:read` | Visualizzare eventi e ricevute |
+| `servizi:write` | Gestire eventi e ricevute |
+| `archivio:read` | Visualizzare archivio documentale e spartiti |
+| `archivio:write` | Gestire archivio documentale e spartiti |
+
+**Permission enforcement status:**
+
+Currently enforced with `@require_permission()` guards:
+- `utenti:*` on all utenti endpoints
+- `ruoli:*` on all ruoli endpoints
+- `contabilita:*` on contabilità endpoints (`/voci-contabilita`, `/flussi-cassa/trasferimenti`, `/contabilita/rendiconto*`, `/contabilita/check-quote`)
+- `ruoli:read` on permessi catalogue
+
+Defined but not yet enforced per-endpoint: `anagrafica:*`, `iscrizioni:*`, `servizi:*`, `archivio:*`.
+All domain endpoints still **require authentication** (`Depends(get_current_user)`): without a valid session or JWT, responses are `401`.
+
+*Superuser* accounts bypass all permission checks.
 
 ### Health
 
