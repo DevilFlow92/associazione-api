@@ -39,7 +39,7 @@ class PersonaRepository:
         stmt = (
             select(Persona)
             .where(Persona.id == persona_id)
-            .options(selectinload(Persona.indirizzi))
+            .options(selectinload(Persona.indirizzi).selectinload(Indirizzo.comune))
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
