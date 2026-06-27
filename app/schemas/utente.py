@@ -44,7 +44,7 @@ class UtenteResponse(UtenteBase):
     creato_il: datetime
     ruoli: list[RuoloResponse]
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def permessi(self) -> list[str]:
         seen: set[str] = set()
