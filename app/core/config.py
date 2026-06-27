@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = True
     session_cookie_samesite: str = "none"
 
+    # ── Email (Resend) ───────────────────────────────────────────────────────
+    # Chiave API Resend (https://resend.com). Se assente, l'invio email è
+    # disabilitato e i servizi che lo usano sollevano a runtime.
+    resend_api_key: str | None = None
+    # Mittente delle email transazionali (dominio verificato su Resend).
+    email_from: str = "noreply@cosequences.com"
+    # Base URL del frontend, usata per costruire i link (es. reset password).
+    frontend_url: str = "https://bandapp-web-fe.vercel.app"
+
     @field_validator("database_url", "migration_database_url")
     @classmethod
     def _force_async_driver(cls, v: str | None) -> str | None:

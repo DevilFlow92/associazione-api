@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -27,3 +27,25 @@ class TokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     detail: str
+
+
+class PasswordResetRequest(BaseModel):
+    """Richiesta di reset password (indirizzo email)."""
+
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    """Conferma del reset: token ricevuto via email + nuova password."""
+
+    token: str
+    new_password: str = Field(min_length=8)
+
+
+class RegisterRequest(BaseModel):
+    """Auto-registrazione di un nuovo utente con ruolo Ospite."""
+
+    email: EmailStr
+    password: str = Field(min_length=8)
+    nome_completo: str | None = None
+    banda_codice: int

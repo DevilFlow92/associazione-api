@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_auth_service, get_current_user
 from app.core.config import settings
+from app.core.database import get_db
 from app.exceptions.auth import InactiveUserError, InvalidCredentialsError
+from app.exceptions.utente import UtenteDuplicateEmailError
 from app.models.utente import Utente
+from app.repositories.password_reset_repository import PasswordResetRepository
 from app.schemas.auth import (
     LoginRequest,
     MessageResponse,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    RegisterRequest,
     TokenRequest,
     TokenResponse,
 )
@@ -80,3 +87,66 @@ async def issue_token(
 async def read_me(user: Utente = Depends(get_current_user)) -> UtenteResponse:
     """Restituisce il profilo (e i ruoli/permessi) dell'utente autenticato."""
     return UtenteResponse.model_validate(user)
+
+
+@router.post("/password-reset/request", response_model=MessageResponse)
+async def request_password_reset(
+    data: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+) -> MessageResponse:
+    """Richiede un'email di reset password.
+
+    Risponde sempre 200 per non rivelare se l'indirizzo è registrato.
+    """
+    reset_repo = PasswordResetRepository(db)
+    await service.request_password_reset(data.email, reset_repo)
+    return MessageResponse(
+        detail="Se l'indirizzo è registrato, riceverai un'email con le istruzioni."
+    )
+
+
+@router.post("/password-reset/confirm", response_model=MessageResponse)
+async def confirm_password_reset(
+    data: PasswordResetConfirm,
+    db: AsyncSession = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+) -> MessageResponse:
+    """Consuma un token di reset e imposta la nuova password."""
+    reset_repo = PasswordResetRepository(db)
+    ok = await service.confirm_password_reset(data.token, data.new_password, reset_repo)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token non valido o scaduto.",
+        )
+    return MessageResponse(detail="Password aggiornata con successo.")
+
+
+@router.post(
+    "/register",
+    response_model=MessageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register(
+    data: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+) -> MessageResponse:
+    """Auto-registrazione con ruolo Ospite."""
+    try:
+        await service.register(
+            email=data.email,
+            password=data.password,
+            nome_completo=data.nome_completo,
+            banda_codice=data.banda_codice,
+            db=db,
+        )
+    except UtenteDuplicateEmailError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esiste già un account con questa email.",
+        ) from e
+    return MessageResponse(
+        detail="Registrazione completata. Puoi ora effettuare il login."
+    )
