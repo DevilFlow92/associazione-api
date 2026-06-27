@@ -7,7 +7,13 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.flusso_cassa import FlussoCassa
-from app.models.lookups import NaturaFlusso
+from app.models.lookups import (
+    NaturaFlusso,
+    SezioneRendiconto,
+    SottovoceRendiconto,
+    VoceRendiconto,
+)
+from app.models.relations import voci_sottovoci_rendiconto
 from app.models.voce_contabilita import VoceContabilita
 from app.schemas.flusso_cassa import FlussoCassaCreate, FlussoCassaUpdate
 
@@ -105,6 +111,43 @@ class FlussoCassaRepository:
 
     async def refresh(self, flusso: FlussoCassa) -> None:
         await self.db.refresh(flusso)
+
+    # ── Rendiconto structure & aggregation ───────────────────────────────────
+
+    async def get_struttura_rendiconto(
+        self,
+    ) -> list[tuple[int, str, int, str, int, str]]:
+        """Full Modello D skeleton: one row per (sezione, voce, sottovoce)."""
+        stmt = (
+            select(
+                SezioneRendiconto.codice,
+                SezioneRendiconto.descrizione,
+                VoceRendiconto.codice,
+                VoceRendiconto.descrizione,
+                SottovoceRendiconto.codice,
+                SottovoceRendiconto.descrizione,
+            )
+            .join(
+                VoceRendiconto,
+                VoceRendiconto.sezione_codice == SezioneRendiconto.codice,
+            )
+            .join(
+                voci_sottovoci_rendiconto,
+                voci_sottovoci_rendiconto.c.voce_codice == VoceRendiconto.codice,
+            )
+            .join(
+                SottovoceRendiconto,
+                SottovoceRendiconto.codice
+                == voci_sottovoci_rendiconto.c.sottovoce_codice,
+            )
+            .order_by(
+                SezioneRendiconto.codice,
+                VoceRendiconto.codice,
+                SottovoceRendiconto.codice,
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.all()
 
     # ── Rendiconto aggregation ────────────────────────────────────────────────
 

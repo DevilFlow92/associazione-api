@@ -74,8 +74,8 @@ async def test_rendiconto_empty_anno(client: AsyncClient):
     assert Decimal(data["saldo_iniziale_cassa"]) == Decimal("150")
     assert Decimal(data["saldo_iniziale_banca"]) == Decimal("300")
 
-    # 3 sezioni seeded by the config (Uscite, Entrate, Fuori Bilancio), all zero
-    assert len(data["sezioni"]) == 3
+    # Full Modello D skeleton always returned from lookup tables (4 sezioni), all zero
+    assert len(data["sezioni"]) == 4
     for sezione in data["sezioni"]:
         assert Decimal(sezione["totale"]) == Decimal(0)
 
@@ -88,7 +88,7 @@ async def test_rendiconto_empty_anno(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_rendiconto_no_config(client: AsyncClient):
-    """No config, no flussi → saldi iniziali=0, chiuso=False, sezioni=[]."""
+    """No config, no flussi → saldi iniziali=0, chiuso=False, all sezioni totale=0."""
     resp = await client.get(f"{REND_BASE}/?banda_codice=1&anno=2026")
     assert resp.status_code == 200
     data = resp.json()
@@ -96,7 +96,11 @@ async def test_rendiconto_no_config(client: AsyncClient):
     assert data["chiuso"] is False
     assert Decimal(data["saldo_iniziale_cassa"]) == Decimal(0)
     assert Decimal(data["saldo_iniziale_banca"]) == Decimal(0)
-    assert data["sezioni"] == []
+    # Full skeleton always returned from lookup tables;
+    # all totals are zero without flussi
+    assert len(data["sezioni"]) == 4
+    for sezione in data["sezioni"]:
+        assert Decimal(sezione["totale"]) == Decimal(0)
     assert Decimal(data["totali"]["entrate"]) == Decimal(0)
     assert Decimal(data["totali"]["uscite"]) == Decimal(0)
     assert Decimal(data["totali"]["avanzo_disavanzo"]) == Decimal(0)

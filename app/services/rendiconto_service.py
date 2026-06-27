@@ -47,15 +47,8 @@ class RendicontoService:
         )
         chiuso = cfg.chiuso if cfg else False
 
-        # Structure driven by VoceContabilita for this banda: sezione → voce → sottovoci
-        voci_contabilita = await self.voce_contabilita_repo.get_all(
-            banda_codice=banda_codice, limit=10000
-        )
-        struct: dict[int, dict[int, set[int]]] = {}
-        for vc in voci_contabilita:
-            struct.setdefault(vc.sezione_rendiconto_codice, {}).setdefault(
-                vc.voce_rendiconto_codice, set()
-            ).add(vc.sottovoce_rendiconto_codice)
+        # Full Modello D skeleton from lookup tables (all sezioni/voci/sottovoci)
+        struttura = await self.flusso_repo.get_struttura_rendiconto()
 
         # Flussi aggregation for this banda/anno
         rows = await self.flusso_repo.get_aggregati_per_rendiconto(banda_codice, anno)
@@ -63,66 +56,60 @@ class RendicontoService:
             banda_codice, anno
         )
 
-        # Build signed agg dict: sezione → voce → sottovoce → net importo
-        agg: dict[int, dict[int, dict[int, Decimal]]] = {}
+        # Build flat agg dict keyed by (sez_cod, voce_cod, sv_cod)
+        agg: dict[tuple[int, int, int], Decimal] = {}
         for sez_cod, voce_cod, sv_cod, importo_signed in rows:
-            agg.setdefault(sez_cod, {}).setdefault(voce_cod, {}).setdefault(
-                sv_cod, Decimal(0)
-            )
-            agg[sez_cod][voce_cod][sv_cod] += importo_signed
+            key = (sez_cod, voce_cod, sv_cod)
+            agg[key] = agg.get(key, Decimal(0)) + importo_signed
 
-        # Load lookup descriptions (ordered by codice)
-        all_sezioni = {s.codice: s for s in await self.sezione_repo.get_all(limit=1000)}
-        all_voci = {
-            v.codice: v for v in await self.voce_rendiconto_repo.get_all(limit=1000)
-        }
-        all_sottovoci = {
-            sv.codice: sv for sv in await self.sottovoce_repo.get_all(limit=1000)
-        }
-
-        fuori_bilancio_codici = {
-            codice
-            for codice, sez in all_sezioni.items()
-            if sez.descrizione.lower() == "fuori bilancio"
+        # Identify sezioni to exclude from entrate/uscite totals
+        sezione_descrizioni: dict[int, str] = {}
+        for sez_cod, sez_desc, _vc, _vd, _sc, _sd in struttura:
+            sezione_descrizioni[sez_cod] = sez_desc
+        escluse_codici = {
+            cod
+            for cod, desc in sezione_descrizioni.items()
+            if "fuori bilancio" in desc.lower() or "figurativi" in desc.lower()
         }
 
         # Compute entrate/uscite from raw rows (per-flusso signed importi)
         entrate = Decimal(0)
         uscite = Decimal(0)
         for sez_cod, _voce_cod, _sv_cod, importo_signed in rows:
-            if sez_cod not in fuori_bilancio_codici:
+            if sez_cod not in escluse_codici:
                 if importo_signed > 0:
                     entrate += importo_signed
                 elif importo_signed < 0:
                     uscite += -importo_signed
 
-        # Build nested sezioni response
+        # Walk skeleton: group by sezione → voce → sottovoci (already ordered)
+        # Use ordered dicts to preserve codice ordering from the query
+        sezioni_map: dict[
+            int, tuple[str, dict[int, tuple[str, list[tuple[int, str]]]]]
+        ] = {}
+        for sez_cod, sez_desc, voce_cod, voce_desc, sv_cod, sv_desc in struttura:
+            if sez_cod not in sezioni_map:
+                sezioni_map[sez_cod] = (sez_desc, {})
+            voci_map = sezioni_map[sez_cod][1]
+            if voce_cod not in voci_map:
+                voci_map[voce_cod] = (voce_desc, [])
+            voci_map[voce_cod][1].append((sv_cod, sv_desc))
+
         sezioni_resp: list[SezioneRendicontoAggregato] = []
-        for sez_cod in sorted(struct.keys()):
-            sezione = all_sezioni.get(sez_cod)
-            if sezione is None:
-                continue
+        for sez_cod, (sez_desc, voci_map) in sezioni_map.items():
             sezione_voci: list[VoceRendicontoAggregato] = []
             sezione_totale = Decimal(0)
 
-            for voce_cod in sorted(struct[sez_cod].keys()):
-                voce = all_voci.get(voce_cod)
-                if voce is None:
-                    continue
+            for voce_cod, (voce_desc, sv_list) in voci_map.items():
                 voce_sottovoci: list[SottovoceRendicontoAggregato] = []
                 voce_totale = Decimal(0)
 
-                for sv_cod in sorted(struct[sez_cod][voce_cod]):
-                    sottovoce = all_sottovoci.get(sv_cod)
-                    if sottovoce is None:
-                        continue
-                    sv_importo = (
-                        agg.get(sez_cod, {}).get(voce_cod, {}).get(sv_cod, Decimal(0))
-                    )
+                for sv_cod, sv_desc in sv_list:
+                    sv_importo = agg.get((sez_cod, voce_cod, sv_cod), Decimal(0))
                     voce_sottovoci.append(
                         SottovoceRendicontoAggregato(
-                            codice=sottovoce.codice,
-                            descrizione=sottovoce.descrizione,
+                            codice=sv_cod,
+                            descrizione=sv_desc,
                             totale=sv_importo,
                         )
                     )
@@ -130,8 +117,8 @@ class RendicontoService:
 
                 sezione_voci.append(
                     VoceRendicontoAggregato(
-                        codice=voce.codice,
-                        descrizione=voce.descrizione,
+                        codice=voce_cod,
+                        descrizione=voce_desc,
                         totale=voce_totale,
                         sottovoci=voce_sottovoci,
                     )
@@ -140,8 +127,8 @@ class RendicontoService:
 
             sezioni_resp.append(
                 SezioneRendicontoAggregato(
-                    codice=sezione.codice,
-                    descrizione=sezione.descrizione,
+                    codice=sez_cod,
+                    descrizione=sez_desc,
                     totale=sezione_totale,
                     voci=sezione_voci,
                 )
