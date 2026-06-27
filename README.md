@@ -313,12 +313,33 @@ Gestione utenti, ruoli e permessi (RBAC):
 | `DELETE` | `/ruoli/{id}` | Elimina un ruolo (204) | `ruoli:write` |
 | `GET` | `/permessi/` | Catalogo dei permessi disponibili | `ruoli:read` |
 
+#### Catalogo permessi disponibili
+
+Il sistema RBAC include i seguenti permessi atomici nella forma `risorsa:azione`:
+
+| Permesso | Descrizione |
+|---|---|
+| `utenti:read` | Visualizzare utenti |
+| `utenti:write` | Gestire utenti |
+| `ruoli:read` | Visualizzare ruoli e permessi |
+| `ruoli:write` | Gestire ruoli e permessi |
+| `anagrafica:read` | Visualizzare anagrafica (persone, soci, esterni) |
+| `anagrafica:write` | Gestire anagrafica |
+| `iscrizioni:read` | Visualizzare iscrizioni |
+| `iscrizioni:write` | Gestire iscrizioni |
+| `contabilita:read` | Visualizzare contabilità |
+| `contabilita:write` | Gestire contabilità |
+| `servizi:read` | Visualizzare eventi e ricevute |
+| `servizi:write` | Gestire eventi e ricevute |
+| `archivio:read` | Visualizzare archivio documentale e spartiti |
+| `archivio:write` | Gestire archivio documentale e spartiti |
+
 I *superuser* bypassano il controllo dei permessi. Tutti gli endpoint di dominio
-(anagrafica, servizi/ricevute, contabilità, archivio e tabelle dimensione)
+(anagrafica, servizi/ricevute, iscrizioni, contabilità, archivio e tabelle dimensione)
 **richiedono autenticazione** (`Depends(get_current_user)`): senza una sessione o
 un JWT valido rispondono `401`. Non sono però ancora protetti dalle guardie di
-permesso più granulari: i permessi `anagrafica:*`, `contabilita:*`, `servizi:*`,
-`archivio:*` sono già definiti e pronti per essere applicati per-risorsa.
+permesso più granulari: i permessi `anagrafica:*`, `iscrizioni:*`, `contabilita:*`,
+`servizi:*`, `archivio:*` sono già definiti e pronti per essere applicati per-risorsa.
 
 ### Health
 
