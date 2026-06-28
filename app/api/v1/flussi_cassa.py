@@ -1,5 +1,5 @@
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
@@ -37,9 +37,10 @@ def get_service(db: AsyncSession = Depends(get_db)) -> FlussoCassaService:
 @router.get("/", response_model=PagedResponse[FlussoCassaResponse])
 async def list_flussi_cassa(
     params: PageParams = Depends(),
+    anno: int | None = Query(None),
     service: FlussoCassaService = Depends(get_service),
 ) -> PagedResponse[FlussoCassaResponse]:
-    return await service.get_all(params)
+    return await service.get_all(params, anno=anno)
 
 
 @router.get(

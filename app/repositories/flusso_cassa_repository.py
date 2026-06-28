@@ -22,13 +22,19 @@ class FlussoCassaRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_all(self, offset: int = 0, limit: int = 20) -> list[FlussoCassa]:
+    async def get_all(
+        self, offset: int = 0, limit: int = 20, anno: int | None = None
+    ) -> list[FlussoCassa]:
         stmt = select(FlussoCassa).offset(offset).limit(limit)
+        if anno is not None:
+            stmt = stmt.where(extract("year", FlussoCassa.data_registrazione) == anno)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_all(self) -> int:
+    async def count_all(self, anno: int | None = None) -> int:
         stmt = select(func.count()).select_from(FlussoCassa)
+        if anno is not None:
+            stmt = stmt.where(extract("year", FlussoCassa.data_registrazione) == anno)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

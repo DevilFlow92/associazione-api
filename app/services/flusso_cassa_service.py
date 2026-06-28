@@ -52,9 +52,13 @@ class FlussoCassaService:
         if await self.cfg_repo.is_anno_chiuso(voce.banda_codice, anno):
             raise AnnoChiusoError(voce.banda_codice, anno)
 
-    async def get_all(self, params: PageParams) -> PagedResponse[FlussoCassaResponse]:
-        flussi = await self.repo.get_all(offset=params.offset, limit=params.limit)
-        total = await self.repo.count_all()
+    async def get_all(
+        self, params: PageParams, anno: int | None = None
+    ) -> PagedResponse[FlussoCassaResponse]:
+        flussi = await self.repo.get_all(
+            offset=params.offset, limit=params.limit, anno=anno
+        )
+        total = await self.repo.count_all(anno=anno)
         items = [FlussoCassaResponse.model_validate(f) for f in flussi]
         return paginate(items, total, params)
 
