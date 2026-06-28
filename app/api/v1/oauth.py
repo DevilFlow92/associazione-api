@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import secrets
@@ -53,11 +54,32 @@ def _decode_jwt_unverified(token: str) -> dict:
         return {}
 
 
+def _generate_state(random_part: str) -> str:
+    sig = hmac.new(
+        settings.secret_key.encode(),
+        random_part.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{random_part}.{sig}"
+
+
+def _verify_state(state: str) -> bool:
+    try:
+        random_part, sig = state.rsplit(".", 1)
+        expected = hmac.new(
+            settings.secret_key.encode(),
+            random_part.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(sig, expected)
+    except ValueError:
+        return False
+
+
 def _validate_state_param(request: Request) -> None:
     """CSRF check for GET callbacks (Google, Facebook)."""
-    state_param = request.query_params.get("state", "")
-    state_cookie = request.cookies.get("oauth_state", "")
-    if not state_param or not hmac.compare_digest(state_param, state_cookie):
+    state = request.query_params.get("state", "")
+    if not state or not _verify_state(state):
         raise HTTPException(status_code=400, detail="State OAuth non valido")
 
 
@@ -70,16 +92,8 @@ async def oauth_redirect(provider: str, response: Response) -> Response:
     if provider not in PROVIDERS:
         raise HTTPException(status_code=404, detail="Provider non supportato")
 
-    state = secrets.token_urlsafe(32)
-    response.set_cookie(
-        "oauth_state",
-        state,
-        httponly=True,
-        max_age=600,
-        samesite="none",
-        secure=True,
-        domain=".cosequences.com",
-    )
+    random_part = secrets.token_urlsafe(32)
+    state = _generate_state(random_part)
 
     if provider == "google":
         if not settings.google_client_id:
@@ -235,8 +249,7 @@ async def apple_callback(
 ) -> Response:
     form = await request.form()
     state_in_form = str(form.get("state", ""))
-    state_in_cookie = request.cookies.get("oauth_state", "")
-    if not state_in_form or not hmac.compare_digest(state_in_form, state_in_cookie):
+    if not state_in_form or not _verify_state(state_in_form):
         raise HTTPException(status_code=400, detail="State OAuth non valido")
 
     id_token_raw = str(form.get("id_token", ""))
