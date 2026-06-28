@@ -55,6 +55,23 @@ class Settings(BaseSettings):
     # Base URL del frontend, usata per costruire i link (es. reset password).
     frontend_url: str = "https://bandapp-web-fe.vercel.app"
 
+    # ── OAuth2 — Google ──────────────────────────────────────────────────────
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+
+    # ── OAuth2 — Apple ───────────────────────────────────────────────────────
+    apple_client_id: str | None = None  # "Services ID" (com.xxx.web)
+    apple_team_id: str | None = None
+    apple_key_id: str | None = None
+    apple_private_key: str | None = None  # PEM content, newlines as \n
+
+    # ── OAuth2 — Facebook ────────────────────────────────────────────────────
+    facebook_client_id: str | None = None
+    facebook_client_secret: str | None = None
+
+    # Base URL used to build OAuth2 redirect_uri (e.g. https://associazione-api-production.up.railway.app)
+    api_base_url: str = "http://localhost:8000"
+
     @field_validator("database_url", "migration_database_url")
     @classmethod
     def _force_async_driver(cls, v: str | None) -> str | None:

@@ -11,6 +11,7 @@ from app.core.database import Base
 from app.models.relations import utenti_ruoli
 
 if TYPE_CHECKING:
+    from app.models.oauth_account import OAuthAccount
     from app.models.persona import Persona
     from app.models.ruolo import Ruolo
     from app.models.sessione import Sessione
@@ -68,6 +69,9 @@ class Utente(Base):
     )
     persona: Mapped[Persona | None] = relationship()
     sessioni: Mapped[list[Sessione]] = relationship(
+        back_populates="utente", cascade="all, delete-orphan"
+    )
+    oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         back_populates="utente", cascade="all, delete-orphan"
     )
 
