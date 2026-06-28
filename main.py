@@ -81,7 +81,11 @@ app = FastAPI(
 app.add_middleware(RequestMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://bandapp-web-fe.vercel.app"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://bandapp-web-fe.vercel.app",
+        "https://api.cosequences.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

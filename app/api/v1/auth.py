@@ -45,7 +45,8 @@ async def login(
         value=token,
         httponly=True,
         secure=settings.session_cookie_secure,
-        samesite="none",
+        samesite=settings.session_cookie_samesite,
+        domain=settings.session_cookie_domain,
         max_age=settings.session_expire_hours * 3600,
     )
     return MessageResponse(detail="Login effettuato")
@@ -62,7 +63,10 @@ async def logout(
     token = request.cookies.get(settings.session_cookie_name)
     if token:
         await service.logout(token)
-    response.delete_cookie(key=settings.session_cookie_name)
+    response.delete_cookie(
+        key=settings.session_cookie_name,
+        domain=settings.session_cookie_domain,
+    )
     return MessageResponse(detail="Logout effettuato")
 
 
