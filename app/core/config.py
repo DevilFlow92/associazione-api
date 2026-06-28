@@ -38,7 +38,11 @@ class Settings(BaseSettings):
     # Marca il cookie come Secure (solo HTTPS). In sviluppo locale via HTTP va
     # disattivato, altrimenti il browser non lo invia.
     session_cookie_secure: bool = True
-    session_cookie_samesite: str = "none"
+    session_cookie_samesite: str = "lax"
+    # Dominio del cookie di sessione. In produzione impostare a ".cosequences.com"
+    # per condividere il cookie tra frontend (bandapp-web-fe.vercel.app) e backend
+    # (api.cosequences.com). In sviluppo lasciare None.
+    session_cookie_domain: str | None = None
 
     # ── Email (Resend) ───────────────────────────────────────────────────────
     # Chiave API Resend (https://resend.com). Se assente, l'invio email è
