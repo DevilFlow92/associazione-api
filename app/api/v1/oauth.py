@@ -72,7 +72,12 @@ async def oauth_redirect(provider: str, response: Response) -> Response:
 
     state = secrets.token_urlsafe(32)
     response.set_cookie(
-        "oauth_state", state, httponly=True, max_age=600, samesite="lax"
+        "oauth_state",
+        state,
+        httponly=True,
+        max_age=600,
+        samesite="none",
+        secure=True,
     )
 
     if provider == "google":
