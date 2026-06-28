@@ -83,8 +83,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://bandapp-web-fe.vercel.app",
-        "https://app.cosequences.com",
+        "https://bandapp.cosequences.com",
         "https://associazione-api.cosequences.com",
     ],
     allow_credentials=True,
