@@ -20,6 +20,7 @@ from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.iscrizioni import router as iscrizioni_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
+from app.api.v1.oauth import router as oauth_router
 from app.api.v1.permessi import router as permessi_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.province import router as province_router
@@ -191,6 +192,7 @@ async def permission_denied_handler(
 
 # ── Autenticazione & RBAC ────────────────────────────────────────────────────
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(oauth_router, prefix="/api/v1")  # no auth — login flow
 app.include_router(utenti_router, prefix="/api/v1")
 app.include_router(ruoli_router, prefix="/api/v1")
 app.include_router(permessi_router, prefix="/api/v1")

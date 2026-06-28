@@ -21,15 +21,30 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.exceptions.auth import InvalidTokenError
 from app.models.utente import Utente
+from app.repositories.oauth_account_repository import OAuthAccountRepository
+from app.repositories.ruolo_repository import RuoloRepository
 from app.repositories.sessione_repository import SessioneRepository
 from app.repositories.utente_repository import UtenteRepository
 from app.services.auth_service import AuthService
+from app.services.oauth_service import OAuthService
 
 _bearer = HTTPBearer(auto_error=False)
 
 
 def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(UtenteRepository(db), SessioneRepository(db))
+
+
+def get_oauth_service(db: AsyncSession = Depends(get_db)) -> OAuthService:
+    utente_repo = UtenteRepository(db)
+    sessione_repo = SessioneRepository(db)
+    return OAuthService(
+        utente_repo=utente_repo,
+        oauth_repo=OAuthAccountRepository(db),
+        sessione_repo=sessione_repo,
+        ruolo_repo=RuoloRepository(db),
+        auth_service=AuthService(utente_repo, sessione_repo),
+    )
 
 
 async def get_current_user(

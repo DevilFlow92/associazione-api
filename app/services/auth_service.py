@@ -65,9 +65,8 @@ class AuthService:
 
     # ── Piano umano: sessioni server-side ────────────────────────────────────
 
-    async def login(self, email: str, password: str) -> str:
-        """Apre una sessione e restituisce il token opaco in chiaro."""
-        utente = await self._authenticate(email, password)
+    async def _open_session(self, utente: Utente) -> str:
+        """Crea una sessione server-side e restituisce il token opaco."""
         token = generate_session_token()
         scade_il = datetime.now(UTC) + timedelta(hours=settings.session_expire_hours)
         await self.sessione_repo.create(
@@ -76,6 +75,11 @@ class AuthService:
             scade_il=scade_il,
         )
         return token
+
+    async def login(self, email: str, password: str) -> str:
+        """Apre una sessione e restituisce il token opaco in chiaro."""
+        utente = await self._authenticate(email, password)
+        return await self._open_session(utente)
 
     async def logout(self, token: str) -> None:
         sessione = await self.sessione_repo.get_by_token_hash(hash_session_token(token))
