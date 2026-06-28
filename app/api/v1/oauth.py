@@ -78,6 +78,7 @@ async def oauth_redirect(provider: str, response: Response) -> Response:
         max_age=600,
         samesite="none",
         secure=True,
+        domain=".cosequences.com",
     )
 
     if provider == "google":
