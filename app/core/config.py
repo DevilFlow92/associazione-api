@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     session_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     # Dominio del cookie di sessione. In produzione impostare a ".cosequences.com"
     # per condividere il cookie tra frontend (bandapp-web-fe.vercel.app) e backend
-    # (api.cosequences.com). In sviluppo lasciare None.
+    # (associazione-api.cosequences.com). In sviluppo lasciare None.
     session_cookie_domain: str | None = None
 
     # ── Email (Resend) ───────────────────────────────────────────────────────
