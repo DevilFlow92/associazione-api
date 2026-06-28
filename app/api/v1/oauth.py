@@ -35,6 +35,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         secure=settings.session_cookie_secure,
         samesite="none",
         max_age=settings.session_expire_hours * 3600,
+        domain=".cosequences.com",
     )
 
 
