@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # Mittente delle email transazionali (dominio verificato su Resend).
     email_from: str = "noreply@cosequences.com"
     # Base URL del frontend, usata per costruire i link (es. reset password).
-    frontend_url: str = "https://bandapp-web-fe.vercel.app"
+    frontend_url: str = "https://bandapp.cosequences.com"
 
     # ── OAuth2 — Google ──────────────────────────────────────────────────────
     google_client_id: str | None = None
