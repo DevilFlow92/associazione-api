@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lookups import SezioneRendiconto, SottovoceRendiconto, VoceRendiconto
+from app.models.macro_sezione import MacroSezione
 from app.models.relations import voci_sottovoci_rendiconto
 
 # Dati di riferimento del rendiconto, allineati a legacy_db/seed_pass2b_postgres.sql
@@ -127,6 +128,40 @@ _JUNCTION: dict[int, list[int]] = {
     14: [50],
     15: [48, 49],
 }
+
+
+@pytest.fixture
+async def seeded_macro_sezioni(db_session: AsyncSession) -> None:
+    """Seed the four fixed macro-sezioni used by archivio tests."""
+    db_session.add_all(
+        [
+            MacroSezione(
+                codice=1,
+                nome="Certificazioni Uniche",
+                permesso_prefisso="certificazioni",
+                ordine=1,
+            ),
+            MacroSezione(
+                codice=2,
+                nome="Verbali e Libro Soci",
+                permesso_prefisso="verbali",
+                ordine=2,
+            ),
+            MacroSezione(
+                codice=3,
+                nome="Concorsi e Bandi",
+                permesso_prefisso="concorsi",
+                ordine=3,
+            ),
+            MacroSezione(
+                codice=4,
+                nome="Documenti Amministrativi",
+                permesso_prefisso="documenti_admin",
+                ordine=4,
+            ),
+        ]
+    )
+    await db_session.commit()
 
 
 @pytest.fixture(autouse=True)

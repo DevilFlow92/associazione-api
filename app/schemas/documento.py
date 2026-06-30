@@ -12,11 +12,20 @@ class TipoDocumentoInDocumento(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SottoCartellaInDocumento(BaseModel):
+    id: int
+    nome: str
+
+    model_config = {"from_attributes": True}
+
+
 class DocumentoResponse(BaseModel):
     id: int
     nome: str
     tipo_documento_codice: int | None
     tipo_documento: TipoDocumentoInDocumento | None = None
+    sotto_cartella_id: int | None
+    sotto_cartella: SottoCartellaInDocumento | None = None
     mime_type: str
     dimensione_bytes: int
     checksum: str
