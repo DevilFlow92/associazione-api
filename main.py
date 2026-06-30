@@ -19,6 +19,7 @@ from app.api.v1.esterni import router as esterni_router
 from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.iscrizioni import router as iscrizioni_router
+from app.api.v1.macro_sezioni import router as macro_sezioni_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
 from app.api.v1.oauth import router as oauth_router
 from app.api.v1.permessi import router as permessi_router
@@ -33,6 +34,7 @@ from app.api.v1.ruoli_contatto import router as ruoli_contatto_router
 from app.api.v1.servizi import router as servizi_router
 from app.api.v1.sezioni_rendiconto import router as sezioni_rendiconto_router
 from app.api.v1.soci import router as soci_router
+from app.api.v1.sotto_cartelle import router as sotto_cartelle_router
 from app.api.v1.sottovoci_rendiconto import router as sottovoci_rendiconto_router
 from app.api.v1.spartiti import router as spartiti_router
 from app.api.v1.stati import router as stati_router
@@ -243,6 +245,8 @@ app.include_router(stati_iscrizione_router, prefix="/api/v1", dependencies=_auth
 app.include_router(documenti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(template_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(spartiti_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(macro_sezioni_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(sotto_cartelle_router, prefix="/api/v1", dependencies=_auth)
 
 
 @app.get("/health")
