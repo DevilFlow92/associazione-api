@@ -68,7 +68,7 @@ async def download_template(
         doc = await service.get_documento_file(template_id)
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    if not file_exists(doc.file_path):
+    if not await file_exists(doc.file_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
         )

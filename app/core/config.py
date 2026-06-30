@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -72,6 +72,15 @@ class Settings(BaseSettings):
     # Base URL used to build OAuth2 redirect_uri (e.g. https://associazione-api-production.up.railway.app)
     api_base_url: str = "http://localhost:8000"
 
+    # Storage backend
+    storage_backend: str = "local"  # "local" | "r2"
+
+    # Cloudflare R2 (only required when storage_backend="r2")
+    r2_endpoint_url: str | None = None
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: str | None = None
+    r2_bucket_name: str | None = None
+
     @field_validator("database_url", "migration_database_url")
     @classmethod
     def _force_async_driver(cls, v: str | None) -> str | None:
@@ -83,6 +92,23 @@ class Settings(BaseSettings):
         elif v.startswith("postgresql://"):
             v = "postgresql+asyncpg://" + v[len("postgresql://") :]
         return v
+
+    @model_validator(mode="after")
+    def _validate_r2_config(self) -> Self:
+        if self.storage_backend == "r2":
+            missing = [
+                f
+                for f in [
+                    "r2_endpoint_url",
+                    "r2_access_key_id",
+                    "r2_secret_access_key",
+                    "r2_bucket_name",
+                ]
+                if getattr(self, f) is None
+            ]
+            if missing:
+                raise ValueError(f"storage_backend='r2' requires {', '.join(missing)}")
+        return self
 
 
 settings = Settings()

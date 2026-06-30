@@ -71,5 +71,5 @@ class DocumentoService:
         documento = await self.repo.get_by_id(documento_id)
         if not documento:
             raise DocumentoNotFoundError(documento_id)
-        delete_file(documento.file_path)
+        await delete_file(documento.file_path)
         await self.repo.delete(documento)
