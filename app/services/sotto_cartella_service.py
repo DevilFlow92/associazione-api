@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from fastapi import HTTPException, status
-
 from app.exceptions.sotto_cartella import (
     SottoCartellaDuplicateNomeError,
     SottoCartellaMacroSezioneNotFoundError,
     SottoCartellaNotFoundError,
 )
-from app.models.macro_sezione import MacroSezione
 from app.models.utente import Utente
 from app.repositories.sotto_cartella_repository import (
     MacroSezioneRepository,
@@ -18,25 +15,7 @@ from app.schemas.sotto_cartella import (
     SottoCartellaResponse,
     SottoCartellaUpdate,
 )
-
-
-def _require_write(user: Utente, macro_sezione: MacroSezione) -> None:
-    """Impone il permesso di scrittura della macro-sezione genitrice.
-
-    Il permesso è dinamico: dipende dal ``permesso_prefisso`` della
-    macro-sezione (es. ``certificazioni:write``). I superuser bypassano il
-    controllo, coerentemente con ``require_permission`` in ``app.api.deps``.
-    Riusa il set di permessi già calcolato da ``Utente.permessi`` (i ruoli
-    appiattiti in codici), la stessa logica usata da ``UtenteResponse``.
-    """
-    if user.superuser:
-        return
-    richiesto = f"{macro_sezione.permesso_prefisso}:write"
-    if richiesto not in user.permessi:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Permesso richiesto: {richiesto}",
-        )
+from app.services.permessi_archivio import require_write
 
 
 class SottoCartellaService:
@@ -67,7 +46,7 @@ class SottoCartellaService:
         )
         if not macro_sezione:
             raise SottoCartellaMacroSezioneNotFoundError(data.macro_sezione_codice)
-        _require_write(user, macro_sezione)
+        require_write(user, macro_sezione)
         existing = await self.repo.get_by_nome(data.nome, data.macro_sezione_codice)
         if existing:
             raise SottoCartellaDuplicateNomeError(data.nome, data.macro_sezione_codice)
@@ -87,7 +66,7 @@ class SottoCartellaService:
         )
         if not macro_sezione:
             raise SottoCartellaMacroSezioneNotFoundError(obj.macro_sezione_codice)
-        _require_write(user, macro_sezione)
+        require_write(user, macro_sezione)
         if data.nome is not None and data.nome != obj.nome:
             existing = await self.repo.get_by_nome(data.nome, obj.macro_sezione_codice)
             if existing and existing.id != id:
@@ -106,5 +85,5 @@ class SottoCartellaService:
         )
         if not macro_sezione:
             raise SottoCartellaMacroSezioneNotFoundError(obj.macro_sezione_codice)
-        _require_write(user, macro_sezione)
+        require_write(user, macro_sezione)
         await self.repo.delete(obj)

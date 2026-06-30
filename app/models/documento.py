@@ -10,6 +10,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.lookups import TipoDocumento
+    from app.models.sotto_cartella import SottoCartella
 
 
 class Documento(Base):
@@ -35,8 +36,14 @@ class Documento(Base):
         DateTime,
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
+    sotto_cartella_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("sotto_cartelle.id", ondelete="SET NULL"), nullable=True
+    )
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     tipo_documento: Mapped[TipoDocumento | None] = relationship(
         "TipoDocumento", foreign_keys=[tipo_documento_codice]
+    )
+    sotto_cartella: Mapped[SottoCartella | None] = relationship(
+        "SottoCartella", foreign_keys=[sotto_cartella_id]
     )
