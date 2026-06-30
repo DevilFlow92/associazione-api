@@ -23,6 +23,7 @@ from app.models.lookups import (  # noqa: F401
     TipoSpartito,
     VoceRendiconto,
 )
+from app.models.macro_sezione import MacroSezione  # noqa: F401
 from app.models.oauth_account import OAuthAccount  # noqa: F401
 from app.models.password_reset_token import PasswordResetToken  # noqa: F401
 from app.models.permesso import Permesso  # noqa: F401
@@ -38,6 +39,7 @@ from app.models.ruolo import Ruolo  # noqa: F401
 from app.models.servizio import Servizio  # noqa: F401
 from app.models.sessione import Sessione  # noqa: F401
 from app.models.socio import Socio  # noqa: F401
+from app.models.sotto_cartella import SottoCartella  # noqa: F401
 from app.models.spartito import Spartito  # noqa: F401
 from app.models.template import Template  # noqa: F401
 from app.models.utente import TipoUtente, Utente  # noqa: F401
