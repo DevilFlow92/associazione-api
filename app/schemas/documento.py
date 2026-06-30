@@ -15,6 +15,7 @@ class TipoDocumentoInDocumento(BaseModel):
 class SottoCartellaInDocumento(BaseModel):
     id: int
     nome: str
+    macro_sezione_codice: int
 
     model_config = {"from_attributes": True}
 
