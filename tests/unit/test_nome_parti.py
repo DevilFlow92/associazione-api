@@ -116,3 +116,76 @@ async def test_delete_nome_parte_cascades_to_spartiti(client: AsyncClient) -> No
     assert del_r.status_code == 204
 
     assert (await client.get(f"/api/v1/spartiti/{spartito_id}")).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# documento_audio_id tests
+# Note: documento_service.upload() currently enforces PDF-only; all uploads
+# use PDF content until that restriction is lifted.
+# ---------------------------------------------------------------------------
+
+
+def _pdf_file(filename: str = "audio.pdf") -> tuple[str, tuple[str, bytes, str]]:
+    return ("file", (filename, b"%PDF-1.4 test pdf content", "application/pdf"))
+
+
+@pytest.mark.asyncio
+async def test_update_nome_parte_documento_audio_id(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    upload = await client.post("/api/v1/documenti/", files=[_pdf_file("brano.pdf")])
+    assert upload.status_code == 201
+    doc_id = upload.json()["id"]
+
+    r = await client.patch(
+        f"/api/v1/nome-parti/{seeded_nome_parte.id}",
+        json={"documento_audio_id": doc_id},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["documento_audio_id"] == doc_id
+    assert data["documento_audio"]["nome"] is not None
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_endpoint(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    r = await client.post(
+        f"/api/v1/nome-parti/{seeded_nome_parte.id}/audio",
+        files=[_pdf_file("traccia.pdf")],
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["documento_audio_id"] is not None
+    assert data["documento_audio"]["nome"] == "traccia.pdf"
+
+
+@pytest.mark.asyncio
+async def test_delete_audio_endpoint(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    upload_r = await client.post(
+        f"/api/v1/nome-parti/{seeded_nome_parte.id}/audio",
+        files=[_pdf_file("da_scollegare.pdf")],
+    )
+    assert upload_r.status_code == 200
+
+    del_r = await client.delete(f"/api/v1/nome-parti/{seeded_nome_parte.id}/audio")
+    assert del_r.status_code == 204
+
+    get_r = await client.get(f"/api/v1/nome-parti/{seeded_nome_parte.id}")
+    assert get_r.status_code == 200
+    assert get_r.json()["documento_audio_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_delete_audio_when_none_is_noop(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    del_r = await client.delete(f"/api/v1/nome-parti/{seeded_nome_parte.id}/audio")
+    assert del_r.status_code == 204
+
+    get_r = await client.get(f"/api/v1/nome-parti/{seeded_nome_parte.id}")
+    assert get_r.status_code == 200
+    assert get_r.json()["documento_audio_id"] is None

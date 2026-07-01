@@ -31,6 +31,14 @@ class NomeParteInSpartito(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DocumentoInNomeParte(BaseModel):
+    id: int
+    nome: str
+    mime_type: str
+
+    model_config = {"from_attributes": True}
+
+
 # ── NomeParte schemas ─────────────────────────────────────────────────────────
 
 
@@ -40,6 +48,7 @@ class NomeParteCreate(BaseModel):
     banda_codice: int
     url_riferimento: str | None = None
     note: str | None = None
+    documento_audio_id: int | None = None
 
 
 class NomeParteUpdate(BaseModel):
@@ -47,6 +56,7 @@ class NomeParteUpdate(BaseModel):
     tipo_spartito_codice: int | None = None
     url_riferimento: str | None = None
     note: str | None = None
+    documento_audio_id: int | None = None
     # banda_codice intentionally NOT updatable (ownership cannot change)
 
 
@@ -57,7 +67,9 @@ class NomeParteResponse(BaseModel):
     banda_codice: int
     url_riferimento: str | None = None
     note: str | None = None
+    documento_audio_id: int | None = None
     tipo_spartito: TipoSpartitoInSpartito | None = None
+    documento_audio: DocumentoInNomeParte | None = None
     num_parti: int = 0  # filled by service layer, not from ORM directly
 
     model_config = {"from_attributes": True}

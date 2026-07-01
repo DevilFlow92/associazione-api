@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, SmallInteger, String
+from sqlalchemy import ForeignKey, Integer, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.documento import Documento
     from app.models.lookups import TipoSpartito
     from app.models.spartito import Spartito
 
@@ -34,9 +35,15 @@ class NomeParte(Base):
     )
     url_riferimento: Mapped[str | None] = mapped_column(String(500), nullable=True)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    documento_audio_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("documenti.id", ondelete="SET NULL"), nullable=True
+    )
 
     tipo_spartito: Mapped[TipoSpartito] = relationship(
         "TipoSpartito", foreign_keys=[tipo_spartito_codice]
+    )
+    documento_audio: Mapped[Documento | None] = relationship(
+        "Documento", foreign_keys=[documento_audio_id]
     )
     spartiti: Mapped[list[Spartito]] = relationship(
         "Spartito", back_populates="nome_parte", cascade="all, delete-orphan"
