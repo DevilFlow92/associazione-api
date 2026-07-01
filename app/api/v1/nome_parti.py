@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.exceptions.documento import DocumentoTipoNonValidoError
 from app.exceptions.spartito import NomeParteNotFoundError
 from app.models.utente import Utente
 from app.repositories.documento_repository import DocumentoRepository
@@ -89,18 +88,13 @@ async def upload_audio(
         await nome_parte_service.get_by_id(id)
     except NomeParteNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    try:
-        doc = await documento_service.upload(
-            file=file,
-            user=user,
-            tipo_documento_codice=None,
-            sotto_cartella_id=None,
-            note=None,
-        )
-    except DocumentoTipoNonValidoError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        ) from e
+    doc = await documento_service.upload(
+        file=file,
+        user=user,
+        tipo_documento_codice=None,
+        sotto_cartella_id=None,
+        note=None,
+    )
     return await nome_parte_service.update(
         id, NomeParteUpdate(documento_audio_id=doc.id)
     )

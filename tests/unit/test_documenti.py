@@ -48,12 +48,13 @@ async def test_upload_documento_con_tipo(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_upload_documento_non_pdf(client: AsyncClient):
+async def test_upload_documento_non_pdf_now_accepted(client: AsyncClient):
+    # All file types are now accepted; the PDF-only restriction has been removed.
     response = await client.post(
         "/api/v1/documenti/",
         files=[fake_file()],
     )
-    assert response.status_code == 422
+    assert response.status_code == 201
 
 
 @pytest.mark.asyncio
