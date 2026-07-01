@@ -24,6 +24,7 @@ from app.models.lookups import (  # noqa: F401
     VoceRendiconto,
 )
 from app.models.macro_sezione import MacroSezione  # noqa: F401
+from app.models.nome_parte import NomeParte  # noqa: F401
 from app.models.oauth_account import OAuthAccount  # noqa: F401
 from app.models.password_reset_token import PasswordResetToken  # noqa: F401
 from app.models.permesso import Permesso  # noqa: F401

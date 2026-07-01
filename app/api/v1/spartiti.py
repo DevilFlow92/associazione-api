@@ -20,11 +20,16 @@ async def list_spartiti(
     tipo_spartito_codice: int | None = Query(None),
     strumento_codice: int | None = Query(None),
     banda_codice: int | None = Query(None),
+    nome_parte_id: int | None = Query(None),
     params: PageParams = Depends(),
     service: SpartitoService = Depends(get_service),
 ) -> PagedResponse[SpartitoResponse]:
     return await service.get_all(
-        tipo_spartito_codice, strumento_codice, params, banda_codice=banda_codice
+        tipo_spartito_codice,
+        strumento_codice,
+        params,
+        banda_codice=banda_codice,
+        nome_parte_id=nome_parte_id,
     )
 
 
