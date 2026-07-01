@@ -9,6 +9,7 @@ from app.schemas.spartito import NomeParteCreate, NomeParteUpdate
 
 _LOAD_OPTS = [
     selectinload(NomeParte.tipo_spartito),
+    selectinload(NomeParte.documento_audio),
     selectinload(NomeParte.spartiti),
 ]
 
@@ -70,6 +71,10 @@ class NomeParteRepository:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(obj, field, value)
         await self.db.commit()
+        # Expire the object so that selectinload in get_by_id issues fresh
+        # subqueries — necessary when the session is long-lived (e.g. tests)
+        # and relationship attributes were already populated before this update.
+        self.db.expire(obj)
         result = await self.get_by_id(obj_id)
         assert result is not None
         return result
