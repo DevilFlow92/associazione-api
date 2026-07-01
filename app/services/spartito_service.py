@@ -17,11 +17,13 @@ class SpartitoService:
         strumento_codice: int | None,
         params: PageParams,
         banda_codice: int | None = None,
+        nome_parte_id: int | None = None,
     ) -> PagedResponse[SpartitoResponse]:
         spartiti = await self.repo.get_all(
             tipo_spartito_codice=tipo_spartito_codice,
             strumento_codice=strumento_codice,
             banda_codice=banda_codice,
+            nome_parte_id=nome_parte_id,
             offset=params.offset,
             limit=params.limit,
         )
@@ -29,6 +31,7 @@ class SpartitoService:
             tipo_spartito_codice=tipo_spartito_codice,
             strumento_codice=strumento_codice,
             banda_codice=banda_codice,
+            nome_parte_id=nome_parte_id,
         )
         items = [SpartitoResponse.model_validate(s) for s in spartiti]
         return paginate(items, total, params)

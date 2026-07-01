@@ -8,6 +8,7 @@ from app.models.spartito import Spartito
 from app.schemas.spartito import SpartitoCreate, SpartitoUpdate
 
 _LOAD_OPTS = [
+    selectinload(Spartito.nome_parte),
     selectinload(Spartito.tipo_spartito),
     selectinload(Spartito.strumento),
     selectinload(Spartito.documento),
@@ -23,6 +24,7 @@ class SpartitoRepository:
         tipo_spartito_codice: int | None = None,
         strumento_codice: int | None = None,
         banda_codice: int | None = None,
+        nome_parte_id: int | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[Spartito]:
@@ -33,6 +35,8 @@ class SpartitoRepository:
             stmt = stmt.where(Spartito.strumento_codice == strumento_codice)
         if banda_codice is not None:
             stmt = stmt.where(Spartito.banda_codice == banda_codice)
+        if nome_parte_id is not None:
+            stmt = stmt.where(Spartito.nome_parte_id == nome_parte_id)
         stmt = stmt.offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -42,6 +46,7 @@ class SpartitoRepository:
         tipo_spartito_codice: int | None = None,
         strumento_codice: int | None = None,
         banda_codice: int | None = None,
+        nome_parte_id: int | None = None,
     ) -> int:
         stmt = select(func.count()).select_from(Spartito)
         if tipo_spartito_codice is not None:
@@ -50,6 +55,8 @@ class SpartitoRepository:
             stmt = stmt.where(Spartito.strumento_codice == strumento_codice)
         if banda_codice is not None:
             stmt = stmt.where(Spartito.banda_codice == banda_codice)
+        if nome_parte_id is not None:
+            stmt = stmt.where(Spartito.nome_parte_id == nome_parte_id)
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

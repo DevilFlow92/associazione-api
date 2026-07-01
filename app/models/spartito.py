@@ -10,6 +10,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.documento import Documento
     from app.models.lookups import Strumento, TipoSpartito
+    from app.models.nome_parte import NomeParte
 
 
 class Spartito(Base):
@@ -32,13 +33,17 @@ class Spartito(Base):
     strumento_codice: Mapped[int | None] = mapped_column(
         SmallInteger, ForeignKey("strumenti.codice"), nullable=True
     )
-    documento_id: Mapped[int] = mapped_column(
-        ForeignKey("documenti.id"), nullable=False
+    nome_parte_id: Mapped[int] = mapped_column(
+        ForeignKey("nome_parti.id", ondelete="CASCADE"), nullable=False
+    )
+    documento_id: Mapped[int | None] = mapped_column(
+        ForeignKey("documenti.id"), nullable=True
     )
     scaffale: Mapped[str | None] = mapped_column(String(50), nullable=True)
     ripiano: Mapped[str | None] = mapped_column(String(50), nullable=True)
     cartella: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    nome_parte: Mapped[NomeParte] = relationship("NomeParte", back_populates="spartiti")
     tipo_spartito: Mapped[TipoSpartito] = relationship(
         "TipoSpartito", foreign_keys=[tipo_spartito_codice]
     )

@@ -21,6 +21,7 @@ from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.iscrizioni import router as iscrizioni_router
 from app.api.v1.macro_sezioni import router as macro_sezioni_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
+from app.api.v1.nome_parti import router as nome_parti_router
 from app.api.v1.oauth import router as oauth_router
 from app.api.v1.permessi import router as permessi_router
 from app.api.v1.persone import router as persone_router
@@ -244,6 +245,7 @@ app.include_router(stati_iscrizione_router, prefix="/api/v1", dependencies=_auth
 # ── Archivio documentale (file) ──────────────────────────────────────────────
 app.include_router(documenti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(template_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(nome_parti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(spartiti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(macro_sezioni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(sotto_cartelle_router, prefix="/api/v1", dependencies=_auth)
