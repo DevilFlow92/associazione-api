@@ -3,11 +3,10 @@ from __future__ import annotations
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 from fastapi import HTTPException, UploadFile, status
 
-from app.core.storage import delete_file, save_upload, validate_pdf
+from app.core.storage import delete_file, save_upload
 from app.exceptions.documento import (
     DocumentoNotFoundError,
     DocumentoSottoCartellaNotFoundError,
-    DocumentoTipoNonValidoError,
 )
 from app.models.macro_sezione import MacroSezione
 from app.models.utente import Utente
@@ -18,8 +17,6 @@ from app.repositories.sotto_cartella_repository import (
 )
 from app.schemas.documento import DocumentoResponse
 from app.services.permessi_archivio import require_read, require_write
-
-MIME_TYPES_ACCETTATI = {"application/pdf"}
 
 
 class DocumentoService:
@@ -88,20 +85,16 @@ class DocumentoService:
         sotto_cartella_id: int | None = None,
         note: str | None = None,
     ) -> DocumentoResponse:
-        if file.content_type not in MIME_TYPES_ACCETTATI:
-            raise DocumentoTipoNonValidoError(file.content_type or "unknown")
-
-        content = await file.read()
-        if not validate_pdf(content):
-            raise DocumentoTipoNonValidoError(file.content_type or "unknown")
-
+        # Tutti i formati sono accettati. La validazione del tipo è
+        # responsabilità del client. File eseguibili (.exe, .bat, ecc.)
+        # non sono bloccati a livello di backend ma dovrebbero essere
+        # filtrati dal frontend tramite l'attributo `accept`.
         if sotto_cartella_id is not None:
             macro_sezione = await self._resolve_macro_sezione_for_sotto_cartella(
                 sotto_cartella_id
             )
             require_write(user, macro_sezione)
 
-        await file.seek(0)
         sottocartella = (
             f"documenti/{tipo_documento_codice}"
             if tipo_documento_codice is not None
@@ -110,9 +103,9 @@ class DocumentoService:
         file_path, checksum, dimensione = await save_upload(file, sottocartella)
 
         documento = await self.repo.create(
-            nome=file.filename or "documento.pdf",
+            nome=file.filename or "documento",
             file_path=file_path,
-            mime_type=file.content_type or "application/pdf",
+            mime_type=file.content_type or "application/octet-stream",
             dimensione_bytes=dimensione,
             checksum=checksum,
             tipo_documento_codice=tipo_documento_codice,
