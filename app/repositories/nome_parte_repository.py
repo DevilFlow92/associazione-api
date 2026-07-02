@@ -22,6 +22,7 @@ class NomeParteRepository:
         self,
         banda_codice: int,
         tipo_spartito_codice: int | None = None,
+        nome: str | None = None,
         offset: int = 0,
         limit: int = 20,
     ) -> list[NomeParte]:
@@ -32,6 +33,8 @@ class NomeParteRepository:
         )
         if tipo_spartito_codice is not None:
             stmt = stmt.where(NomeParte.tipo_spartito_codice == tipo_spartito_codice)
+        if nome is not None:
+            stmt = stmt.where(NomeParte.nome.ilike(f"%{nome}%"))
         stmt = stmt.order_by(NomeParte.nome).offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -40,6 +43,7 @@ class NomeParteRepository:
         self,
         banda_codice: int,
         tipo_spartito_codice: int | None = None,
+        nome: str | None = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -48,6 +52,8 @@ class NomeParteRepository:
         )
         if tipo_spartito_codice is not None:
             stmt = stmt.where(NomeParte.tipo_spartito_codice == tipo_spartito_codice)
+        if nome is not None:
+            stmt = stmt.where(NomeParte.nome.ilike(f"%{nome}%"))
         result = await self.db.execute(stmt)
         return result.scalar_one()
 

@@ -16,16 +16,19 @@ class NomeParteService:
         banda_codice: int,
         tipo_spartito_codice: int | None,
         params: PageParams,
+        nome: str | None = None,
     ) -> PagedResponse[NomeParteResponse]:
         items = await self.repo.get_all(
             banda_codice=banda_codice,
             tipo_spartito_codice=tipo_spartito_codice,
+            nome=nome,
             offset=params.offset,
             limit=params.limit,
         )
         total = await self.repo.count_all(
             banda_codice=banda_codice,
             tipo_spartito_codice=tipo_spartito_codice,
+            nome=nome,
         )
         responses = []
         for np in items:
