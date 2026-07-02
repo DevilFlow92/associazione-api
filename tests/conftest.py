@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
 from app.api.deps import get_current_user
@@ -10,9 +11,11 @@ from app.core.database import Base, get_db
 from app.models.utente import TipoUtente, Utente
 from main import app
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
-
-engine_test = create_async_engine(TEST_DATABASE_URL, echo=False)
+engine_test = create_async_engine(
+    "sqlite+aiosqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 AsyncSessionTest = async_sessionmaker(bind=engine_test, expire_on_commit=False)
 
 
