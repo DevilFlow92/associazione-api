@@ -37,10 +37,11 @@ def get_documento_service(db: AsyncSession = Depends(get_db)) -> DocumentoServic
 async def list_nome_parti(
     banda_codice: int,
     tipo_spartito_codice: int | None = Query(None),
+    nome: str | None = Query(None),
     params: PageParams = Depends(),
     service: NomeParteService = Depends(get_service),
 ) -> PagedResponse[NomeParteResponse]:
-    return await service.get_all(banda_codice, tipo_spartito_codice, params)
+    return await service.get_all(banda_codice, tipo_spartito_codice, params, nome)
 
 
 @router.get("/{id}", response_model=NomeParteResponse)
