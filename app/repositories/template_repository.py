@@ -18,7 +18,7 @@ class TemplateRepository:
         offset: int = 0,
         limit: int = 20,
     ) -> list[Template]:
-        stmt = select(Template)
+        stmt = select(Template).options(selectinload(Template.documento))
         if documento_id is not None:
             stmt = stmt.where(Template.documento_id == documento_id)
         stmt = stmt.offset(offset).limit(limit)
@@ -33,7 +33,11 @@ class TemplateRepository:
         return result.scalar_one()
 
     async def get_by_id(self, template_id: int) -> Template | None:
-        stmt = select(Template).where(Template.id == template_id)
+        stmt = (
+            select(Template)
+            .where(Template.id == template_id)
+            .options(selectinload(Template.documento))
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -50,14 +54,14 @@ class TemplateRepository:
         template = Template(**data.model_dump())
         self.db.add(template)
         await self.db.commit()
-        await self.db.refresh(template)
+        await self.db.refresh(template, attribute_names=["documento"])
         return template
 
     async def update(self, template: Template, data: TemplateUpdate) -> Template:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(template, field, value)
         await self.db.commit()
-        await self.db.refresh(template)
+        await self.db.refresh(template, attribute_names=["documento"])
         return template
 
     async def delete(self, template: Template) -> None:
