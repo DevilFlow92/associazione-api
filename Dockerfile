@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 
 # Installa dipendenze prima del codice (layer cachabile)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --frozen
+RUN uv sync --no-dev --frozen --extra r2
 
 # Copia il resto del codice
 COPY . .
