@@ -1,47 +1,64 @@
 from __future__ import annotations
 
-import os
+from collections.abc import Collection
 
 import pytest
 from httpx import AsyncClient
 
+from app.api.deps import get_current_user
+from app.models.permesso import Permesso
+from app.models.ruolo import Ruolo
+from app.models.utente import TipoUtente, Utente
+from main import app
 
-def pdf_file(filename: str = "template.pdf") -> tuple[str, tuple[str, bytes, str]]:
-    content = b"%PDF-1.4 test template content"
-    return ("file", (filename, content, "application/pdf"))
+
+def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
+    ruoli: list[Ruolo] = []
+    if permessi:
+        ruoli = [
+            Ruolo(
+                nome="test",
+                permessi=[Permesso(codice=c, descrizione=c) for c in permessi],
+            )
+        ]
+    return Utente(
+        id=1,
+        tipo=TipoUtente.UMANO,
+        email="test@example.com",
+        superuser=superuser,
+        ruoli=ruoli,
+    )
 
 
-async def upload_documento(client: AsyncClient, filename: str = "doc.pdf") -> dict:
-    response = await client.post("/api/v1/documenti/", files=[pdf_file(filename)])
-    assert response.status_code == 201
-    return response.json()
+def template_payload(**overrides) -> dict:
+    payload = {
+        "nome": "Modulo Iscrizione",
+        "contenuto_json": {"type": "doc", "content": []},
+        "entita_richieste": ["socio", "banda"],
+    }
+    payload.update(overrides)
+    return payload
 
 
 @pytest.mark.asyncio
 async def test_create_template(client: AsyncClient):
-    doc = await upload_documento(client)
-    response = await client.post(
-        "/api/v1/templates/",
-        json={"documento_id": doc["id"], "nome": "Modulo Test"},
-    )
+    response = await client.post("/api/v1/templates/", json=template_payload())
     assert response.status_code == 201
     data = response.json()
-    assert data["documento_id"] == doc["id"]
-    assert data["nome"] == "Modulo Test"
+    assert data["nome"] == "Modulo Iscrizione"
     assert data["descrizione"] is None
+    assert data["contenuto_json"] == {"type": "doc", "content": []}
+    assert data["entita_richieste"] == ["socio", "banda"]
     assert "creato_il" in data
 
 
 @pytest.mark.asyncio
 async def test_create_template_con_descrizione(client: AsyncClient):
-    doc = await upload_documento(client)
     response = await client.post(
         "/api/v1/templates/",
-        json={
-            "documento_id": doc["id"],
-            "nome": "Ricevuta Base",
-            "descrizione": "Template per le ricevute ai soci",
-        },
+        json=template_payload(
+            nome="Ricevuta Base", descrizione="Template per le ricevute ai soci"
+        ),
     )
     assert response.status_code == 201
     assert response.json()["descrizione"] == "Template per le ricevute ai soci"
@@ -63,25 +80,17 @@ async def test_list_templates_empty(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_list_templates_filtro_documento(client: AsyncClient):
-    doc1 = await upload_documento(client, "d1.pdf")
-    doc2 = await upload_documento(client, "d2.pdf")
-    await client.post(
-        "/api/v1/templates/", json={"documento_id": doc1["id"], "nome": "T1"}
-    )
-    await client.post(
-        "/api/v1/templates/", json={"documento_id": doc2["id"], "nome": "T2"}
-    )
-    response = await client.get(f"/api/v1/templates/?documento_id={doc1['id']}")
-    assert response.json()["meta"]["total_items"] == 1
+async def test_list_templates(client: AsyncClient):
+    await client.post("/api/v1/templates/", json=template_payload(nome="T1"))
+    await client.post("/api/v1/templates/", json=template_payload(nome="T2"))
+    response = await client.get("/api/v1/templates/")
+    assert response.json()["meta"]["total_items"] == 2
 
 
 @pytest.mark.asyncio
 async def test_update_template(client: AsyncClient):
-    doc = await upload_documento(client)
     created = await client.post(
-        "/api/v1/templates/",
-        json={"documento_id": doc["id"], "nome": "Originale"},
+        "/api/v1/templates/", json=template_payload(nome="Originale")
     )
     template_id = created.json()["id"]
     response = await client.patch(
@@ -96,9 +105,8 @@ async def test_update_template(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_delete_template(client: AsyncClient):
-    doc = await upload_documento(client)
     created = await client.post(
-        "/api/v1/templates/", json={"documento_id": doc["id"], "nome": "Da cancellare"}
+        "/api/v1/templates/", json=template_payload(nome="Da cancellare")
     )
     template_id = created.json()["id"]
     response = await client.delete(f"/api/v1/templates/{template_id}")
@@ -107,23 +115,34 @@ async def test_delete_template(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_download_template(client: AsyncClient):
-    doc = await upload_documento(client, "scaricabile.pdf")
-    created = await client.post(
-        "/api/v1/templates/", json={"documento_id": doc["id"], "nome": "Scaricabile"}
-    )
-    template_id = created.json()["id"]
-    response = await client.get(f"/api/v1/templates/{template_id}/download")
-    assert response.status_code == 200
-    assert response.content == b"%PDF-1.4 test template content"
+async def test_list_templates_forbidden_without_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    response = await client.get("/api/v1/templates/")
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_download_template_missing_file(client: AsyncClient):
-    doc = await upload_documento(client, "fantasma.pdf")
-    created = await client.post(
-        "/api/v1/templates/", json={"documento_id": doc["id"], "nome": "Fantasma"}
+async def test_list_templates_succeeds_with_read_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"templates:read"}
     )
-    os.remove(doc["file_path"])
-    response = await client.get(f"/api/v1/templates/{created.json()['id']}/download")
-    assert response.status_code == 404
+    response = await client.get("/api/v1/templates/")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_template_forbidden_without_write_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"templates:read"}
+    )
+    response = await client.post("/api/v1/templates/", json=template_payload())
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_template_succeeds_with_write_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"templates:write"}
+    )
+    response = await client.post("/api/v1/templates/", json=template_payload())
+    assert response.status_code == 201

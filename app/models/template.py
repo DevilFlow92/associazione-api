@@ -1,33 +1,28 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import JSON, DateTime, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
-if TYPE_CHECKING:
-    from app.models.documento import Documento
-
 
 class Template(Base):
-    """Template documentale: metadati su un Documento archiviato.
+    """Template di documento dinamico (modulistica).
 
-    Base del futuro sistema di documenti dinamici (configuratore campi a
-    frontend). Il file vive su ``documenti``; il template ne è una vista con
-    nome e descrizione applicativi.
+    ``contenuto_json`` è l'albero del documento prodotto dall'editor TipTap.
+    ``entita_richieste`` elenca i provider di merge field necessari per
+    compilarlo (es. ``["socio", "banda"]``, si veda ``app.mergefields``).
     """
 
     __tablename__ = "templates"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    documento_id: Mapped[int] = mapped_column(
-        ForeignKey("documenti.id"), nullable=False
-    )
     nome: Mapped[str] = mapped_column(String(255))
     descrizione: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    contenuto_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    entita_richieste: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     creato_il: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -36,5 +31,3 @@ class Template(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
-
-    documento: Mapped[Documento] = relationship()
