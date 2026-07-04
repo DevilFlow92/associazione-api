@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.storage import file_exists
+from app.core.storage import StorageFileNotFoundError, storage
 from app.exceptions.template import TemplateNotFoundError
 from app.repositories.template_repository import TemplateRepository
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
@@ -63,16 +62,22 @@ async def update_template(
 async def download_template(
     template_id: int,
     service: TemplateService = Depends(get_service),
-) -> FileResponse:
+) -> Response:
     try:
         doc = await service.get_documento_file(template_id)
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    if not await file_exists(doc.file_path):
+    try:
+        content = await storage.get_bytes(doc.file_path)
+    except StorageFileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
         )
-    return FileResponse(path=doc.file_path, media_type=doc.mime_type, filename=doc.nome)
+    return Response(
+        content=content,
+        media_type=doc.mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{doc.nome}"'},
+    )
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)

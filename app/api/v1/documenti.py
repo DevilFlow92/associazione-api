@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.core.storage import file_exists
+from app.core.storage import StorageFileNotFoundError, storage
 from app.exceptions.documento import (
     DocumentoNotFoundError,
     DocumentoSottoCartellaNotFoundError,
@@ -84,35 +91,46 @@ async def upload_documento(
 
 
 # download/preview share the same no-gate rationale as get_documento above.
-async def _resolve_file(documento_id: int, service: DocumentoService):  # type: ignore[return]
+async def _resolve_documento(documento_id: int, service: DocumentoService):  # type: ignore[return]
     try:
-        doc = await service.get_by_id(documento_id)
+        return await service.get_by_id(documento_id)
     except DocumentoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    if not await file_exists(doc.file_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
-        )
-    return doc
 
 
 @router.get("/{documento_id}/download")
 async def download_documento(
     documento_id: int,
     service: DocumentoService = Depends(get_service),
-) -> FileResponse:
-    doc = await _resolve_file(documento_id, service)
-    return FileResponse(path=doc.file_path, media_type=doc.mime_type, filename=doc.nome)
+) -> Response:
+    doc = await _resolve_documento(documento_id, service)
+    try:
+        content = await storage.get_bytes(doc.file_path)
+    except StorageFileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
+        )
+    return Response(
+        content=content,
+        media_type=doc.mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{doc.nome}"'},
+    )
 
 
 @router.get("/{documento_id}/preview")
 async def preview_documento(
     documento_id: int,
     service: DocumentoService = Depends(get_service),
-) -> FileResponse:
-    doc = await _resolve_file(documento_id, service)
-    return FileResponse(
-        path=doc.file_path,
+) -> Response:
+    doc = await _resolve_documento(documento_id, service)
+    try:
+        content = await storage.get_bytes(doc.file_path)
+    except StorageFileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
+        )
+    return Response(
+        content=content,
         media_type=doc.mime_type,
         headers={"Content-Disposition": f'inline; filename="{doc.nome}"'},
     )
