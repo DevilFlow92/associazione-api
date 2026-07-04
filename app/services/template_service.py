@@ -11,10 +11,13 @@ from app.repositories.template_repository import TemplateRepository
 from app.schemas.documento import DocumentoResponse
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
 from app.services.render.docx_walker import build_docx
+from app.services.render.html_renderer import build_html
+from app.services.render.pdf_renderer import build_pdf
 
 _DOCX_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
+_PDF_MIME_TYPE = "application/pdf"
 
 
 class TemplateService:
@@ -53,7 +56,7 @@ class TemplateService:
             raise TemplateNotFoundError(template_id)
         await self.repo.delete(template)
 
-    async def generate(
+    async def generate_docx(
         self, template_id: int, entities: dict[str, int], db: AsyncSession
     ) -> DocumentoResponse:
         template = await self.repo.get_by_id(template_id)
@@ -71,6 +74,30 @@ class TemplateService:
             nome=filename,
             file_path=file_path,
             mime_type=_DOCX_MIME_TYPE,
+            dimensione_bytes=dimensione,
+            checksum=checksum,
+        )
+        return DocumentoResponse.model_validate(documento)
+
+    async def generate_pdf(
+        self, template_id: int, entities: dict[str, int], db: AsyncSession
+    ) -> DocumentoResponse:
+        template = await self.repo.get_by_id(template_id)
+        if not template:
+            raise TemplateNotFoundError(template_id)
+
+        context = await resolve_context(entities, db)
+        html = build_html(template.contenuto_json, context)
+        content = await build_pdf(html)
+
+        filename = f"{template.nome}.pdf"
+        file_path, checksum, dimensione = await storage.save(
+            content, "documenti/generati", filename
+        )
+        documento = await self.documento_repo.create(
+            nome=filename,
+            file_path=file_path,
+            mime_type=_PDF_MIME_TYPE,
             dimensione_bytes=dimensione,
             checksum=checksum,
         )

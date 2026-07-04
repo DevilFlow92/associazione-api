@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 
 import pytest
 from docx import Document as DocxDocument
@@ -8,6 +9,8 @@ from httpx import AsyncClient
 
 from app.exceptions.template import TemplateRenderError
 from app.services.render.docx_walker import build_docx
+from app.services.render.html_renderer import build_html
+from app.services.render.pdf_renderer import build_pdf
 
 
 def _read_paragraphs(content: bytes) -> list[str]:
@@ -112,6 +115,86 @@ def test_build_docx_tipo_nodo_non_supportato():
         build_docx(contenuto, {})
 
 
+def test_build_html_risolve_mergefield_e_marks():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1},
+                "content": [{"type": "text", "text": "Titolo"}],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Gentile "},
+                    {"type": "mergefield", "attrs": {"chiave": "socio.nome"}},
+                    {
+                        "type": "text",
+                        "text": " grassetto",
+                        "marks": [{"type": "bold"}],
+                    },
+                ],
+            },
+        ],
+    }
+    html = build_html(contenuto, {"socio": {"nome": "Mario"}})
+    assert "<h1>Titolo</h1>" in html
+    assert "Gentile Mario" in html
+    assert "<strong> grassetto</strong>" in html
+    assert "@page { size: A4; margin: 2cm; }" in html
+    assert "unpkg.com" not in html
+    assert "http" not in html
+
+
+def test_build_html_mergefield_non_risolvibile():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "mergefield", "attrs": {"chiave": "socio.nome"}}],
+            }
+        ],
+    }
+    html = build_html(contenuto, {})
+    assert "[campo mancante: socio.nome]" in html
+
+
+def test_build_html_tipo_nodo_non_supportato():
+    contenuto = {"type": "doc", "content": [{"type": "table", "content": []}]}
+    with pytest.raises(TemplateRenderError):
+        build_html(contenuto, {})
+
+
+def _contenuto_multi_pagina() -> dict:
+    testo_lungo = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 20
+    paragrafi = [
+        {"type": "paragraph", "content": [{"type": "text", "text": testo_lungo}]}
+        for _ in range(80)
+    ]
+    return {"type": "doc", "content": paragrafi}
+
+
+@pytest.mark.asyncio
+async def test_build_pdf_produce_pdf_valido():
+    html = build_html(_contenuto_multi_pagina(), {})
+
+    inizio = time.monotonic()
+    content = await build_pdf(html)
+    durata = time.monotonic() - inizio
+
+    assert content[:5] == b"%PDF-"
+    # Se l'attesa di impaginazione degrada di nuovo a un timeout fisso
+    # (invece di risolversi sul completamento reale di paged.js), questo
+    # test tornerebbe a durare ~10s+: un tempo basso è la prova che
+    # l'hook PagedConfig.after ha davvero segnalato il completamento.
+    assert durata < 5, (
+        f"build_pdf ha impiegato {durata:.1f}s: l'attesa sembra basarsi "
+        "su un timeout invece che sul completamento reale di paged.js"
+    )
+
+
 async def _create_persona(ac: AsyncClient) -> dict:
     resp = await ac.post(
         "/api/v1/persone/",
@@ -127,8 +210,7 @@ async def _create_persona(ac: AsyncClient) -> dict:
     return resp.json()
 
 
-@pytest.mark.asyncio
-async def test_generate_endpoint_produce_docx_valido(client: AsyncClient):
+async def _create_socio_con_template(client: AsyncClient) -> tuple[int, int]:
     persona = await _create_persona(client)
     socio_resp = await client.post(
         "/api/v1/soci/",
@@ -165,10 +247,15 @@ async def test_generate_endpoint_produce_docx_valido(client: AsyncClient):
         },
     )
     assert template_resp.status_code == 201, template_resp.text
-    template_id = template_resp.json()["id"]
+    return template_resp.json()["id"], socio_id
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_produce_docx_valido(client: AsyncClient):
+    template_id, socio_id = await _create_socio_con_template(client)
 
     generate_resp = await client.post(
-        f"/api/v1/templates/{template_id}/generate",
+        f"/api/v1/templates/{template_id}/generate/docx",
         json={"entities": {"socio": socio_id}},
     )
     assert generate_resp.status_code == 200, generate_resp.text
@@ -184,7 +271,24 @@ async def test_generate_endpoint_produce_docx_valido(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_generate_endpoint_forbidden_senza_permesso(client: AsyncClient):
+async def test_generate_pdf_endpoint_produce_pdf_valido(client: AsyncClient):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/pdf",
+        json={"entities": {"socio": socio_id}},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    documento = generate_resp.json()
+    assert documento["mime_type"] == "application/pdf"
+
+    download_resp = await client.get(f"/api/v1/documenti/{documento['id']}/download")
+    assert download_resp.status_code == 200
+    assert download_resp.content[:5] == b"%PDF-"
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_forbidden_senza_permesso(client: AsyncClient):
     from app.api.deps import get_current_user
     from app.models.utente import TipoUtente, Utente
     from main import app
@@ -193,5 +297,23 @@ async def test_generate_endpoint_forbidden_senza_permesso(client: AsyncClient):
         return Utente(id=1, tipo=TipoUtente.UMANO, email="test@example.com")
 
     app.dependency_overrides[get_current_user] = _user_senza_permessi
-    response = await client.post("/api/v1/templates/1/generate", json={"entities": {}})
+    response = await client.post(
+        "/api/v1/templates/1/generate/docx", json={"entities": {}}
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_generate_pdf_endpoint_forbidden_senza_permesso(client: AsyncClient):
+    from app.api.deps import get_current_user
+    from app.models.utente import TipoUtente, Utente
+    from main import app
+
+    def _user_senza_permessi() -> Utente:
+        return Utente(id=1, tipo=TipoUtente.UMANO, email="test@example.com")
+
+    app.dependency_overrides[get_current_user] = _user_senza_permessi
+    response = await client.post(
+        "/api/v1/templates/1/generate/pdf", json={"entities": {}}
+    )
     assert response.status_code == 403

@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --frozen --extra r2
 
+# Chromium per il rendering PDF via Playwright (app/services/render/pdf_renderer.py).
+# --with-deps installa anche le librerie di sistema Debian richieste dal browser.
+RUN uv run playwright install --with-deps chromium
+
 # Copia il resto del codice
 COPY . .
 
