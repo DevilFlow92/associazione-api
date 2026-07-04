@@ -6,16 +6,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
 from app.core.database import get_db
-from app.exceptions.template import TemplateNotFoundError
+from app.exceptions.esterno import EsternoNotFoundError
+from app.exceptions.socio import SocioNotFoundError
+from app.exceptions.template import TemplateNotFoundError, TemplateRenderError
+from app.repositories.documento_repository import DocumentoRepository
 from app.repositories.template_repository import TemplateRepository
-from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
+from app.schemas.documento import DocumentoResponse
+from app.schemas.template import (
+    TemplateCreate,
+    TemplateGenerateRequest,
+    TemplateResponse,
+    TemplateUpdate,
+)
 from app.services.template_service import TemplateService
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> TemplateService:
-    return TemplateService(TemplateRepository(db))
+    return TemplateService(TemplateRepository(db), DocumentoRepository(db))
 
 
 @router.get(
@@ -87,3 +96,31 @@ async def delete_template(
         await service.delete(template_id)
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post(
+    "/{template_id}/generate",
+    response_model=DocumentoResponse,
+    dependencies=[Depends(require_permission("templates:read"))],
+)
+async def generate_template(
+    template_id: int,
+    data: TemplateGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    service: TemplateService = Depends(get_service),
+) -> DocumentoResponse:
+    try:
+        return await service.generate(template_id, data.entities, db)
+    except TemplateNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except (SocioNotFoundError, EsternoNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Entità sconosciuta: {e}",
+        ) from e
+    except TemplateRenderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e

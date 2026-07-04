@@ -44,6 +44,7 @@ dependencies = [
     # ── OAuth2 / SSO ──────────────────────────────────────────────────────
     "authlib>=1.3.0",
     "httpx>=0.28.0",
+    "python-docx>=1.2.0",
 ]
 
 # Install with: uv pip install -e ".[r2]"

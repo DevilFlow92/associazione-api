@@ -13,6 +13,10 @@ class TemplateCreate(BaseModel):
     entita_richieste: list[str] = []
 
 
+class TemplateGenerateRequest(BaseModel):
+    entities: dict[str, int]
+
+
 class TemplateUpdate(BaseModel):
     nome: str | None = None
     descrizione: str | None = None
