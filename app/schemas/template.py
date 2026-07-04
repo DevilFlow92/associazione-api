@@ -1,37 +1,32 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
 
 class TemplateCreate(BaseModel):
-    documento_id: int
     nome: str
     descrizione: str | None = None
+    contenuto_json: dict[str, Any]
+    entita_richieste: list[str] = []
 
 
 class TemplateUpdate(BaseModel):
     nome: str | None = None
     descrizione: str | None = None
-
-
-class DocumentoInTemplate(BaseModel):
-    id: int
-    nome: str
-    mime_type: str
-    dimensione_bytes: int
-
-    model_config = {"from_attributes": True}
+    contenuto_json: dict[str, Any] | None = None
+    entita_richieste: list[str] | None = None
 
 
 class TemplateResponse(BaseModel):
     id: int
-    documento_id: int
     nome: str
     descrizione: str | None
+    contenuto_json: dict[str, Any]
+    entita_richieste: list[str]
     creato_il: datetime
     aggiornato_il: datetime
-    documento: DocumentoInTemplate | None = None
 
     model_config = {"from_attributes": True}

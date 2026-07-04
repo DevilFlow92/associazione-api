@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
-from app.core.storage import StorageFileNotFoundError, storage
 from app.exceptions.template import TemplateNotFoundError
 from app.repositories.template_repository import TemplateRepository
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
@@ -18,16 +18,23 @@ def get_service(db: AsyncSession = Depends(get_db)) -> TemplateService:
     return TemplateService(TemplateRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[TemplateResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[TemplateResponse],
+    dependencies=[Depends(require_permission("templates:read"))],
+)
 async def list_templates(
-    documento_id: int | None = Query(None),
     params: PageParams = Depends(),
     service: TemplateService = Depends(get_service),
 ) -> PagedResponse[TemplateResponse]:
-    return await service.get_all(documento_id, params)
+    return await service.get_all(params)
 
 
-@router.get("/{template_id}", response_model=TemplateResponse)
+@router.get(
+    "/{template_id}",
+    response_model=TemplateResponse,
+    dependencies=[Depends(require_permission("templates:read"))],
+)
 async def get_template(
     template_id: int,
     service: TemplateService = Depends(get_service),
@@ -38,7 +45,12 @@ async def get_template(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=TemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("templates:write"))],
+)
 async def create_template(
     data: TemplateCreate,
     service: TemplateService = Depends(get_service),
@@ -46,7 +58,11 @@ async def create_template(
     return await service.create(data)
 
 
-@router.patch("/{template_id}", response_model=TemplateResponse)
+@router.patch(
+    "/{template_id}",
+    response_model=TemplateResponse,
+    dependencies=[Depends(require_permission("templates:write"))],
+)
 async def update_template(
     template_id: int,
     data: TemplateUpdate,
@@ -58,29 +74,11 @@ async def update_template(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/{template_id}/download")
-async def download_template(
-    template_id: int,
-    service: TemplateService = Depends(get_service),
-) -> Response:
-    try:
-        doc = await service.get_documento_file(template_id)
-    except TemplateNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    try:
-        content = await storage.get_bytes(doc.file_path)
-    except StorageFileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
-        )
-    return Response(
-        content=content,
-        media_type=doc.mime_type,
-        headers={"Content-Disposition": f'attachment; filename="{doc.nome}"'},
-    )
-
-
-@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{template_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("templates:write"))],
+)
 async def delete_template(
     template_id: int,
     service: TemplateService = Depends(get_service),
