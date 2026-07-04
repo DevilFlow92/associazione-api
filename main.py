@@ -20,6 +20,7 @@ from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.iscrizioni import router as iscrizioni_router
 from app.api.v1.macro_sezioni import router as macro_sezioni_router
+from app.api.v1.mergefields import router as mergefields_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
 from app.api.v1.nome_parti import router as nome_parti_router
 from app.api.v1.oauth import router as oauth_router
@@ -249,6 +250,7 @@ app.include_router(nome_parti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(spartiti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(macro_sezioni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(sotto_cartelle_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(mergefields_router, prefix="/api/v1", dependencies=_auth)
 
 
 @app.get("/health")
