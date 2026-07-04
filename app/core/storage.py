@@ -22,6 +22,14 @@ from pathlib import Path
 from fastapi import UploadFile
 
 
+class StorageFileNotFoundError(Exception):
+    """Sollevata quando get_bytes() non trova il file/oggetto."""
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(f"File non trovato nello storage: {path}")
+
+
 class Storage(ABC):
     @abstractmethod
     async def save(
@@ -72,7 +80,10 @@ class LocalStorage(Storage):
         return Path(path).is_file()
 
     async def get_bytes(self, path: str) -> bytes:
-        return Path(path).read_bytes()
+        try:
+            return Path(path).read_bytes()
+        except FileNotFoundError as e:
+            raise StorageFileNotFoundError(path) from e
 
 
 class R2Storage(Storage):
@@ -130,10 +141,17 @@ class R2Storage(Storage):
             raise
 
     async def get_bytes(self, path: str) -> bytes:
+        import botocore.exceptions  # lazy import alongside boto3
+
         client = self._client()
-        response = await asyncio.to_thread(
-            client.get_object, Bucket=self._bucket_name, Key=path
-        )
+        try:
+            response = await asyncio.to_thread(
+                client.get_object, Bucket=self._bucket_name, Key=path
+            )
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                raise StorageFileNotFoundError(path) from e
+            raise
         return await asyncio.to_thread(response["Body"].read)
 
 
