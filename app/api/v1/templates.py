@@ -99,18 +99,46 @@ async def delete_template(
 
 
 @router.post(
-    "/{template_id}/generate",
+    "/{template_id}/generate/docx",
     response_model=DocumentoResponse,
     dependencies=[Depends(require_permission("templates:read"))],
 )
-async def generate_template(
+async def generate_template_docx(
     template_id: int,
     data: TemplateGenerateRequest,
     db: AsyncSession = Depends(get_db),
     service: TemplateService = Depends(get_service),
 ) -> DocumentoResponse:
     try:
-        return await service.generate(template_id, data.entities, db)
+        return await service.generate_docx(template_id, data.entities, db)
+    except TemplateNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except (SocioNotFoundError, EsternoNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Entità sconosciuta: {e}",
+        ) from e
+    except TemplateRenderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
+
+
+@router.post(
+    "/{template_id}/generate/pdf",
+    response_model=DocumentoResponse,
+    dependencies=[Depends(require_permission("templates:read"))],
+)
+async def generate_template_pdf(
+    template_id: int,
+    data: TemplateGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    service: TemplateService = Depends(get_service),
+) -> DocumentoResponse:
+    try:
+        return await service.generate_pdf(template_id, data.entities, db)
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (SocioNotFoundError, EsternoNotFoundError) as e:
