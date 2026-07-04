@@ -288,6 +288,91 @@ async def test_generate_pdf_endpoint_produce_pdf_valido(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_preview_endpoint_risolve_mergefield(client: AsyncClient):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    resp = await client.post(
+        f"/api/v1/templates/{template_id}/preview",
+        json={
+            "contenuto_json": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Gentile "},
+                            {
+                                "type": "mergefield",
+                                "attrs": {"chiave": "socio.nome"},
+                            },
+                        ],
+                    }
+                ],
+            },
+            "entities": {"socio": socio_id},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert "Gentile Mario" in resp.json()["html"]
+
+
+@pytest.mark.asyncio
+async def test_preview_endpoint_usa_contenuto_del_body_non_quello_salvato(
+    client: AsyncClient,
+):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    resp = await client.post(
+        f"/api/v1/templates/{template_id}/preview",
+        json={
+            "contenuto_json": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": "Contenuto non salvato"}],
+                    }
+                ],
+            },
+            "entities": {"socio": socio_id},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    html = resp.json()["html"]
+    assert "Contenuto non salvato" in html
+    assert "con la presente" not in html
+
+
+@pytest.mark.asyncio
+async def test_preview_endpoint_404_template_inesistente(client: AsyncClient):
+    resp = await client.post(
+        "/api/v1/templates/999999/preview",
+        json={
+            "contenuto_json": {"type": "doc", "content": []},
+            "entities": {},
+        },
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_preview_endpoint_forbidden_senza_permesso(client: AsyncClient):
+    from app.api.deps import get_current_user
+    from app.models.utente import TipoUtente, Utente
+    from main import app
+
+    def _user_senza_permessi() -> Utente:
+        return Utente(id=1, tipo=TipoUtente.UMANO, email="test@example.com")
+
+    app.dependency_overrides[get_current_user] = _user_senza_permessi
+    response = await client.post(
+        "/api/v1/templates/1/preview",
+        json={"contenuto_json": {"type": "doc", "content": []}, "entities": {}},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_generate_docx_endpoint_forbidden_senza_permesso(client: AsyncClient):
     from app.api.deps import get_current_user
     from app.models.utente import TipoUtente, Utente

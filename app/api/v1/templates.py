@@ -15,6 +15,7 @@ from app.schemas.documento import DocumentoResponse
 from app.schemas.template import (
     TemplateCreate,
     TemplateGenerateRequest,
+    TemplatePreviewRequest,
     TemplateResponse,
     TemplateUpdate,
 )
@@ -96,6 +97,36 @@ async def delete_template(
         await service.delete(template_id)
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post(
+    "/{template_id}/preview",
+    dependencies=[Depends(require_permission("templates:read"))],
+)
+async def preview_template(
+    template_id: int,
+    data: TemplatePreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    service: TemplateService = Depends(get_service),
+) -> dict[str, str]:
+    try:
+        html = await service.preview_html(
+            template_id, data.contenuto_json, data.entities, db
+        )
+        return {"html": html}
+    except TemplateNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except (SocioNotFoundError, EsternoNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Entità sconosciuta: {e}",
+        ) from e
+    except TemplateRenderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
 
 
 @router.post(

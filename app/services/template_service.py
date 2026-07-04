@@ -79,6 +79,20 @@ class TemplateService:
         )
         return DocumentoResponse.model_validate(documento)
 
+    async def preview_html(
+        self,
+        template_id: int,
+        contenuto_json: dict,
+        entities: dict[str, int],
+        db: AsyncSession,
+    ) -> str:
+        template = await self.repo.get_by_id(template_id)
+        if not template:
+            raise TemplateNotFoundError(template_id)
+
+        context = await resolve_context(entities, db)
+        return build_html(contenuto_json, context)
+
     async def generate_pdf(
         self, template_id: int, entities: dict[str, int], db: AsyncSession
     ) -> DocumentoResponse:

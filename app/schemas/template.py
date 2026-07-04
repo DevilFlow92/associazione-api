@@ -17,6 +17,11 @@ class TemplateGenerateRequest(BaseModel):
     entities: dict[str, int]
 
 
+class TemplatePreviewRequest(BaseModel):
+    contenuto_json: dict[str, Any]
+    entities: dict[str, int]
+
+
 class TemplateUpdate(BaseModel):
     nome: str | None = None
     descrizione: str | None = None
