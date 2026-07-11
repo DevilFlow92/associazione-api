@@ -370,6 +370,269 @@ def test_build_html_text_style_colore_valido_con_e_senza_hash():
         assert "color: #FF0000" in html
 
 
+def _lista_semplice(list_type: str, extra_attrs: dict | None = None) -> dict:
+    attrs = extra_attrs or {}
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": list_type,
+                "attrs": attrs,
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Primo"}],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Secondo"}],
+                            }
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def _lista_annidata_due_livelli(list_type: str) -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": list_type,
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "Livello 0"}],
+                            },
+                            {
+                                "type": list_type,
+                                "content": [
+                                    {
+                                        "type": "listItem",
+                                        "content": [
+                                            {
+                                                "type": "paragraph",
+                                                "content": [
+                                                    {
+                                                        "type": "text",
+                                                        "text": "Livello 1",
+                                                    }
+                                                ],
+                                            }
+                                        ],
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_build_docx_lista_puntata_semplice():
+    content = build_docx(_lista_semplice("bulletList"), {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert [p.text for p in doc.paragraphs] == ["Primo", "Secondo"]
+    assert doc.paragraphs[0].style.name == "List Bullet"
+    assert doc.paragraphs[1].style.name == "List Bullet"
+
+
+def test_build_html_lista_puntata_semplice():
+    html = build_html(_lista_semplice("bulletList"), {})
+    assert '<ul style="list-style-type: disc;">' in html
+    assert "<li><p>Primo</p></li>" in html
+    assert "<li><p>Secondo</p></li>" in html
+
+
+def test_build_docx_lista_puntata_annidata_marcatori_per_livello():
+    content = build_docx(_lista_annidata_due_livelli("bulletList"), {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.paragraphs[0].text == "Livello 0"
+    assert doc.paragraphs[0].style.name == "List Bullet"
+    assert doc.paragraphs[1].text == "Livello 1"
+    assert doc.paragraphs[1].style.name == "List Bullet 2"
+
+
+def test_build_html_lista_puntata_annidata_marcatori_per_livello():
+    html = build_html(_lista_annidata_due_livelli("bulletList"), {})
+    assert '<ul style="list-style-type: disc;">' in html
+    assert '<ul style="list-style-type: circle;">' in html
+
+
+def test_build_docx_lista_numerata_semplice():
+    content = build_docx(_lista_semplice("orderedList"), {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert [p.text for p in doc.paragraphs] == ["Primo", "Secondo"]
+    assert doc.paragraphs[0].style.name == "List Number"
+    assert doc.paragraphs[1].style.name == "List Number"
+
+
+def test_build_html_lista_numerata_semplice():
+    html = build_html(_lista_semplice("orderedList"), {})
+    assert '<ol style="list-style-type: decimal;">' in html
+
+
+def test_build_docx_lista_numerata_annidata_marcatori_per_livello():
+    content = build_docx(_lista_annidata_due_livelli("orderedList"), {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.paragraphs[0].style.name == "List Number"
+    assert doc.paragraphs[1].style.name == "List Number 2"
+
+
+def test_build_html_lista_numerata_annidata_marcatori_per_livello():
+    html = build_html(_lista_annidata_due_livelli("orderedList"), {})
+    assert '<ol style="list-style-type: decimal;">' in html
+    assert '<ol style="list-style-type: lower-alpha;">' in html
+
+
+def test_build_docx_lista_numerata_start_personalizzato():
+    content = build_docx(_lista_semplice("orderedList", {"start": 5}), {})
+    doc = DocxDocument(io.BytesIO(content))
+    numbering_xml = doc.part.numbering_part.element.xml
+    assert 'w:startOverride w:val="5"' in numbering_xml
+
+
+def test_build_html_lista_numerata_start_personalizzato():
+    html = build_html(_lista_semplice("orderedList", {"start": 5}), {})
+    assert '<ol start="5"' in html
+
+
+def test_build_docx_lista_item_con_bold_e_mergefield():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "bulletList",
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "grassetto",
+                                        "marks": [{"type": "bold"}],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "mergefield",
+                                        "attrs": {"chiave": "socio.nome"},
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+    content = build_docx(contenuto, {"socio": {"nome": "Mario"}})
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.paragraphs[0].runs[0].bold is True
+    assert doc.paragraphs[1].text == "Mario"
+
+
+def test_build_html_lista_item_con_bold_e_mergefield():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "bulletList",
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "grassetto",
+                                        "marks": [{"type": "bold"}],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "mergefield",
+                                        "attrs": {"chiave": "socio.nome"},
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+    html = build_html(contenuto, {"socio": {"nome": "Mario"}})
+    assert "<li><p><strong>grassetto</strong></p></li>" in html
+    assert "<li><p>Mario</p></li>" in html
+
+
+def test_build_docx_lista_senza_liste_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Testo semplice"}],
+            }
+        ],
+    }
+    content = build_docx(contenuto, {})
+    assert _read_paragraphs(content) == ["Testo semplice"]
+
+
+def test_build_html_lista_senza_liste_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Testo semplice"}],
+            }
+        ],
+    }
+    html = build_html(contenuto, {})
+    assert "<ul" not in html
+    assert "<ol" not in html
+    assert "<p>Testo semplice</p>" in html
+
+
 def _contenuto_multi_pagina() -> dict:
     testo_lungo = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 20
     paragrafi = [

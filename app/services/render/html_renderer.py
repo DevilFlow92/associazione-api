@@ -10,14 +10,22 @@ _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 
 # Schema ProseMirror/TipTap supportato (deve restare sincronizzato con
 # docx_walker.py):
-# - nodi blocco: doc, paragraph, heading (attrs.level 1-3)
+# - nodi blocco: doc, paragraph, heading (attrs.level 1-3),
+#   bulletList/orderedList (contengono listItem; orderedList ha
+#   attrs.start opzionale), listItem (contiene blocchi, tipicamente
+#   paragraph, oppure a sua volta bulletList/orderedList annidate)
 #   - attrs.textAlign su paragraph/heading: left | center | right | justify
 #     (default "left" se assente)
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
 #   app.services.render.fonts.SAFE_FONTS, altrimenti ignorato)
+# - marcatori di lista "stile Word": il livello di annidamento (0, 1, 2...)
+#   determina il list-style-type CSS, riciclando ogni 3 livelli (bulletList:
+#   disc/circle/square; orderedList: decimal/lower-alpha/lower-roman).
 _VALID_TEXT_ALIGN = {"left", "center", "right", "justify"}
+_BULLET_LIST_MARKERS = ["disc", "circle", "square"]
+_ORDERED_LIST_MARKERS = ["decimal", "lower-alpha", "lower-roman"]
 
 _STYLE = """
     @page { size: A4; margin: 2cm; }
@@ -57,8 +65,48 @@ def _render_block(node: dict, context: dict) -> str:
         tag = _HEADING_TAGS.get(level, "h1")
         inner = _render_inline_content(node.get("content", []), context)
         return f"<{tag}{_text_align_attr(attrs)}>{inner}</{tag}>"
+    elif node_type in ("bulletList", "orderedList"):
+        return _render_list(node, context, depth=0)
     else:
         raise TemplateRenderError(f"Tipo di nodo non supportato: {node_type!r}")
+
+
+def _render_list(node: dict, context: dict, depth: int) -> str:
+    is_ordered = node.get("type") == "orderedList"
+    markers = _ORDERED_LIST_MARKERS if is_ordered else _BULLET_LIST_MARKERS
+    marker = markers[depth % len(markers)]
+    tag = "ol" if is_ordered else "ul"
+
+    start_attr = ""
+    if is_ordered:
+        start = node.get("attrs", {}).get("start")
+        if start and start != 1:
+            start_attr = f' start="{start}"'
+
+    items = "".join(
+        _render_list_item(item, context, depth) for item in node.get("content", [])
+    )
+    return f'<{tag}{start_attr} style="list-style-type: {marker};">{items}</{tag}>'
+
+
+def _render_list_item(item_node: dict, context: dict, depth: int) -> str:
+    inner = "".join(
+        _render_list_item_child(child, context, depth)
+        for child in item_node.get("content", [])
+    )
+    return f"<li>{inner}</li>"
+
+
+def _render_list_item_child(child: dict, context: dict, depth: int) -> str:
+    child_type = child.get("type")
+    if child_type == "paragraph":
+        return _render_block(child, context)
+    elif child_type in ("bulletList", "orderedList"):
+        return _render_list(child, context, depth + 1)
+    else:
+        raise TemplateRenderError(
+            f"Tipo di nodo non supportato dentro listItem: {child_type!r}"
+        )
 
 
 def _text_align_attr(attrs: dict) -> str:
