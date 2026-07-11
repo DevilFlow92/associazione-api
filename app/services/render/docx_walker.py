@@ -5,7 +5,9 @@ from typing import Any
 
 from docx import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import RGBColor
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, RGBColor
 from docx.text.paragraph import Paragraph
 
 from app.exceptions.template import TemplateRenderError
@@ -15,19 +17,31 @@ _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 
 # Schema ProseMirror/TipTap supportato (deve restare sincronizzato con
 # html_renderer.py):
-# - nodi blocco: doc, paragraph, heading (attrs.level 1-3)
+# - nodi blocco: doc, paragraph, heading (attrs.level 1-3),
+#   bulletList/orderedList (contengono listItem; orderedList ha
+#   attrs.start opzionale), listItem (contiene blocchi, tipicamente
+#   paragraph, oppure a sua volta bulletList/orderedList annidate)
 #   - attrs.textAlign su paragraph/heading: left | center | right | justify
 #     (default "left" se assente)
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
 #   app.services.render.fonts.SAFE_FONTS, altrimenti ignorato)
+# - marcatori di lista "stile Word": il livello di annidamento (0, 1, 2...)
+#   seleziona lo stile built-in di python-docx, riciclando ogni 3 livelli
+#   (bulletList: List Bullet / List Bullet 2 / List Bullet 3; orderedList:
+#   List Number / List Number 2 / List Number 3). Oltre il terzo livello lo
+#   stile si ricicla ma l'indentazione viene forzata manualmente per
+#   riflettere la vera profondità.
 _TEXT_ALIGN = {
     "left": WD_ALIGN_PARAGRAPH.LEFT,
     "center": WD_ALIGN_PARAGRAPH.CENTER,
     "right": WD_ALIGN_PARAGRAPH.RIGHT,
     "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
 }
+_BULLET_LIST_STYLES = ["List Bullet", "List Bullet 2", "List Bullet 3"]
+_ORDERED_LIST_STYLES = ["List Number", "List Number 2", "List Number 3"]
+_LIST_INDENT_STEP = Inches(0.25)
 
 
 def build_docx(contenuto_json: dict, context: dict) -> bytes:
@@ -58,8 +72,107 @@ def _add_block(doc: Any, node: dict, context: dict) -> None:
         paragraph = doc.add_paragraph(style=_HEADING_STYLES.get(level, "Heading 1"))
         _apply_text_align(paragraph, attrs.get("textAlign"))
         _add_inline_content(paragraph, node.get("content", []), context)
+    elif node_type in ("bulletList", "orderedList"):
+        _add_list(doc, node, context, depth=0)
     else:
         raise TemplateRenderError(f"Tipo di nodo non supportato: {node_type!r}")
+
+
+def _add_list(doc: Any, node: dict, context: dict, depth: int) -> None:
+    is_ordered = node.get("type") == "orderedList"
+    styles = _ORDERED_LIST_STYLES if is_ordered else _BULLET_LIST_STYLES
+    style_name = styles[depth % len(styles)]
+
+    numid_override = None
+    if is_ordered:
+        start = node.get("attrs", {}).get("start", 1)
+        numid_override = _create_numbering_start_override(doc, style_name, start)
+
+    for item in node.get("content", []):
+        _add_list_item(doc, item, context, depth, style_name, numid_override)
+
+
+def _add_list_item(
+    doc: Any,
+    item_node: dict,
+    context: dict,
+    depth: int,
+    style_name: str,
+    numid_override: int | None,
+) -> None:
+    for child in item_node.get("content", []):
+        child_type = child.get("type")
+        if child_type == "paragraph":
+            paragraph = doc.add_paragraph(style=style_name)
+            _apply_list_indent(paragraph, depth)
+            if numid_override is not None:
+                _set_numid(paragraph, numid_override)
+            child_attrs = child.get("attrs", {})
+            _apply_text_align(paragraph, child_attrs.get("textAlign"))
+            _add_inline_content(paragraph, child.get("content", []), context)
+        elif child_type in ("bulletList", "orderedList"):
+            _add_list(doc, child, context, depth + 1)
+        else:
+            raise TemplateRenderError(
+                f"Tipo di nodo non supportato dentro listItem: {child_type!r}"
+            )
+
+
+def _apply_list_indent(paragraph: Paragraph, depth: int) -> None:
+    # I primi 3 livelli usano l'indentazione nativa degli stili built-in
+    # (List Bullet/List Bullet 2/List Bullet 3 e le loro varianti
+    # numeriche). Oltre quello lo stile si ricicla (vedi _add_list), quindi
+    # forziamo un'indentazione crescente per distinguere visivamente la
+    # vera profondità di annidamento.
+    styles_count = 3
+    if depth >= styles_count:
+        paragraph.paragraph_format.left_indent = _LIST_INDENT_STEP * (depth + 1)
+
+
+def _create_numbering_start_override(doc: Any, style_name: str, start: int) -> int:
+    numbering_part = doc.part.numbering_part
+    numbering_elem = numbering_part.element
+
+    style_elem = doc.styles[style_name].element
+    num_id_elem = style_elem.find(f"{qn('w:pPr')}/{qn('w:numPr')}/{qn('w:numId')}")
+    base_num_id = num_id_elem.get(qn("w:val"))
+
+    abstract_num_id = None
+    for num_elem in numbering_elem.findall(qn("w:num")):
+        if num_elem.get(qn("w:numId")) == base_num_id:
+            abstract_num_id = num_elem.find(qn("w:abstractNumId")).get(qn("w:val"))
+            break
+
+    existing_ids = [
+        int(num_elem.get(qn("w:numId")))
+        for num_elem in numbering_elem.findall(qn("w:num"))
+    ]
+    new_num_id = max(existing_ids) + 1
+
+    new_num = OxmlElement("w:num")
+    new_num.set(qn("w:numId"), str(new_num_id))
+    abstract_ref = OxmlElement("w:abstractNumId")
+    abstract_ref.set(qn("w:val"), abstract_num_id)
+    new_num.append(abstract_ref)
+
+    lvl_override = OxmlElement("w:lvlOverride")
+    lvl_override.set(qn("w:ilvl"), "0")
+    start_override = OxmlElement("w:startOverride")
+    start_override.set(qn("w:val"), str(start))
+    lvl_override.append(start_override)
+    new_num.append(lvl_override)
+
+    numbering_elem.append(new_num)
+    return new_num_id
+
+
+def _set_numid(paragraph: Paragraph, num_id: int) -> None:
+    p_pr = paragraph._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    num_id_elem = OxmlElement("w:numId")
+    num_id_elem.set(qn("w:val"), str(num_id))
+    num_pr.append(num_id_elem)
+    p_pr.append(num_pr)
 
 
 def _apply_text_align(paragraph: Paragraph, text_align: str | None) -> None:
