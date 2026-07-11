@@ -8,7 +8,10 @@ from app.models.esterno import Esterno
 from app.models.persona import Persona
 from app.schemas.esterno import EsternoCreate, EsternoUpdate
 
-_LOAD_OPTS = [selectinload(Esterno.strumento), selectinload(Esterno.persona)]
+_LOAD_OPTS = [
+    selectinload(Esterno.strumento),
+    selectinload(Esterno.persona).selectinload(Persona.comune_nascita),
+]
 
 
 class EsternoRepository:

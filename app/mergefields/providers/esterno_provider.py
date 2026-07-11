@@ -18,6 +18,8 @@ _FIELDS = [
     MergeFieldDefinition("codice_fiscale", "Codice fiscale", "str"),
     MergeFieldDefinition("data_nascita", "Data di nascita", "date"),
     MergeFieldDefinition("indirizzo_completo", "Indirizzo", "str"),
+    MergeFieldDefinition("ragione_sociale", "Ragione sociale", "str"),
+    MergeFieldDefinition("luogo_nascita", "Luogo di nascita", "str"),
 ]
 
 
@@ -34,6 +36,7 @@ class EsternoProvider(MergeFieldProvider):
 
         persona = await PersonaRepository(db).get_with_indirizzi(esterno.persona.id)
         indirizzo = persona.indirizzi[0] if persona and persona.indirizzi else None
+        comune_nascita = esterno.persona.comune_nascita
 
         return {
             "codice_esterno": esterno.codice_esterno,
@@ -42,4 +45,6 @@ class EsternoProvider(MergeFieldProvider):
             "codice_fiscale": esterno.persona.codice_fiscale,
             "data_nascita": esterno.persona.data_nascita,
             "indirizzo_completo": format_indirizzo(indirizzo),
+            "ragione_sociale": esterno.persona.ragione_sociale,
+            "luogo_nascita": comune_nascita.descrizione if comune_nascita else None,
         }

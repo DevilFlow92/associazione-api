@@ -4,12 +4,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mergefields.base import MergeFieldDefinition, MergeFieldProvider
 from app.mergefields.providers.banda_provider import BandaProvider
+from app.mergefields.providers.contatto_provider import ContattoProvider
 from app.mergefields.providers.esterno_provider import EsternoProvider
+from app.mergefields.providers.iscrizione_provider import IscrizioneProvider
+from app.mergefields.providers.ricevuta_provider import RicevutaProvider
+from app.mergefields.providers.servizio_provider import ServizioProvider
 from app.mergefields.providers.socio_provider import SocioProvider
 
 REGISTRY: dict[str, MergeFieldProvider] = {
     provider.entity_name: provider
-    for provider in [SocioProvider(), EsternoProvider(), BandaProvider()]
+    for provider in [
+        SocioProvider(),
+        EsternoProvider(),
+        BandaProvider(),
+        ContattoProvider(),
+        IscrizioneProvider(),
+        ServizioProvider(),
+        RicevutaProvider(),
+    ]
 }
 
 
