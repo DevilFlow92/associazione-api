@@ -4,8 +4,20 @@ from html import escape
 
 from app.exceptions.template import TemplateRenderError
 from app.services.render.docx_walker import _resolve_mergefield
+from app.services.render.fonts import sanitize_font_family, validate_hex_color
 
 _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
+
+# Schema ProseMirror/TipTap supportato (deve restare sincronizzato con
+# docx_walker.py):
+# - nodi blocco: doc, paragraph, heading (attrs.level 1-3)
+#   - attrs.textAlign su paragraph/heading: left | center | right | justify
+#     (default "left" se assente)
+# - nodi inline: text, mergefield (attrs.chiave)
+# - marks su text/mergefield: bold, italic,
+#   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
+#   app.services.render.fonts.SAFE_FONTS, altrimenti ignorato)
+_VALID_TEXT_ALIGN = {"left", "center", "right", "justify"}
 
 _STYLE = """
     @page { size: A4; margin: 2cm; }
@@ -36,16 +48,24 @@ def build_html(contenuto_json: dict, context: dict) -> str:
 
 def _render_block(node: dict, context: dict) -> str:
     node_type = node.get("type")
+    attrs = node.get("attrs", {})
     if node_type == "paragraph":
         inner = _render_inline_content(node.get("content", []), context)
-        return f"<p>{inner}</p>"
+        return f"<p{_text_align_attr(attrs)}>{inner}</p>"
     elif node_type == "heading":
-        level = node.get("attrs", {}).get("level", 1)
+        level = attrs.get("level", 1)
         tag = _HEADING_TAGS.get(level, "h1")
         inner = _render_inline_content(node.get("content", []), context)
-        return f"<{tag}>{inner}</{tag}>"
+        return f"<{tag}{_text_align_attr(attrs)}>{inner}</{tag}>"
     else:
         raise TemplateRenderError(f"Tipo di nodo non supportato: {node_type!r}")
+
+
+def _text_align_attr(attrs: dict) -> str:
+    text_align = attrs.get("textAlign")
+    if text_align not in _VALID_TEXT_ALIGN or text_align == "left":
+        return ""
+    return f' style="text-align: {text_align};"'
 
 
 def _render_inline_content(nodes: list[dict], context: dict) -> str:
@@ -71,4 +91,22 @@ def _wrap_marks(text: str, marks: list[dict]) -> str:
             text = f"<strong>{text}</strong>"
         elif mark_type == "italic":
             text = f"<em>{text}</em>"
+        elif mark_type == "textStyle":
+            text = _wrap_text_style(text, mark.get("attrs", {}))
     return text
+
+
+def _wrap_text_style(text: str, attrs: dict) -> str:
+    declarations = []
+
+    hex_color = validate_hex_color(attrs.get("color"))
+    if hex_color:
+        declarations.append(f"color: #{hex_color}")
+
+    font_family = sanitize_font_family(attrs.get("fontFamily"))
+    if font_family:
+        declarations.append(f"font-family: {font_family}")
+
+    if not declarations:
+        return text
+    return f'<span style="{"; ".join(declarations)};">{text}</span>'

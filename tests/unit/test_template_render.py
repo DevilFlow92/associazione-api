@@ -167,6 +167,209 @@ def test_build_html_tipo_nodo_non_supportato():
         build_html(contenuto, {})
 
 
+def _paragrafo_con_align(text_align: str | None) -> dict:
+    attrs = {} if text_align is None else {"textAlign": text_align}
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "attrs": attrs,
+                "content": [{"type": "text", "text": "Testo"}],
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "text_align,expected",
+    [("center", 1), ("right", 2), ("justify", 3)],
+)
+def test_build_docx_text_align(text_align, expected):
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    content = build_docx(_paragrafo_con_align(text_align), {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.paragraphs[0].alignment == WD_ALIGN_PARAGRAPH(expected)
+
+
+@pytest.mark.parametrize("text_align", ["center", "right", "justify"])
+def test_build_html_text_align(text_align):
+    html = build_html(_paragrafo_con_align(text_align), {})
+    assert f'style="text-align: {text_align};"' in html
+
+
+def test_build_docx_heading_text_align():
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1, "textAlign": "center"},
+                "content": [{"type": "text", "text": "Titolo"}],
+            }
+        ],
+    }
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
+
+
+def test_build_html_heading_text_align():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1, "textAlign": "right"},
+                "content": [{"type": "text", "text": "Titolo"}],
+            }
+        ],
+    }
+    html = build_html(contenuto, {})
+    assert '<h1 style="text-align: right;">Titolo</h1>' in html
+
+
+def _paragrafo_con_text_style(attrs: dict) -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Colorato",
+                        "marks": [{"type": "textStyle", "attrs": attrs}],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_build_docx_text_style_color_e_font():
+    from docx.shared import RGBColor
+
+    contenuto = _paragrafo_con_text_style({"color": "#FF0000", "fontFamily": "Arial"})
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.color.rgb == RGBColor.from_string("FF0000")
+    assert run.font.name == "Arial"
+
+
+def test_build_html_text_style_color_e_font():
+    contenuto = _paragrafo_con_text_style({"color": "#FF0000", "fontFamily": "Arial"})
+    html = build_html(contenuto, {})
+    assert '<span style="color: #FF0000; font-family: Arial;">Colorato</span>' in html
+
+
+def test_build_html_text_style_solo_color():
+    contenuto = _paragrafo_con_text_style({"color": "#00FF00"})
+    html = build_html(contenuto, {})
+    assert '<span style="color: #00FF00;">Colorato</span>' in html
+
+
+def test_build_docx_text_style_font_non_whitelisted_ignorato():
+    contenuto = _paragrafo_con_text_style({"fontFamily": "ComicSansMS"})
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.name is None
+
+
+def test_build_html_text_style_font_non_whitelisted_ignorato():
+    contenuto = _paragrafo_con_text_style({"fontFamily": "ComicSansMS"})
+    html = build_html(contenuto, {})
+    assert "ComicSansMS" not in html
+    assert "<span" not in html
+
+
+def test_build_docx_senza_textalign_ne_textstyle_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1},
+                "content": [{"type": "text", "text": "Titolo"}],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "grassetto", "marks": [{"type": "bold"}]}
+                ],
+            },
+        ],
+    }
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.paragraphs[0].alignment is None
+    assert doc.paragraphs[1].alignment is None
+    assert doc.paragraphs[1].runs[0].bold is True
+
+
+def test_build_html_senza_textalign_ne_textstyle_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1},
+                "content": [{"type": "text", "text": "Titolo"}],
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "grassetto", "marks": [{"type": "bold"}]}
+                ],
+            },
+        ],
+    }
+    html = build_html(contenuto, {})
+    assert "<h1>Titolo</h1>" in html
+    assert "<p><strong>grassetto</strong></p>" in html
+    assert "style=" not in html
+
+
+@pytest.mark.parametrize("colore_malformato", ["notacolor", "#fff", "12345", ""])
+def test_build_docx_text_style_colore_malformato_ignorato(colore_malformato):
+    contenuto = _paragrafo_con_text_style({"color": colore_malformato})
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.color.rgb is None
+
+
+@pytest.mark.parametrize("colore_malformato", ["notacolor", "#fff", "12345", ""])
+def test_build_html_text_style_colore_malformato_ignorato(colore_malformato):
+    contenuto = _paragrafo_con_text_style({"color": colore_malformato})
+    html = build_html(contenuto, {})
+    assert "color:" not in html
+    assert "<span" not in html or "font-family:" in html
+
+
+def test_build_docx_text_style_colore_valido_con_e_senza_hash():
+    for colore in ["#FF0000", "FF0000"]:
+        contenuto = _paragrafo_con_text_style({"color": colore})
+        content = build_docx(contenuto, {})
+        doc = DocxDocument(io.BytesIO(content))
+        run = doc.paragraphs[0].runs[0]
+        from docx.shared import RGBColor
+
+        assert run.font.color.rgb == RGBColor.from_string("FF0000")
+
+
+def test_build_html_text_style_colore_valido_con_e_senza_hash():
+    for colore in ["#FF0000", "FF0000"]:
+        contenuto = _paragrafo_con_text_style({"color": colore})
+        html = build_html(contenuto, {})
+        assert "color: #FF0000" in html
+
+
 def _contenuto_multi_pagina() -> dict:
     testo_lungo = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 20
     paragrafi = [
