@@ -11,7 +11,15 @@ async def test_list_mergefields(client: AsyncClient):
     resp = await client.get("/api/v1/mergefields/")
     assert resp.status_code == 200
     data = resp.json()
-    assert set(data["entita"]) == {"socio", "esterno", "banda"}
+    assert set(data["entita"]) == {
+        "socio",
+        "esterno",
+        "banda",
+        "contatto",
+        "iscrizione",
+        "servizio",
+        "ricevuta",
+    }
 
     socio_fields = {f["chiave"]: f["tipo"] for f in data["entita"]["socio"]}
     assert socio_fields["codice_socio"] == "str"
