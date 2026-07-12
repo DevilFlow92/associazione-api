@@ -147,7 +147,7 @@ def _add_image(doc: Any, node: dict, images: dict[int, ImageAsset]) -> None:
     run = paragraph.add_run()
     width = attrs.get("width")
     if isinstance(width, int | float) and width > 0:
-        run.add_picture(io.BytesIO(asset.content), width=Emu(width * _EMU_PER_PX))
+        run.add_picture(io.BytesIO(asset.content), width=Emu(int(width * _EMU_PER_PX)))
     else:
         run.add_picture(io.BytesIO(asset.content))
 
