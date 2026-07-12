@@ -13,6 +13,7 @@ _FIELDS = [
     MergeFieldDefinition("data_ricevuta", "Data ricevuta", "date"),
     MergeFieldDefinition("importo", "Importo", "str"),
     MergeFieldDefinition("note_in_stampa", "Note in stampa", "str"),
+    MergeFieldDefinition("note_fuori_stampa", "Note fuori stampa", "str"),
 ]
 
 
@@ -31,4 +32,5 @@ class RicevutaProvider(MergeFieldProvider):
             "data_ricevuta": ricevuta.data_ricevuta,
             "importo": format_euro(Decimal(str(ricevuta.importo))),
             "note_in_stampa": ricevuta.note_in_stampa,
+            "note_fuori_stampa": ricevuta.note_fuori_stampa,
         }

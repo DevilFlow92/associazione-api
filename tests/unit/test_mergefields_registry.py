@@ -70,13 +70,40 @@ async def _create_stato_iscrizione(
     return resp.json()
 
 
-async def _create_socio(ac: AsyncClient, persona_id: int, codice: str = "S001") -> dict:
+async def _create_ruolo_banda(
+    ac: AsyncClient, *, codice: int = 10, descrizione: str = "Socio Bandista"
+) -> dict:
+    resp = await ac.post(
+        "/api/v1/ruoli-banda/", json={"codice": codice, "descrizione": descrizione}
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_strumento(
+    ac: AsyncClient, *, codice: int = 1, descrizione: str = "Flauto"
+) -> dict:
+    resp = await ac.post(
+        "/api/v1/strumenti/", json={"codice": codice, "descrizione": descrizione}
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_socio(
+    ac: AsyncClient,
+    persona_id: int,
+    codice: str = "S001",
+    *,
+    strumento_codice: int | None = None,
+) -> dict:
     resp = await ac.post(
         "/api/v1/soci/",
         json={
             "persona_id": persona_id,
             "codice_socio": codice,
             "ruolo_banda_codice": 10,
+            "strumento_codice": strumento_codice,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -151,6 +178,7 @@ def test_list_all_fields_grouped_by_entity():
 
 @pytest.mark.asyncio
 async def test_socio_provider_resolve(client: AsyncClient, db_session: AsyncSession):
+    await _create_ruolo_banda(client, codice=10, descrizione="Socio Bandista")
     persona = await _create_persona(client)
     indirizzo = await _create_indirizzo(client)
     await client.put(f"/api/v1/persone/{persona['id']}/indirizzi/{indirizzo['id']}")
@@ -174,27 +202,34 @@ async def test_socio_provider_resolve(client: AsyncClient, db_session: AsyncSess
     assert result["indirizzo_completo"] == "Via Roma, 1, 00100"
     assert result["ragione_sociale"] is None
     assert result["luogo_nascita"] is None
+    assert result["ruolo_banda"] == "Socio Bandista"
+    assert result["strumento"] is None
 
 
 @pytest.mark.asyncio
 async def test_socio_provider_resolve_ragione_sociale_e_luogo_nascita(
     client: AsyncClient, db_session: AsyncSession
 ):
+    await _create_ruolo_banda(client, codice=10, descrizione="Socio Bandista")
+    await _create_strumento(client, codice=1, descrizione="Flauto")
     comune = await _create_comune(client, codice=1, descrizione="Cagliari")
     persona = await _create_persona(
         client,
         ragione_sociale="Associazione XYZ",
         comune_nascita_codice=comune["codice"],
     )
-    socio = await _create_socio(client, persona["id"])
+    socio = await _create_socio(client, persona["id"], strumento_codice=1)
 
     result = await SocioProvider().resolve(socio["id"], db_session)
     assert result["ragione_sociale"] == "Associazione XYZ"
     assert result["luogo_nascita"] == "Cagliari"
+    assert result["ruolo_banda"] == "Socio Bandista"
+    assert result["strumento"] == "Flauto"
 
 
 @pytest.mark.asyncio
 async def test_esterno_provider_resolve(client: AsyncClient, db_session: AsyncSession):
+    await _create_strumento(client, codice=1, descrizione="Flauto")
     persona = await _create_persona(client, nome="Luigi", cognome="Verdi")
 
     esterno_resp = await client.post(
@@ -215,12 +250,14 @@ async def test_esterno_provider_resolve(client: AsyncClient, db_session: AsyncSe
     assert result["indirizzo_completo"] is None
     assert result["ragione_sociale"] is None
     assert result["luogo_nascita"] is None
+    assert result["strumento"] == "Flauto"
 
 
 @pytest.mark.asyncio
 async def test_esterno_provider_resolve_ragione_sociale_e_luogo_nascita(
     client: AsyncClient, db_session: AsyncSession
 ):
+    await _create_strumento(client, codice=1, descrizione="Flauto")
     comune = await _create_comune(client, codice=1, descrizione="Sassari")
     persona = await _create_persona(
         client,
@@ -261,6 +298,7 @@ async def test_banda_provider_resolve(client: AsyncClient, db_session: AsyncSess
 async def test_resolve_context_groups_by_entity(
     client: AsyncClient, db_session: AsyncSession
 ):
+    await _create_ruolo_banda(client, codice=10, descrizione="Socio Bandista")
     persona = await _create_persona(client)
     socio_resp = await client.post(
         "/api/v1/soci/",
@@ -319,6 +357,7 @@ async def test_iscrizione_provider_resolve(
             "quota_partecipazione": 15.0,
             "stato_iscrizione_codice": 1,
             "data_iscrizione": "2026-01-10",
+            "note": "Iscrizione anticipata",
         },
     )
     assert iscrizione_resp.status_code == 201, iscrizione_resp.text
@@ -329,6 +368,7 @@ async def test_iscrizione_provider_resolve(
     assert result["quota_partecipazione"] == "€ 15,00"
     assert result["stato_iscrizione"] == "In attesa"
     assert str(result["data_iscrizione"]) == "2026-01-10"
+    assert result["note"] == "Iscrizione anticipata"
 
 
 @pytest.mark.asyncio
@@ -339,6 +379,8 @@ async def test_servizio_provider_resolve(client: AsyncClient, db_session: AsyncS
     assert result["descrizione_servizio"] == "Concerto estivo"
     assert str(result["data_servizio"]) == "2026-07-20 21:00:00"
     assert result["indirizzo_completo"] == "Via Roma, 1, 00100"
+    assert result["anno"] == 2026
+    assert result["note"] is None
 
 
 @pytest.mark.asyncio
@@ -352,6 +394,7 @@ async def test_ricevuta_provider_resolve(client: AsyncClient, db_session: AsyncS
             "data_ricevuta": "2026-07-21T10:00:00",
             "importo": 150.50,
             "note_in_stampa": "Compenso servizio",
+            "note_fuori_stampa": "Pagamento in contanti",
         },
     )
     assert ricevuta_resp.status_code == 201, ricevuta_resp.text
@@ -361,3 +404,4 @@ async def test_ricevuta_provider_resolve(client: AsyncClient, db_session: AsyncS
     assert str(result["data_ricevuta"]) == "2026-07-21 10:00:00"
     assert result["importo"] == "€ 150,50"
     assert result["note_in_stampa"] == "Compenso servizio"
+    assert result["note_fuori_stampa"] == "Pagamento in contanti"

@@ -20,6 +20,8 @@ _FIELDS = [
     MergeFieldDefinition("indirizzo_completo", "Indirizzo", "str"),
     MergeFieldDefinition("ragione_sociale", "Ragione sociale", "str"),
     MergeFieldDefinition("luogo_nascita", "Luogo di nascita", "str"),
+    MergeFieldDefinition("ruolo_banda", "Ruolo in banda", "str"),
+    MergeFieldDefinition("strumento", "Strumento", "str"),
 ]
 
 
@@ -47,4 +49,6 @@ class SocioProvider(MergeFieldProvider):
             "indirizzo_completo": format_indirizzo(indirizzo),
             "ragione_sociale": socio.persona.ragione_sociale,
             "luogo_nascita": comune_nascita.descrizione if comune_nascita else None,
+            "ruolo_banda": socio.ruolo_banda.descrizione,
+            "strumento": socio.strumento.descrizione if socio.strumento else None,
         }

@@ -16,6 +16,7 @@ _FIELDS = [
     MergeFieldDefinition("quota_partecipazione", "Quota partecipazione", "str"),
     MergeFieldDefinition("stato_iscrizione", "Stato iscrizione", "str"),
     MergeFieldDefinition("data_iscrizione", "Data iscrizione", "date"),
+    MergeFieldDefinition("note", "Note", "str"),
 ]
 
 
@@ -41,4 +42,5 @@ class IscrizioneProvider(MergeFieldProvider):
             ),
             "stato_iscrizione": stato.descrizione if stato else None,
             "data_iscrizione": iscrizione.data_iscrizione,
+            "note": iscrizione.note,
         }

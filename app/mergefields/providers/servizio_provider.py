@@ -14,6 +14,8 @@ _FIELDS = [
     MergeFieldDefinition("descrizione_servizio", "Descrizione servizio", "str"),
     MergeFieldDefinition("data_servizio", "Data servizio", "date"),
     MergeFieldDefinition("indirizzo_completo", "Indirizzo", "str"),
+    MergeFieldDefinition("anno", "Anno", "number"),
+    MergeFieldDefinition("note", "Note", "str"),
 ]
 
 
@@ -32,4 +34,6 @@ class ServizioProvider(MergeFieldProvider):
             "descrizione_servizio": servizio.descrizione_servizio,
             "data_servizio": servizio.data_servizio,
             "indirizzo_completo": format_indirizzo(servizio.indirizzo),
+            "anno": servizio.anno,
+            "note": servizio.note,
         }

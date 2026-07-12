@@ -20,6 +20,7 @@ _FIELDS = [
     MergeFieldDefinition("indirizzo_completo", "Indirizzo", "str"),
     MergeFieldDefinition("ragione_sociale", "Ragione sociale", "str"),
     MergeFieldDefinition("luogo_nascita", "Luogo di nascita", "str"),
+    MergeFieldDefinition("strumento", "Strumento", "str"),
 ]
 
 
@@ -47,4 +48,5 @@ class EsternoProvider(MergeFieldProvider):
             "indirizzo_completo": format_indirizzo(indirizzo),
             "ragione_sociale": esterno.persona.ragione_sociale,
             "luogo_nascita": comune_nascita.descrizione if comune_nascita else None,
+            "strumento": esterno.strumento.descrizione,
         }
