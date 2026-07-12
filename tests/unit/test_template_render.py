@@ -890,6 +890,119 @@ def test_build_html_tabella_1x1_ha_bordo():
     assert "border: 1px solid #000;" in html
 
 
+def _tabella_con_cella_stile(attrs: dict) -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [_tableCell("Cella", attrs=attrs)],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "align,expected", [("center", 1), ("right", 2), ("justify", 3)]
+)
+def test_build_docx_tabella_cella_align(align, expected):
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    content = build_docx(_tabella_con_cella_stile({"align": align}), {})
+    doc = DocxDocument(io.BytesIO(content))
+    cell = doc.tables[0].cell(0, 0)
+    assert cell.paragraphs[0].alignment == WD_ALIGN_PARAGRAPH(expected)
+
+
+@pytest.mark.parametrize("align", ["center", "right", "justify"])
+def test_build_html_tabella_cella_align(align):
+    html = build_html(_tabella_con_cella_stile({"align": align}), {})
+    assert f"text-align: {align};" in html
+
+
+def test_build_docx_tabella_cella_bordo_personalizzato():
+    content = build_docx(
+        _tabella_con_cella_stile({"borderColor": "#FF0000", "borderWidth": 3}), {}
+    )
+    doc = DocxDocument(io.BytesIO(content))
+    xml = doc.tables[0].cell(0, 0)._tc.xml
+    assert 'w:color="FF0000"' in xml
+    assert 'w:sz="18"' in xml  # 3px * 6 ottavi di punto per px
+
+
+def test_build_html_tabella_cella_bordo_personalizzato():
+    html = build_html(
+        _tabella_con_cella_stile({"borderColor": "#FF0000", "borderWidth": 3}), {}
+    )
+    assert "border: 3px solid #FF0000;" in html
+
+
+def test_build_docx_tabella_cella_sfondo():
+    content = build_docx(_tabella_con_cella_stile({"backgroundColor": "#00FF00"}), {})
+    doc = DocxDocument(io.BytesIO(content))
+    xml = doc.tables[0].cell(0, 0)._tc.xml
+    assert 'w:fill="00FF00"' in xml
+
+
+def test_build_html_tabella_cella_sfondo():
+    html = build_html(_tabella_con_cella_stile({"backgroundColor": "#00FF00"}), {})
+    assert "background-color: #00FF00;" in html
+
+
+@pytest.mark.parametrize("colore_malformato", ["notacolor", "#fff", "12345", ""])
+def test_build_docx_tabella_cella_bordo_colore_malformato_ignorato(colore_malformato):
+    content = build_docx(
+        _tabella_con_cella_stile({"borderColor": colore_malformato}), {}
+    )
+    doc = DocxDocument(io.BytesIO(content))
+    xml = doc.tables[0].cell(0, 0)._tc.xml
+    assert "tcBorders" not in xml
+
+
+@pytest.mark.parametrize("colore_malformato", ["notacolor", "#fff", "12345", ""])
+def test_build_html_tabella_cella_bordo_colore_malformato_ignorato(colore_malformato):
+    html = build_html(_tabella_con_cella_stile({"borderColor": colore_malformato}), {})
+    assert "border: 1px solid #000;" in html
+
+
+@pytest.mark.parametrize("colore_malformato", ["notacolor", "#fff", "12345", ""])
+def test_build_docx_tabella_cella_sfondo_malformato_ignorato(colore_malformato):
+    content = build_docx(
+        _tabella_con_cella_stile({"backgroundColor": colore_malformato}), {}
+    )
+    doc = DocxDocument(io.BytesIO(content))
+    xml = doc.tables[0].cell(0, 0)._tc.xml
+    assert "shd" not in xml
+
+
+@pytest.mark.parametrize("colore_malformato", ["notacolor", "#fff", "12345", ""])
+def test_build_html_tabella_cella_sfondo_malformato_ignorato(colore_malformato):
+    html = build_html(
+        _tabella_con_cella_stile({"backgroundColor": colore_malformato}), {}
+    )
+    assert "background-color:" not in html
+
+
+def test_build_docx_tabella_cella_senza_stile_nessuna_regressione():
+    content = build_docx(_tabella_semplice_2x2(), {})
+    doc = DocxDocument(io.BytesIO(content))
+    xml = doc.tables[0].cell(0, 0)._tc.xml
+    assert "tcBorders" not in xml
+    assert "shd" not in xml
+
+
+def test_build_html_tabella_cella_senza_stile_nessuna_regressione():
+    html = build_html(_tabella_semplice_2x2(), {})
+    assert "border: 1px solid #000;" in html
+    assert "background-color:" not in html
+    assert "text-align:" not in html
+
+
 def test_build_docx_senza_tabelle_nessuna_regressione():
     contenuto = {
         "type": "doc",

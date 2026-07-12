@@ -34,6 +34,16 @@ _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 #   - attrs.colwidth (array opzionale di larghezze in px) su
 #     tableCell/tableHeader: non applicato in HTML (rilevante solo per il
 #     .docx, dove le colonne non si adattano automaticamente al contenuto)
+#   - attrs.align (opzionale) su tableCell/tableHeader: stessa
+#     whitelist di attrs.textAlign su paragraph/heading, tradotto in
+#     text-align CSS sulla cella (default nessuno = comportamento attuale)
+#   - attrs.borderColor (hex "#RRGGBB", opzionale) e attrs.borderWidth
+#     (numero px, opzionale) su tableCell/tableHeader: sostituiscono il
+#     bordo di default della cella; se assenti/non validi resta il bordo
+#     1px nero di default (CR#8)
+#   - attrs.backgroundColor (hex "#RRGGBB", opzionale) su tableCell/
+#     tableHeader: tradotto in background-color CSS, nessuno se
+#     assente/non valido (comportamento attuale)
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
@@ -47,7 +57,8 @@ _ORDERED_LIST_MARKERS = ["decimal", "lower-alpha", "lower-roman"]
 _TABLE_STYLE = "border-collapse: collapse;"
 # Bordo esplicito su ogni cella: senza, il browser non disegna alcun bordo
 # di default per <table>/<td>/<th>.
-_TABLE_CELL_STYLE = "border: 1px solid #000;"
+_DEFAULT_CELL_BORDER_COLOR = "#000"
+_DEFAULT_CELL_BORDER_WIDTH = 1
 
 _STYLE = """
     @page { size: A4; margin: 2cm; }
@@ -164,11 +175,32 @@ def _render_table_cell(cell_node: dict, context: dict) -> str:
             f"Tipo di nodo non supportato dentro tableRow: {cell_type!r}"
         )
     tag = "th" if cell_type == "tableHeader" else "td"
+    attrs = cell_node.get("attrs", {})
     inner = "".join(
         _render_block(child, context) for child in cell_node.get("content", [])
     )
-    span_attrs = _table_span_attrs(cell_node.get("attrs", {}))
-    return f'<{tag} style="{_TABLE_CELL_STYLE}"{span_attrs}>{inner}</{tag}>'
+    span_attrs = _table_span_attrs(attrs)
+    return f'<{tag} style="{_cell_style(attrs)}"{span_attrs}>{inner}</{tag}>'
+
+
+def _cell_style(attrs: dict) -> str:
+    border_color = validate_hex_color(attrs.get("borderColor"))
+    border_width = attrs.get("borderWidth")
+    has_custom_width = isinstance(border_width, int | float) and border_width > 0
+
+    color = f"#{border_color}" if border_color else _DEFAULT_CELL_BORDER_COLOR
+    width = border_width if has_custom_width else _DEFAULT_CELL_BORDER_WIDTH
+    declarations = [f"border: {width}px solid {color}"]
+
+    background_color = validate_hex_color(attrs.get("backgroundColor"))
+    if background_color:
+        declarations.append(f"background-color: #{background_color}")
+
+    align = attrs.get("align")
+    if align in _VALID_TEXT_ALIGN and align != "left":
+        declarations.append(f"text-align: {align}")
+
+    return "; ".join(declarations) + ";"
 
 
 def _table_span_attrs(attrs: dict) -> str:
