@@ -19,7 +19,11 @@ _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 # - nodi tabella: table (contiene tableRow, una o più; nessun attrs
 #   rilevante — l'estensione TipTap standard non ne emette di suo),
 #   tableRow (contiene tableCell/tableHeader, celle normali e celle di
-#   intestazione), tableCell/tableHeader (contengono blocchi, tipicamente
+#   intestazione)
+#   - attrs.height (numero opzionale, px) su tableRow: tradotto in
+#     style="height: {n}px;" sul <tr> — nei browser è un minimo, coerente
+#     con height_rule AT_LEAST usato per il .docx
+#   tableCell/tableHeader (contengono blocchi, tipicamente
 #   paragraph, ma anche bulletList/orderedList annidate — riusa la logica
 #   ricorsiva dei blocchi già esistente)
 #   - attrs.colspan (default 1) e attrs.rowspan (default 1) su
@@ -142,7 +146,15 @@ def _render_table_row(row: dict, context: dict) -> str:
     cells = "".join(
         _render_table_cell(cell, context) for cell in row.get("content", [])
     )
-    return f"<tr>{cells}</tr>"
+    style_attr = _row_height_attr(row.get("attrs", {}))
+    return f"<tr{style_attr}>{cells}</tr>"
+
+
+def _row_height_attr(attrs: dict) -> str:
+    height = attrs.get("height")
+    if not height:
+        return ""
+    return f' style="height: {height}px;"'
 
 
 def _render_table_cell(cell_node: dict, context: dict) -> str:
