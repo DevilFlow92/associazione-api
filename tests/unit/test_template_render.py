@@ -692,6 +692,64 @@ def test_build_html_tabella_semplice_2x2():
     assert "<p>30</p></td>" in html
 
 
+def _tabella_con_row_height() -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "attrs": {"height": 60},
+                        "content": [
+                            _tableCell("Nome", header=True),
+                            _tableCell("Età", header=True),
+                        ],
+                    },
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            _tableCell("Mario"),
+                            _tableCell("30"),
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def test_build_docx_tabella_con_row_height():
+    from docx.enum.table import WD_ROW_HEIGHT_RULE
+    from docx.shared import Emu
+
+    content = build_docx(_tabella_con_row_height(), {})
+    doc = DocxDocument(io.BytesIO(content))
+    table = doc.tables[0]
+    assert table.rows[0].height == Emu(60 * 9525)
+    assert table.rows[0].height_rule == WD_ROW_HEIGHT_RULE.AT_LEAST
+
+
+def test_build_docx_tabella_senza_row_height_nessuna_regressione():
+    content = build_docx(_tabella_semplice_2x2(), {})
+    doc = DocxDocument(io.BytesIO(content))
+    table = doc.tables[0]
+    assert table.rows[0].height is None
+    assert table.rows[0].height_rule is None
+
+
+def test_build_html_tabella_con_row_height():
+    html = build_html(_tabella_con_row_height(), {})
+    assert '<tr style="height: 60px;">' in html
+
+
+def test_build_html_tabella_senza_row_height_nessuna_regressione():
+    html = build_html(_tabella_semplice_2x2(), {})
+    assert "<tr>" in html
+    assert "height:" not in html
+
+
 def _tabella_con_colspan_rowspan() -> dict:
     return {
         "type": "doc",

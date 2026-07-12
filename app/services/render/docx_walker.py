@@ -4,6 +4,7 @@ import io
 from typing import Any
 
 from docx import Document as DocxDocument
+from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -26,7 +27,10 @@ _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 # - nodi tabella: table (contiene tableRow, una o più; nessun attrs
 #   rilevante — l'estensione TipTap standard non ne emette di suo),
 #   tableRow (contiene tableCell/tableHeader, celle normali e celle di
-#   intestazione), tableCell/tableHeader (contengono blocchi, tipicamente
+#   intestazione)
+#   - attrs.height (numero opzionale, px) su tableRow: se assente,
+#     altezza automatica basata sul contenuto (comportamento invariato)
+#   tableCell/tableHeader (contengono blocchi, tipicamente
 #   paragraph, ma anche bulletList/orderedList annidate — riusa la logica
 #   ricorsiva dei blocchi già esistente)
 #   - attrs.colspan (default 1) e attrs.rowspan (default 1) su
@@ -201,7 +205,9 @@ def _add_table(doc: Any, node: dict, context: dict) -> None:
         return
 
     table = doc.add_table(rows=num_rows, cols=total_cols, style=_TABLE_STYLE)
+    row_nodes = node.get("content", [])
     for row_idx, row_layout in enumerate(layout):
+        _apply_row_height(table.rows[row_idx], row_nodes[row_idx].get("attrs", {}))
         for col, cell_node in row_layout:
             attrs = cell_node.get("attrs", {})
             colspan = attrs.get("colspan") or 1
@@ -245,6 +251,18 @@ def _apply_cell_width(cell: Any, colwidth: list[int | None] | None) -> None:
     if not widths:
         return
     cell.width = Emu(sum(widths) * _EMU_PER_PX)
+
+
+def _apply_row_height(row: Any, attrs: dict) -> None:
+    height = attrs.get("height")
+    if not height:
+        return
+    # AT_LEAST (non EXACTLY) replica lo stesso comportamento della resa HTML,
+    # dove "height" sul <tr> è un minimo e la riga cresce se il contenuto non
+    # ci sta: EXACTLY troncherebbe il contenuto in Word senza equivalente in
+    # HTML, disallineando visivamente i due renderer.
+    row.height = Emu(height * _EMU_PER_PX)
+    row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
 
 
 def _create_numbering_start_override(doc: Any, style_name: str, start: int) -> int:
