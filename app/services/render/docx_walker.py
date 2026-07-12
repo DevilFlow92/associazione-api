@@ -236,7 +236,6 @@ def _fill_table_cell(cell: Any, content_nodes: list[dict], context: dict) -> Non
 def _delete_paragraph(paragraph: Paragraph) -> None:
     p = paragraph._p
     p.getparent().remove(p)
-    paragraph._p = paragraph._element = None
 
 
 def _apply_cell_width(cell: Any, colwidth: list[int | None] | None) -> None:
