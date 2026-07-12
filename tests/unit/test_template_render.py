@@ -677,6 +677,11 @@ async def _create_persona(ac: AsyncClient) -> dict:
 
 
 async def _create_socio_con_template(client: AsyncClient) -> tuple[int, int]:
+    ruolo_resp = await client.post(
+        "/api/v1/ruoli-banda/", json={"codice": 10, "descrizione": "Socio Bandista"}
+    )
+    assert ruolo_resp.status_code == 201, ruolo_resp.text
+
     persona = await _create_persona(client)
     socio_resp = await client.post(
         "/api/v1/soci/",
