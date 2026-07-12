@@ -13,6 +13,7 @@ from docx.text.paragraph import Paragraph
 
 from app.exceptions.template import TemplateRenderError
 from app.services.render.fonts import sanitize_font_family, validate_hex_color
+from app.services.render.images import ImageAsset
 
 _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 
@@ -50,6 +51,17 @@ _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 #   - attrs.backgroundColor (hex "#RRGGBB", opzionale) su tableCell/
 #     tableHeader: sfondo della cella, nessuno se assente/non valido
 #     (comportamento attuale)
+#   - image (blocco, non inline): attrs.documentoId (int, riferimento a un
+#     Documento esistente), attrs.width (opzionale, px) e attrs.align
+#     (opzionale, left|center|right — stessa whitelist/logica di
+#     textAlign/align, default nessuno). Il contenuto binario va risolto a
+#     monte (vedi TemplateService._load_images) e passato tramite il
+#     parametro images: dict[int, ImageAsset] di build_docx (chiave =
+#     documentoId); se un id referenziato non è presente in images (es.
+#     Documento cancellato dopo l'inserimento nel template), viene inserito
+#     un placeholder testuale "[immagine non disponibile]" invece di far
+#     fallire la generazione — stesso principio già usato per i mergefield
+#     non risolvibili
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
@@ -79,23 +91,30 @@ _DEFAULT_BORDER_SZ = _EIGHTHS_PT_PER_PX  # equivalente a 1px, come "Table Grid"
 _DEFAULT_BORDER_COLOR = "000000"
 
 
-def build_docx(contenuto_json: dict, context: dict) -> bytes:
+def build_docx(
+    contenuto_json: dict,
+    context: dict,
+    images: dict[int, ImageAsset] | None = None,
+) -> bytes:
     """Cammina l'albero ProseMirror/TipTap del template e produce un .docx."""
     if contenuto_json.get("type") != "doc":
         raise TemplateRenderError(
             "Il contenuto del template deve avere type 'doc' come radice"
         )
 
+    images = images or {}
     doc = DocxDocument()
     for node in contenuto_json.get("content", []):
-        _add_block(doc, node, context)
+        _add_block(doc, node, context, images)
 
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
 
 
-def _add_block(doc: Any, node: dict, context: dict) -> None:
+def _add_block(
+    doc: Any, node: dict, context: dict, images: dict[int, ImageAsset]
+) -> None:
     node_type = node.get("type")
     attrs = node.get("attrs", {})
     if node_type == "paragraph":
@@ -108,14 +127,34 @@ def _add_block(doc: Any, node: dict, context: dict) -> None:
         _apply_text_align(paragraph, attrs.get("textAlign"))
         _add_inline_content(paragraph, node.get("content", []), context)
     elif node_type in ("bulletList", "orderedList"):
-        _add_list(doc, node, context, depth=0)
+        _add_list(doc, node, context, depth=0, images=images)
     elif node_type == "table":
-        _add_table(doc, node, context)
+        _add_table(doc, node, context, images)
+    elif node_type == "image":
+        _add_image(doc, node, images)
     else:
         raise TemplateRenderError(f"Tipo di nodo non supportato: {node_type!r}")
 
 
-def _add_list(doc: Any, node: dict, context: dict, depth: int) -> None:
+def _add_image(doc: Any, node: dict, images: dict[int, ImageAsset]) -> None:
+    attrs = node.get("attrs", {})
+    asset = images.get(attrs.get("documentoId"))
+    paragraph = doc.add_paragraph()
+    _apply_text_align(paragraph, attrs.get("align"))
+    if asset is None:
+        paragraph.add_run("[immagine non disponibile]")
+        return
+    run = paragraph.add_run()
+    width = attrs.get("width")
+    if isinstance(width, int | float) and width > 0:
+        run.add_picture(io.BytesIO(asset.content), width=Emu(int(width * _EMU_PER_PX)))
+    else:
+        run.add_picture(io.BytesIO(asset.content))
+
+
+def _add_list(
+    doc: Any, node: dict, context: dict, depth: int, images: dict[int, ImageAsset]
+) -> None:
     is_ordered = node.get("type") == "orderedList"
     styles = _ORDERED_LIST_STYLES if is_ordered else _BULLET_LIST_STYLES
     style_name = styles[depth % len(styles)]
@@ -126,7 +165,7 @@ def _add_list(doc: Any, node: dict, context: dict, depth: int) -> None:
         numid_override = _create_numbering_start_override(doc, style_name, start)
 
     for item in node.get("content", []):
-        _add_list_item(doc, item, context, depth, style_name, numid_override)
+        _add_list_item(doc, item, context, depth, style_name, numid_override, images)
 
 
 def _add_list_item(
@@ -136,6 +175,7 @@ def _add_list_item(
     depth: int,
     style_name: str,
     numid_override: int | None,
+    images: dict[int, ImageAsset],
 ) -> None:
     for child in item_node.get("content", []):
         child_type = child.get("type")
@@ -148,7 +188,7 @@ def _add_list_item(
             _apply_text_align(paragraph, child_attrs.get("textAlign"))
             _add_inline_content(paragraph, child.get("content", []), context)
         elif child_type in ("bulletList", "orderedList"):
-            _add_list(doc, child, context, depth + 1)
+            _add_list(doc, child, context, depth + 1, images)
         else:
             raise TemplateRenderError(
                 f"Tipo di nodo non supportato dentro listItem: {child_type!r}"
@@ -214,7 +254,9 @@ def _layout_table_rows(node: dict) -> tuple[list[list[tuple[int, dict]]], int]:
     return layout, total_cols
 
 
-def _add_table(doc: Any, node: dict, context: dict) -> None:
+def _add_table(
+    doc: Any, node: dict, context: dict, images: dict[int, ImageAsset]
+) -> None:
     layout, total_cols = _layout_table_rows(node)
     num_rows = len(layout)
     if num_rows == 0 or total_cols == 0:
@@ -232,20 +274,22 @@ def _add_table(doc: Any, node: dict, context: dict) -> None:
             if colspan > 1 or rowspan > 1:
                 end_cell = table.cell(row_idx + rowspan - 1, col + colspan - 1)
                 cell = cell.merge(end_cell)
-            _fill_table_cell(cell, cell_node.get("content", []), context)
+            _fill_table_cell(cell, cell_node.get("content", []), context, images)
             _apply_cell_width(cell, attrs.get("colwidth"))
             _apply_cell_align(cell, attrs.get("align"))
             _apply_cell_border_and_background(cell, attrs)
 
 
-def _fill_table_cell(cell: Any, content_nodes: list[dict], context: dict) -> None:
+def _fill_table_cell(
+    cell: Any, content_nodes: list[dict], context: dict, images: dict[int, ImageAsset]
+) -> None:
     # Ogni cella nasce con un paragrafo vuoto già presente (python-docx non
     # permette celle senza paragrafi): lo riutilizziamo solo come segnaposto
     # e lo rimuoviamo se il contenuto reale è stato aggiunto con altri
     # add_paragraph, per non lasciare una riga vuota prima del testo.
     placeholder = cell.paragraphs[0]
     for block in content_nodes:
-        _add_block(cell, block, context)
+        _add_block(cell, block, context, images)
     # cell.paragraphs ricostruisce un nuovo Paragraph a ogni accesso, quindi
     # "is" confronterebbe sempre wrapper diversi: si confronta l'elemento
     # XML sottostante, che invece resta lo stesso oggetto.

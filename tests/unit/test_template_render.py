@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 import time
 
@@ -10,7 +11,14 @@ from httpx import AsyncClient
 from app.exceptions.template import TemplateRenderError
 from app.services.render.docx_walker import build_docx
 from app.services.render.html_renderer import build_html
+from app.services.render.images import ImageAsset
 from app.services.render.pdf_renderer import build_pdf
+
+# PNG 1x1 pixel valido, usato come contenuto immagine minimale nei test.
+_PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY"
+    "42YAAAAASUVORK5CYII="
+)
 
 
 def _read_paragraphs(content: bytes) -> list[str]:
@@ -1034,6 +1042,92 @@ def test_build_html_senza_tabelle_nessuna_regressione():
     assert "<p>Testo semplice</p>" in html
 
 
+def _contenuto_con_immagine(attrs: dict | None = None) -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {"type": "image", "attrs": attrs or {"documentoId": 1}},
+        ],
+    }
+
+
+def test_build_docx_immagine_presente():
+    images = {1: ImageAsset(content=_PNG_1X1, mime_type="image/png")}
+    content = build_docx(_contenuto_con_immagine(), {}, images)
+    doc = DocxDocument(io.BytesIO(content))
+    assert len(doc.inline_shapes) == 1
+
+
+def test_build_html_immagine_presente():
+    images = {1: ImageAsset(content=_PNG_1X1, mime_type="image/png")}
+    html = build_html(_contenuto_con_immagine(), {}, images)
+    assert "data:image/png;base64," in html
+    b64 = html.split("data:image/png;base64,")[1].split('"')[0]
+    assert base64.b64decode(b64) == _PNG_1X1
+
+
+def test_build_docx_immagine_con_width_e_align():
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Emu
+
+    images = {1: ImageAsset(content=_PNG_1X1, mime_type="image/png")}
+    contenuto = _contenuto_con_immagine(
+        {"documentoId": 1, "width": 100, "align": "center"}
+    )
+    content = build_docx(contenuto, {}, images)
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
+    picture = doc.inline_shapes[0]
+    assert picture.width == Emu(100 * 9525)
+
+
+def test_build_html_immagine_con_width_e_align():
+    images = {1: ImageAsset(content=_PNG_1X1, mime_type="image/png")}
+    contenuto = _contenuto_con_immagine(
+        {"documentoId": 1, "width": 100, "align": "center"}
+    )
+    html = build_html(contenuto, {}, images)
+    assert '<p style="text-align: center;">' in html
+    assert 'width="100"' in html
+
+
+def test_build_docx_immagine_non_disponibile_placeholder():
+    content = build_docx(_contenuto_con_immagine(), {}, {})
+    assert _read_paragraphs(content) == ["[immagine non disponibile]"]
+
+
+def test_build_html_immagine_non_disponibile_placeholder():
+    html = build_html(_contenuto_con_immagine(), {}, {})
+    assert "<p>[immagine non disponibile]</p>" in html
+    assert "<img" not in html
+
+
+def test_build_docx_senza_immagini_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Testo semplice"}],
+            }
+        ],
+    }
+    assert build_docx(contenuto, {}, {}) == build_docx(contenuto, {})
+
+
+def test_build_html_senza_immagini_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Testo semplice"}],
+            }
+        ],
+    }
+    assert build_html(contenuto, {}, {}) == build_html(contenuto, {})
+
+
 def _contenuto_multi_pagina() -> dict:
     testo_lungo = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 20
     paragrafi = [
@@ -1140,6 +1234,44 @@ async def test_generate_docx_endpoint_produce_docx_valido(client: AsyncClient):
     assert download_resp.status_code == 200
     doc = DocxDocument(io.BytesIO(download_resp.content))
     assert doc.paragraphs[0].text == "Gentile Mario, con la presente..."
+
+
+async def _upload_immagine(client: AsyncClient) -> int:
+    resp = await client.post(
+        "/api/v1/documenti/",
+        files=[("file", ("logo.png", _PNG_1X1, "image/png"))],
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_con_immagine_referenziata(client: AsyncClient):
+    template_id, socio_id = await _create_socio_con_template(client)
+    documento_id = await _upload_immagine(client)
+
+    update_resp = await client.patch(
+        f"/api/v1/templates/{template_id}",
+        json={
+            "contenuto_json": {
+                "type": "doc",
+                "content": [{"type": "image", "attrs": {"documentoId": documento_id}}],
+            }
+        },
+    )
+    assert update_resp.status_code == 200, update_resp.text
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/docx",
+        json={"entities": {"socio": socio_id}},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    documento = generate_resp.json()
+
+    download_resp = await client.get(f"/api/v1/documenti/{documento['id']}/download")
+    assert download_resp.status_code == 200
+    doc = DocxDocument(io.BytesIO(download_resp.content))
+    assert len(doc.inline_shapes) == 1
 
 
 @pytest.mark.asyncio

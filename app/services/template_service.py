@@ -3,7 +3,7 @@ from __future__ import annotations
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.storage import storage
+from app.core.storage import StorageFileNotFoundError, storage
 from app.exceptions.template import TemplateNotFoundError
 from app.mergefields.registry import resolve_context
 from app.repositories.documento_repository import DocumentoRepository
@@ -12,12 +12,27 @@ from app.schemas.documento import DocumentoResponse
 from app.schemas.template import TemplateCreate, TemplateResponse, TemplateUpdate
 from app.services.render.docx_walker import build_docx
 from app.services.render.html_renderer import build_html
+from app.services.render.images import ImageAsset
 from app.services.render.pdf_renderer import build_pdf
 
 _DOCX_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
 _PDF_MIME_TYPE = "application/pdf"
+
+
+def _find_image_documento_ids(node: dict) -> set[int]:
+    """Cammina ricorsivamente l'albero ProseMirror/TipTap raccogliendo gli
+    attrs.documentoId di tutti i nodi "image" presenti (a qualunque
+    profondità: paragrafi, celle di tabella, list item...)."""
+    ids: set[int] = set()
+    if node.get("type") == "image":
+        documento_id = node.get("attrs", {}).get("documentoId")
+        if documento_id is not None:
+            ids.add(documento_id)
+    for child in node.get("content", []) or []:
+        ids |= _find_image_documento_ids(child)
+    return ids
 
 
 class TemplateService:
@@ -56,6 +71,24 @@ class TemplateService:
             raise TemplateNotFoundError(template_id)
         await self.repo.delete(template)
 
+    async def _load_images(self, contenuto_json: dict) -> dict[int, ImageAsset]:
+        images: dict[int, ImageAsset] = {}
+        for documento_id in _find_image_documento_ids(contenuto_json):
+            documento = await self.documento_repo.get_by_id(documento_id)
+            if documento is None:
+                # Referenziato nel template ma cancellato in seguito: il
+                # renderer lo tratterà come immagine mancante (placeholder),
+                # senza far fallire l'intera generazione.
+                continue
+            try:
+                content = await storage.get_bytes(documento.file_path)
+            except StorageFileNotFoundError:
+                continue
+            images[documento_id] = ImageAsset(
+                content=content, mime_type=documento.mime_type
+            )
+        return images
+
     async def generate_docx(
         self, template_id: int, entities: dict[str, int], db: AsyncSession
     ) -> DocumentoResponse:
@@ -64,7 +97,8 @@ class TemplateService:
             raise TemplateNotFoundError(template_id)
 
         context = await resolve_context(entities, db)
-        content = build_docx(template.contenuto_json, context)
+        images = await self._load_images(template.contenuto_json)
+        content = build_docx(template.contenuto_json, context, images)
 
         filename = f"{template.nome}.docx"
         file_path, checksum, dimensione = await storage.save(
@@ -91,7 +125,8 @@ class TemplateService:
             raise TemplateNotFoundError(template_id)
 
         context = await resolve_context(entities, db)
-        return build_html(contenuto_json, context)
+        images = await self._load_images(contenuto_json)
+        return build_html(contenuto_json, context, images)
 
     async def generate_pdf(
         self, template_id: int, entities: dict[str, int], db: AsyncSession
@@ -101,7 +136,8 @@ class TemplateService:
             raise TemplateNotFoundError(template_id)
 
         context = await resolve_context(entities, db)
-        html = build_html(template.contenuto_json, context)
+        images = await self._load_images(template.contenuto_json)
+        html = build_html(template.contenuto_json, context, images)
         content = await build_pdf(html)
 
         filename = f"{template.nome}.pdf"
