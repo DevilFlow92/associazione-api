@@ -7,7 +7,7 @@ from docx import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Inches, RGBColor
+from docx.shared import Emu, Inches, RGBColor
 from docx.text.paragraph import Paragraph
 
 from app.exceptions.template import TemplateRenderError
@@ -23,6 +23,18 @@ _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 #   paragraph, oppure a sua volta bulletList/orderedList annidate)
 #   - attrs.textAlign su paragraph/heading: left | center | right | justify
 #     (default "left" se assente)
+# - nodi tabella: table (contiene tableRow, una o più; nessun attrs
+#   rilevante — l'estensione TipTap standard non ne emette di suo),
+#   tableRow (contiene tableCell/tableHeader, celle normali e celle di
+#   intestazione), tableCell/tableHeader (contengono blocchi, tipicamente
+#   paragraph, ma anche bulletList/orderedList annidate — riusa la logica
+#   ricorsiva dei blocchi già esistente)
+#   - attrs.colspan (default 1) e attrs.rowspan (default 1) su
+#     tableCell/tableHeader: per schema standard ProseMirror/TipTap, le
+#     celle "coperte" da un rowspan non compaiono nel JSON delle righe
+#     successive (vanno ricostruite camminando la griglia)
+#   - attrs.colwidth (array opzionale di larghezze in px) su
+#     tableCell/tableHeader
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
@@ -42,6 +54,9 @@ _TEXT_ALIGN = {
 _BULLET_LIST_STYLES = ["List Bullet", "List Bullet 2", "List Bullet 3"]
 _ORDERED_LIST_STYLES = ["List Number", "List Number 2", "List Number 3"]
 _LIST_INDENT_STEP = Inches(0.25)
+_TABLE_STYLE = "Table Grid"
+# 1px a 96 DPI (convenzione standard Office/browser) = 9525 EMU.
+_EMU_PER_PX = 9525
 
 
 def build_docx(contenuto_json: dict, context: dict) -> bytes:
@@ -74,6 +89,8 @@ def _add_block(doc: Any, node: dict, context: dict) -> None:
         _add_inline_content(paragraph, node.get("content", []), context)
     elif node_type in ("bulletList", "orderedList"):
         _add_list(doc, node, context, depth=0)
+    elif node_type == "table":
+        _add_table(doc, node, context)
     else:
         raise TemplateRenderError(f"Tipo di nodo non supportato: {node_type!r}")
 
@@ -127,6 +144,108 @@ def _apply_list_indent(paragraph: Paragraph, depth: int) -> None:
     styles_count = 3
     if depth >= styles_count:
         paragraph.paragraph_format.left_indent = _LIST_INDENT_STEP * (depth + 1)
+
+
+def _layout_table_rows(node: dict) -> tuple[list[list[tuple[int, dict]]], int]:
+    """Calcola, per ogni tableRow, la colonna di partenza di ciascuna cella
+    JSON e il numero totale di colonne della tabella.
+
+    Nello schema ProseMirror/TipTap le celle "coperte" da un rowspan
+    proveniente da una riga precedente non compaiono nel JSON della riga
+    corrente, quindi la griglia va ricostruita tenendo traccia degli
+    span ancora attivi riga per riga.
+    """
+    pending: dict[int, int] = {}
+    layout: list[list[tuple[int, dict]]] = []
+    total_cols = 0
+    for row in node.get("content", []):
+        if row.get("type") != "tableRow":
+            raise TemplateRenderError(
+                f"Tipo di nodo non supportato dentro table: {row.get('type')!r}"
+            )
+        occupied = set(pending)
+        new_pending: dict[int, int] = {
+            col: remaining - 1 for col, remaining in pending.items() if remaining > 1
+        }
+        row_layout: list[tuple[int, dict]] = []
+        col = 0
+        for cell_node in row.get("content", []):
+            cell_type = cell_node.get("type")
+            if cell_type not in ("tableCell", "tableHeader"):
+                raise TemplateRenderError(
+                    f"Tipo di nodo non supportato dentro tableRow: {cell_type!r}"
+                )
+            while col in occupied:
+                col += 1
+            attrs = cell_node.get("attrs", {})
+            colspan = attrs.get("colspan") or 1
+            rowspan = attrs.get("rowspan") or 1
+            row_layout.append((col, cell_node))
+            if rowspan > 1:
+                for c in range(col, col + colspan):
+                    new_pending[c] = rowspan - 1
+            col += colspan
+        row_end = col
+        while row_end in occupied:
+            row_end += 1
+        layout.append(row_layout)
+        total_cols = max(total_cols, row_end)
+        pending = new_pending
+    return layout, total_cols
+
+
+def _add_table(doc: Any, node: dict, context: dict) -> None:
+    layout, total_cols = _layout_table_rows(node)
+    num_rows = len(layout)
+    if num_rows == 0 or total_cols == 0:
+        return
+
+    table = doc.add_table(rows=num_rows, cols=total_cols, style=_TABLE_STYLE)
+    for row_idx, row_layout in enumerate(layout):
+        for col, cell_node in row_layout:
+            attrs = cell_node.get("attrs", {})
+            colspan = attrs.get("colspan") or 1
+            rowspan = attrs.get("rowspan") or 1
+            cell = table.cell(row_idx, col)
+            if colspan > 1 or rowspan > 1:
+                end_cell = table.cell(row_idx + rowspan - 1, col + colspan - 1)
+                cell = cell.merge(end_cell)
+            _fill_table_cell(cell, cell_node.get("content", []), context)
+            _apply_cell_width(cell, attrs.get("colwidth"))
+
+
+def _fill_table_cell(cell: Any, content_nodes: list[dict], context: dict) -> None:
+    # Ogni cella nasce con un paragrafo vuoto già presente (python-docx non
+    # permette celle senza paragrafi): lo riutilizziamo solo come segnaposto
+    # e lo rimuoviamo se il contenuto reale è stato aggiunto con altri
+    # add_paragraph, per non lasciare una riga vuota prima del testo.
+    placeholder = cell.paragraphs[0]
+    for block in content_nodes:
+        _add_block(cell, block, context)
+    # cell.paragraphs ricostruisce un nuovo Paragraph a ogni accesso, quindi
+    # "is" confronterebbe sempre wrapper diversi: si confronta l'elemento
+    # XML sottostante, che invece resta lo stesso oggetto.
+    if (
+        len(cell.paragraphs) > 1
+        and cell.paragraphs[0]._p is placeholder._p
+        and not placeholder.text
+    ):
+        _delete_paragraph(placeholder)
+
+
+def _delete_paragraph(paragraph: Paragraph) -> None:
+    p = paragraph._p
+    p.getparent().remove(p)
+    paragraph._p = paragraph._element = None
+
+
+def _apply_cell_width(cell: Any, colwidth: list[int | None] | None) -> None:
+    if not colwidth:
+        return
+    widths = [w for w in colwidth if w]
+    if not widths:
+        return
+    cell.width = Emu(sum(widths) * _EMU_PER_PX)
 
 
 def _create_numbering_start_override(doc: Any, style_name: str, start: int) -> int:

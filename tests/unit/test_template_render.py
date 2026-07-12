@@ -110,7 +110,7 @@ def test_build_docx_mergefield_non_risolvibile():
 
 
 def test_build_docx_tipo_nodo_non_supportato():
-    contenuto = {"type": "doc", "content": [{"type": "table", "content": []}]}
+    contenuto = {"type": "doc", "content": [{"type": "codeBlock", "content": []}]}
     with pytest.raises(TemplateRenderError):
         build_docx(contenuto, {})
 
@@ -162,7 +162,7 @@ def test_build_html_mergefield_non_risolvibile():
 
 
 def test_build_html_tipo_nodo_non_supportato():
-    contenuto = {"type": "doc", "content": [{"type": "table", "content": []}]}
+    contenuto = {"type": "doc", "content": [{"type": "codeBlock", "content": []}]}
     with pytest.raises(TemplateRenderError):
         build_html(contenuto, {})
 
@@ -630,6 +630,236 @@ def test_build_html_lista_senza_liste_nessuna_regressione():
     html = build_html(contenuto, {})
     assert "<ul" not in html
     assert "<ol" not in html
+    assert "<p>Testo semplice</p>" in html
+
+
+def _tableCell(testo: str, *, header: bool = False, attrs: dict | None = None) -> dict:
+    node = {
+        "type": "tableHeader" if header else "tableCell",
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": testo}]}
+        ],
+    }
+    if attrs:
+        node["attrs"] = attrs
+    return node
+
+
+def _tabella_semplice_2x2() -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            _tableCell("Nome", header=True),
+                            _tableCell("Età", header=True),
+                        ],
+                    },
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            _tableCell("Mario"),
+                            _tableCell("30"),
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def test_build_docx_tabella_semplice_2x2():
+    content = build_docx(_tabella_semplice_2x2(), {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert len(doc.tables) == 1
+    table = doc.tables[0]
+    assert len(table.rows) == 2
+    assert len(table.columns) == 2
+    assert [c.text for c in table.rows[0].cells] == ["Nome", "Età"]
+    assert [c.text for c in table.rows[1].cells] == ["Mario", "30"]
+
+
+def test_build_html_tabella_semplice_2x2():
+    html = build_html(_tabella_semplice_2x2(), {})
+    assert "<table" in html
+    assert "<th" in html and "<p>Nome</p></th>" in html
+    assert "<p>Età</p></th>" in html
+    assert "<p>Mario</p></td>" in html
+    assert "<p>30</p></td>" in html
+
+
+def _tabella_con_colspan_rowspan() -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            _tableCell("P", attrs={"rowspan": 2}),
+                            _tableCell("Q", attrs={"colspan": 2}),
+                        ],
+                    },
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            _tableCell("R"),
+                            _tableCell("S"),
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def test_build_docx_tabella_con_colspan_rowspan():
+    content = build_docx(_tabella_con_colspan_rowspan(), {})
+    doc = DocxDocument(io.BytesIO(content))
+    table = doc.tables[0]
+    assert len(table.columns) == 3
+    assert table.cell(0, 0).text == "P"
+    assert table.cell(1, 0).text == "P"  # cella coperta dal rowspan
+    assert table.cell(0, 0)._tc is table.cell(1, 0)._tc  # stessa cella unita
+    assert table.cell(0, 1).text == "Q"
+    assert table.cell(0, 2).text == "Q"
+    assert table.cell(0, 1)._tc is table.cell(0, 2)._tc
+    assert table.cell(1, 1).text == "R"
+    assert table.cell(1, 2).text == "S"
+
+
+def test_build_html_tabella_con_colspan_rowspan():
+    html = build_html(_tabella_con_colspan_rowspan(), {})
+    assert 'rowspan="2"' in html
+    assert 'colspan="2"' in html
+    assert "<p>P</p>" in html
+    assert "<p>Q</p>" in html
+    assert "<p>R</p>" in html
+    assert "<p>S</p>" in html
+
+
+def _tabella_con_testo_formattato_e_mergefield() -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {
+                                "type": "tableCell",
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": "Nome: ",
+                                                "marks": [{"type": "bold"}],
+                                            },
+                                            {
+                                                "type": "mergefield",
+                                                "attrs": {"chiave": "socio.nome"},
+                                            },
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_build_docx_tabella_cella_con_bold_e_mergefield():
+    content = build_docx(
+        _tabella_con_testo_formattato_e_mergefield(), {"socio": {"nome": "Mario"}}
+    )
+    doc = DocxDocument(io.BytesIO(content))
+    cell = doc.tables[0].cell(0, 0)
+    runs = cell.paragraphs[0].runs
+    assert runs[0].text == "Nome: "
+    assert runs[0].bold is True
+    assert runs[1].text == "Mario"
+    assert not runs[1].bold
+
+
+def test_build_html_tabella_cella_con_bold_e_mergefield():
+    html = build_html(
+        _tabella_con_testo_formattato_e_mergefield(), {"socio": {"nome": "Mario"}}
+    )
+    assert "<strong>Nome: </strong>Mario" in html
+
+
+def _tabella_1x1() -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [_tableCell("Riquadro")],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_build_docx_tabella_1x1_ha_bordo():
+    content = build_docx(_tabella_1x1(), {})
+    doc = DocxDocument(io.BytesIO(content))
+    table = doc.tables[0]
+    assert table.style.name == "Table Grid"
+    assert table.cell(0, 0).text == "Riquadro"
+
+
+def test_build_html_tabella_1x1_ha_bordo():
+    html = build_html(_tabella_1x1(), {})
+    assert "border-collapse: collapse;" in html
+    assert "border: 1px solid #000;" in html
+
+
+def test_build_docx_senza_tabelle_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Testo semplice"}],
+            }
+        ],
+    }
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    assert doc.tables == []
+    assert _read_paragraphs(content) == ["Testo semplice"]
+
+
+def test_build_html_senza_tabelle_nessuna_regressione():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Testo semplice"}],
+            }
+        ],
+    }
+    html = build_html(contenuto, {})
+    assert "<table" not in html
     assert "<p>Testo semplice</p>" in html
 
 
