@@ -39,6 +39,17 @@ _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 #     successive (vanno ricostruite camminando la griglia)
 #   - attrs.colwidth (array opzionale di larghezze in px) su
 #     tableCell/tableHeader
+#   - attrs.align (opzionale) su tableCell/tableHeader: stessa
+#     whitelist/logica di attrs.textAlign su paragraph/heading, applicata
+#     a tutti i paragrafi contenuti nella cella (default nessuno =
+#     comportamento attuale)
+#   - attrs.borderColor (hex "#RRGGBB", opzionale) e attrs.borderWidth
+#     (numero px, opzionale) su tableCell/tableHeader: bordo personalizzato
+#     della singola cella; se assenti/non validi resta il bordo di default
+#     1px nero della tabella (CR#8)
+#   - attrs.backgroundColor (hex "#RRGGBB", opzionale) su tableCell/
+#     tableHeader: sfondo della cella, nessuno se assente/non valido
+#     (comportamento attuale)
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
@@ -61,6 +72,11 @@ _LIST_INDENT_STEP = Inches(0.25)
 _TABLE_STYLE = "Table Grid"
 # 1px a 96 DPI (convenzione standard Office/browser) = 9525 EMU.
 _EMU_PER_PX = 9525
+_BORDER_EDGES = ("top", "left", "bottom", "right")
+# w:sz sui bordi è espresso in ottavi di punto: 1px a 96 DPI = 0.75pt = 6 ottavi.
+_EIGHTHS_PT_PER_PX = 6
+_DEFAULT_BORDER_SZ = _EIGHTHS_PT_PER_PX  # equivalente a 1px, come "Table Grid"
+_DEFAULT_BORDER_COLOR = "000000"
 
 
 def build_docx(contenuto_json: dict, context: dict) -> bytes:
@@ -218,6 +234,8 @@ def _add_table(doc: Any, node: dict, context: dict) -> None:
                 cell = cell.merge(end_cell)
             _fill_table_cell(cell, cell_node.get("content", []), context)
             _apply_cell_width(cell, attrs.get("colwidth"))
+            _apply_cell_align(cell, attrs.get("align"))
+            _apply_cell_border_and_background(cell, attrs)
 
 
 def _fill_table_cell(cell: Any, content_nodes: list[dict], context: dict) -> None:
@@ -251,6 +269,55 @@ def _apply_cell_width(cell: Any, colwidth: list[int | None] | None) -> None:
     if not widths:
         return
     cell.width = Emu(sum(widths) * _EMU_PER_PX)
+
+
+def _apply_cell_align(cell: Any, align: str | None) -> None:
+    # Si applica a tutti i paragrafi della cella (inclusi quelli di eventuali
+    # liste annidate): è un attributo di stile a livello di cella, non del
+    # singolo blocco contenuto.
+    for paragraph in cell.paragraphs:
+        _apply_text_align(paragraph, align)
+
+
+def _apply_cell_border_and_background(cell: Any, attrs: dict) -> None:
+    # python-docx non espone un'API di alto livello per bordo/sfondo della
+    # singola cella (solo per lo stile dell'intera tabella), quindi si
+    # manipola direttamente l'XML di tcPr.
+    border_color = validate_hex_color(attrs.get("borderColor"))
+    border_width = attrs.get("borderWidth")
+    valid_width = (
+        border_width
+        if isinstance(border_width, int | float) and border_width > 0
+        else None
+    )
+    background_color = validate_hex_color(attrs.get("backgroundColor"))
+
+    tc_pr = None
+    if border_color or valid_width:
+        sz = (
+            round(valid_width * _EIGHTHS_PT_PER_PX)
+            if valid_width
+            else _DEFAULT_BORDER_SZ
+        )
+        color = border_color or _DEFAULT_BORDER_COLOR
+        tc_pr = cell._tc.get_or_add_tcPr()
+        tc_borders = OxmlElement("w:tcBorders")
+        for edge in _BORDER_EDGES:
+            edge_elem = OxmlElement(f"w:{edge}")
+            edge_elem.set(qn("w:val"), "single")
+            edge_elem.set(qn("w:sz"), str(sz))
+            edge_elem.set(qn("w:color"), color)
+            tc_borders.append(edge_elem)
+        tc_pr.append(tc_borders)
+
+    if background_color:
+        if tc_pr is None:
+            tc_pr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), background_color)
+        tc_pr.append(shd)
 
 
 def _apply_row_height(row: Any, attrs: dict) -> None:
