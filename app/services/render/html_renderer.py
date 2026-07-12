@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import base64
 from html import escape
 
 from app.exceptions.template import TemplateRenderError
 from app.services.render.docx_walker import _resolve_mergefield
 from app.services.render.fonts import sanitize_font_family, validate_hex_color
+from app.services.render.images import ImageAsset
 
 _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 
@@ -44,6 +46,19 @@ _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 #   - attrs.backgroundColor (hex "#RRGGBB", opzionale) su tableCell/
 #     tableHeader: tradotto in background-color CSS, nessuno se
 #     assente/non valido (comportamento attuale)
+#   - image (blocco, non inline): attrs.documentoId (int, riferimento a un
+#     Documento esistente), attrs.width (opzionale, px) e attrs.align
+#     (opzionale, left|center|right, default nessuno). Tradotto in un
+#     <img> con src="data:{mime_type};base64,..." — mime_type preso dal
+#     Documento stesso (già noto tramite il parametro images, non va
+#     indovinato dai byte), avvolto in un <p> con text-align per
+#     l'allineamento. Il contenuto binario va risolto a monte (vedi
+#     TemplateService._load_images) e passato tramite images: dict[int,
+#     ImageAsset] di build_html (chiave = documentoId); se un id
+#     referenziato non è presente in images (es. Documento cancellato dopo
+#     l'inserimento nel template), viene inserito un placeholder testuale
+#     "[immagine non disponibile]" invece di far fallire la generazione —
+#     stesso principio già usato per i mergefield non risolvibili
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
@@ -52,6 +67,7 @@ _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 #   determina il list-style-type CSS, riciclando ogni 3 livelli (bulletList:
 #   disc/circle/square; orderedList: decimal/lower-alpha/lower-roman).
 _VALID_TEXT_ALIGN = {"left", "center", "right", "justify"}
+_VALID_IMAGE_ALIGN = {"left", "center", "right"}
 _BULLET_LIST_MARKERS = ["disc", "circle", "square"]
 _ORDERED_LIST_MARKERS = ["decimal", "lower-alpha", "lower-roman"]
 _TABLE_STYLE = "border-collapse: collapse;"
@@ -68,15 +84,21 @@ _STYLE = """
 """
 
 
-def build_html(contenuto_json: dict, context: dict) -> str:
+def build_html(
+    contenuto_json: dict,
+    context: dict,
+    images: dict[int, ImageAsset] | None = None,
+) -> str:
     """Cammina lo stesso albero ProseMirror/TipTap del docx_walker e produce HTML."""
     if contenuto_json.get("type") != "doc":
         raise TemplateRenderError(
             "Il contenuto del template deve avere type 'doc' come radice"
         )
 
+    images = images or {}
     body = "".join(
-        _render_block(node, context) for node in contenuto_json.get("content", [])
+        _render_block(node, context, images)
+        for node in contenuto_json.get("content", [])
     )
 
     return (
@@ -87,7 +109,7 @@ def build_html(contenuto_json: dict, context: dict) -> str:
     )
 
 
-def _render_block(node: dict, context: dict) -> str:
+def _render_block(node: dict, context: dict, images: dict[int, ImageAsset]) -> str:
     node_type = node.get("type")
     attrs = node.get("attrs", {})
     if node_type == "paragraph":
@@ -99,14 +121,42 @@ def _render_block(node: dict, context: dict) -> str:
         inner = _render_inline_content(node.get("content", []), context)
         return f"<{tag}{_text_align_attr(attrs)}>{inner}</{tag}>"
     elif node_type in ("bulletList", "orderedList"):
-        return _render_list(node, context, depth=0)
+        return _render_list(node, context, depth=0, images=images)
     elif node_type == "table":
-        return _render_table(node, context)
+        return _render_table(node, context, images)
+    elif node_type == "image":
+        return _render_image(node, images)
     else:
         raise TemplateRenderError(f"Tipo di nodo non supportato: {node_type!r}")
 
 
-def _render_list(node: dict, context: dict, depth: int) -> str:
+def _render_image(node: dict, images: dict[int, ImageAsset]) -> str:
+    attrs = node.get("attrs", {})
+    asset = images.get(attrs.get("documentoId"))
+    align_attr = _image_align_attr(attrs.get("align"))
+    if asset is None:
+        return f"<p{align_attr}>[immagine non disponibile]</p>"
+    width = attrs.get("width")
+    width_attr = (
+        f' width="{width}"' if isinstance(width, int | float) and width > 0 else ""
+    )
+    b64 = base64.b64encode(asset.content).decode()
+    return (
+        f"<p{align_attr}>"
+        f'<img src="data:{asset.mime_type};base64,{b64}"{width_attr}>'
+        f"</p>"
+    )
+
+
+def _image_align_attr(align: str | None) -> str:
+    if align not in _VALID_IMAGE_ALIGN or align == "left":
+        return ""
+    return f' style="text-align: {align};"'
+
+
+def _render_list(
+    node: dict, context: dict, depth: int, images: dict[int, ImageAsset]
+) -> str:
     is_ordered = node.get("type") == "orderedList"
     markers = _ORDERED_LIST_MARKERS if is_ordered else _BULLET_LIST_MARKERS
     marker = markers[depth % len(markers)]
@@ -119,43 +169,50 @@ def _render_list(node: dict, context: dict, depth: int) -> str:
             start_attr = f' start="{start}"'
 
     items = "".join(
-        _render_list_item(item, context, depth) for item in node.get("content", [])
+        _render_list_item(item, context, depth, images)
+        for item in node.get("content", [])
     )
     return f'<{tag}{start_attr} style="list-style-type: {marker};">{items}</{tag}>'
 
 
-def _render_list_item(item_node: dict, context: dict, depth: int) -> str:
+def _render_list_item(
+    item_node: dict, context: dict, depth: int, images: dict[int, ImageAsset]
+) -> str:
     inner = "".join(
-        _render_list_item_child(child, context, depth)
+        _render_list_item_child(child, context, depth, images)
         for child in item_node.get("content", [])
     )
     return f"<li>{inner}</li>"
 
 
-def _render_list_item_child(child: dict, context: dict, depth: int) -> str:
+def _render_list_item_child(
+    child: dict, context: dict, depth: int, images: dict[int, ImageAsset]
+) -> str:
     child_type = child.get("type")
     if child_type == "paragraph":
-        return _render_block(child, context)
+        return _render_block(child, context, images)
     elif child_type in ("bulletList", "orderedList"):
-        return _render_list(child, context, depth + 1)
+        return _render_list(child, context, depth + 1, images)
     else:
         raise TemplateRenderError(
             f"Tipo di nodo non supportato dentro listItem: {child_type!r}"
         )
 
 
-def _render_table(node: dict, context: dict) -> str:
-    rows = "".join(_render_table_row(row, context) for row in node.get("content", []))
+def _render_table(node: dict, context: dict, images: dict[int, ImageAsset]) -> str:
+    rows = "".join(
+        _render_table_row(row, context, images) for row in node.get("content", [])
+    )
     return f'<table style="{_TABLE_STYLE}">{rows}</table>'
 
 
-def _render_table_row(row: dict, context: dict) -> str:
+def _render_table_row(row: dict, context: dict, images: dict[int, ImageAsset]) -> str:
     if row.get("type") != "tableRow":
         raise TemplateRenderError(
             f"Tipo di nodo non supportato dentro table: {row.get('type')!r}"
         )
     cells = "".join(
-        _render_table_cell(cell, context) for cell in row.get("content", [])
+        _render_table_cell(cell, context, images) for cell in row.get("content", [])
     )
     style_attr = _row_height_attr(row.get("attrs", {}))
     return f"<tr{style_attr}>{cells}</tr>"
@@ -168,7 +225,9 @@ def _row_height_attr(attrs: dict) -> str:
     return f' style="height: {height}px;"'
 
 
-def _render_table_cell(cell_node: dict, context: dict) -> str:
+def _render_table_cell(
+    cell_node: dict, context: dict, images: dict[int, ImageAsset]
+) -> str:
     cell_type = cell_node.get("type")
     if cell_type not in ("tableCell", "tableHeader"):
         raise TemplateRenderError(
@@ -177,7 +236,7 @@ def _render_table_cell(cell_node: dict, context: dict) -> str:
     tag = "th" if cell_type == "tableHeader" else "td"
     attrs = cell_node.get("attrs", {})
     inner = "".join(
-        _render_block(child, context) for child in cell_node.get("content", [])
+        _render_block(child, context, images) for child in cell_node.get("content", [])
     )
     span_attrs = _table_span_attrs(attrs)
     return f'<{tag} style="{_cell_style(attrs)}"{span_attrs}>{inner}</{tag}>'
