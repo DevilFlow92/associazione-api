@@ -114,7 +114,27 @@ def test_build_docx_mergefield_non_risolvibile():
         ],
     }
     content = build_docx(contenuto, {})
-    assert _read_paragraphs(content) == ["[campo mancante: socio.nome]"]
+    assert _read_paragraphs(content) == [""]
+
+
+def test_build_docx_mergefield_entita_assente_dal_context():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Gentile "},
+                    {
+                        "type": "mergefield",
+                        "attrs": {"chiave": "socio.nome"},
+                    },
+                ],
+            }
+        ],
+    }
+    content = build_docx(contenuto, {"altra_entita": {"campo": "x"}})
+    assert _read_paragraphs(content) == ["Gentile "]
 
 
 def test_build_docx_tipo_nodo_non_supportato():
@@ -166,7 +186,26 @@ def test_build_html_mergefield_non_risolvibile():
         ],
     }
     html = build_html(contenuto, {})
-    assert "[campo mancante: socio.nome]" in html
+    assert "<p></p>" in html
+    assert "campo mancante" not in html
+
+
+def test_build_html_mergefield_entita_assente_dal_context():
+    contenuto = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Gentile "},
+                    {"type": "mergefield", "attrs": {"chiave": "socio.nome"}},
+                ],
+            }
+        ],
+    }
+    html = build_html(contenuto, {"altra_entita": {"campo": "x"}})
+    assert "<p>Gentile </p>" in html
+    assert "campo mancante" not in html
 
 
 def test_build_html_tipo_nodo_non_supportato():
