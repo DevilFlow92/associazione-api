@@ -8,11 +8,15 @@ from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Emu, Inches, RGBColor
+from docx.shared import Emu, Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
 from app.exceptions.template import TemplateRenderError
-from app.services.render.fonts import sanitize_font_family, validate_hex_color
+from app.services.render.fonts import (
+    sanitize_font_family,
+    sanitize_font_size,
+    validate_hex_color,
+)
 from app.services.render.images import ImageAsset
 
 _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
@@ -65,7 +69,9 @@ _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
-#   app.services.render.fonts.SAFE_FONTS, altrimenti ignorato)
+#   app.services.render.fonts.SAFE_FONTS, altrimenti ignorato — e
+#   attrs.fontSize, numero in pt entro [MIN_FONT_SIZE_PT, MAX_FONT_SIZE_PT]
+#   di app.services.render.fonts, altrimenti ignorato)
 # - marcatori di lista "stile Word": il livello di annidamento (0, 1, 2...)
 #   seleziona lo stile built-in di python-docx, riciclando ogni 3 livelli
 #   (bulletList: List Bullet / List Bullet 2 / List Bullet 3; orderedList:
@@ -467,6 +473,10 @@ def _apply_text_style(run: Any, attrs: dict) -> None:
     font_family = sanitize_font_family(attrs.get("fontFamily"))
     if font_family:
         run.font.name = font_family
+
+    font_size = sanitize_font_size(attrs.get("fontSize"))
+    if font_size:
+        run.font.size = Pt(font_size)
 
 
 def _resolve_mergefield(chiave: str, context: dict) -> str:

@@ -5,7 +5,11 @@ from html import escape
 
 from app.exceptions.template import TemplateRenderError
 from app.services.render.docx_walker import _resolve_mergefield
-from app.services.render.fonts import sanitize_font_family, validate_hex_color
+from app.services.render.fonts import (
+    sanitize_font_family,
+    sanitize_font_size,
+    validate_hex_color,
+)
 from app.services.render.images import ImageAsset
 
 _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
@@ -63,7 +67,9 @@ _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
-#   app.services.render.fonts.SAFE_FONTS, altrimenti ignorato)
+#   app.services.render.fonts.SAFE_FONTS, altrimenti ignorato — e
+#   attrs.fontSize, numero in pt entro [MIN_FONT_SIZE_PT, MAX_FONT_SIZE_PT]
+#   di app.services.render.fonts, altrimenti ignorato)
 # - marcatori di lista "stile Word": il livello di annidamento (0, 1, 2...)
 #   determina il list-style-type CSS, riciclando ogni 3 livelli (bulletList:
 #   disc/circle/square; orderedList: decimal/lower-alpha/lower-roman).
@@ -319,6 +325,10 @@ def _wrap_text_style(text: str, attrs: dict) -> str:
     font_family = sanitize_font_family(attrs.get("fontFamily"))
     if font_family:
         declarations.append(f"font-family: {font_family}")
+
+    font_size = sanitize_font_size(attrs.get("fontSize"))
+    if font_size:
+        declarations.append(f"font-size: {font_size}pt")
 
     if not declarations:
         return text
