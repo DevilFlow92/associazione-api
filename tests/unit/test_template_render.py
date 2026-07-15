@@ -417,6 +417,97 @@ def test_build_html_text_style_colore_valido_con_e_senza_hash():
         assert "color: #FF0000" in html
 
 
+def test_build_docx_text_style_font_size_valido():
+    from docx.shared import Pt
+
+    contenuto = _paragrafo_con_text_style({"fontSize": 14})
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.size == Pt(14)
+
+
+def test_build_html_text_style_font_size_valido():
+    contenuto = _paragrafo_con_text_style({"fontSize": 14})
+    html = build_html(contenuto, {})
+    assert '<span style="font-size: 14.0pt;">Colorato</span>' in html
+
+
+@pytest.mark.parametrize("font_size_fuori_range", [200, 2])
+def test_build_docx_text_style_font_size_fuori_range_ignorato(font_size_fuori_range):
+    contenuto = _paragrafo_con_text_style({"fontSize": font_size_fuori_range})
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.size is None
+
+
+@pytest.mark.parametrize("font_size_fuori_range", [200, 2])
+def test_build_html_text_style_font_size_fuori_range_ignorato(font_size_fuori_range):
+    contenuto = _paragrafo_con_text_style({"fontSize": font_size_fuori_range})
+    html = build_html(contenuto, {})
+    assert "font-size:" not in html
+    assert "<span" not in html
+
+
+@pytest.mark.parametrize("font_size_malformato", ["14pt", None, [], {}])
+def test_build_docx_text_style_font_size_malformato_ignorato(font_size_malformato):
+    contenuto = _paragrafo_con_text_style({"fontSize": font_size_malformato})
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.size is None
+
+
+@pytest.mark.parametrize("font_size_malformato", ["14pt", None, [], {}])
+def test_build_html_text_style_font_size_malformato_ignorato(font_size_malformato):
+    contenuto = _paragrafo_con_text_style({"fontSize": font_size_malformato})
+    html = build_html(contenuto, {})
+    assert "font-size:" not in html
+    assert "<span" not in html
+
+
+def test_build_docx_text_style_color_font_e_font_size_insieme():
+    from docx.shared import Pt, RGBColor
+
+    contenuto = _paragrafo_con_text_style(
+        {"color": "#FF0000", "fontFamily": "Arial", "fontSize": 18}
+    )
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.color.rgb == RGBColor.from_string("FF0000")
+    assert run.font.name == "Arial"
+    assert run.font.size == Pt(18)
+
+
+def test_build_html_text_style_color_font_e_font_size_insieme():
+    contenuto = _paragrafo_con_text_style(
+        {"color": "#FF0000", "fontFamily": "Arial", "fontSize": 18}
+    )
+    html = build_html(contenuto, {})
+    expected = (
+        '<span style="color: #FF0000; font-family: Arial; '
+        'font-size: 18.0pt;">Colorato</span>'
+    )
+    assert expected in html
+
+
+def test_build_docx_text_style_senza_font_size_nessuna_regressione():
+    contenuto = _paragrafo_con_text_style({"color": "#FF0000"})
+    content = build_docx(contenuto, {})
+    doc = DocxDocument(io.BytesIO(content))
+    run = doc.paragraphs[0].runs[0]
+    assert run.font.size is None
+
+
+def test_build_html_text_style_senza_font_size_nessuna_regressione():
+    contenuto = _paragrafo_con_text_style({})
+    html = build_html(contenuto, {})
+    assert "<span" not in html
+    assert html.count("Colorato") == 1
+
+
 def _lista_semplice(list_type: str, extra_attrs: dict | None = None) -> dict:
     attrs = extra_attrs or {}
     return {

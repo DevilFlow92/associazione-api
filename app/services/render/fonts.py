@@ -20,12 +20,26 @@ SAFE_FONTS = frozenset(
 
 _HEX_COLOR_PATTERN = re.compile(r"^[0-9A-Fa-f]{6}$")
 
+MIN_FONT_SIZE_PT = 6
+MAX_FONT_SIZE_PT = 96
+
 
 def sanitize_font_family(font_family: str | None) -> str | None:
     """Restituisce ``font_family`` solo se è nella whitelist dei font sicuri,
     altrimenti ``None`` (fallback al font di default)."""
     if font_family in SAFE_FONTS:
         return font_family
+    return None
+
+
+def sanitize_font_size(font_size: object) -> float | None:
+    """Restituisce ``font_size`` (in pt) solo se è un numero valido nel
+    range [MIN_FONT_SIZE_PT, MAX_FONT_SIZE_PT], altrimenti ``None``
+    (fallback al font size di default)."""
+    if isinstance(font_size, bool) or not isinstance(font_size, int | float):
+        return None
+    if MIN_FONT_SIZE_PT <= font_size <= MAX_FONT_SIZE_PT:
+        return float(font_size)
     return None
 
 
