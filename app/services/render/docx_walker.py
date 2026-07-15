@@ -60,8 +60,8 @@ _HEADING_STYLES = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 #     documentoId); se un id referenziato non è presente in images (es.
 #     Documento cancellato dopo l'inserimento nel template), viene inserito
 #     un placeholder testuale "[immagine non disponibile]" invece di far
-#     fallire la generazione — stesso principio già usato per i mergefield
-#     non risolvibili
+#     fallire la generazione (i mergefield non risolvibili invece
+#     producono stringa vuota, senza placeholder)
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
@@ -473,5 +473,5 @@ def _resolve_mergefield(chiave: str, context: dict) -> str:
     entita, _, campo = chiave.partition(".")
     valori = context.get(entita)
     if not valori or campo not in valori or valori[campo] is None:
-        return f"[campo mancante: {chiave}]"
+        return ""
     return str(valori[campo])

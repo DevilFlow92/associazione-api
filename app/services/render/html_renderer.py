@@ -57,8 +57,9 @@ _HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3"}
 #     ImageAsset] di build_html (chiave = documentoId); se un id
 #     referenziato non è presente in images (es. Documento cancellato dopo
 #     l'inserimento nel template), viene inserito un placeholder testuale
-#     "[immagine non disponibile]" invece di far fallire la generazione —
-#     stesso principio già usato per i mergefield non risolvibili
+#     "[immagine non disponibile]" invece di far fallire la generazione
+#     (i mergefield non risolvibili invece producono stringa vuota, senza
+#     placeholder)
 # - nodi inline: text, mergefield (attrs.chiave)
 # - marks su text/mergefield: bold, italic,
 #   textStyle (attrs.color "#RRGGBB", attrs.fontFamily — solo se in
