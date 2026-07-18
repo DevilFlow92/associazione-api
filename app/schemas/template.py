@@ -11,10 +11,12 @@ class TemplateCreate(BaseModel):
     descrizione: str | None = None
     contenuto_json: dict[str, Any]
     entita_richieste: list[str] = []
+    sotto_cartella_id: int | None = None
 
 
 class TemplateGenerateRequest(BaseModel):
     entities: dict[str, int]
+    nome_file: str | None = None
 
 
 class TemplatePreviewRequest(BaseModel):
@@ -27,6 +29,7 @@ class TemplateUpdate(BaseModel):
     descrizione: str | None = None
     contenuto_json: dict[str, Any] | None = None
     entita_richieste: list[str] | None = None
+    sotto_cartella_id: int | None = None
 
 
 class TemplateResponse(BaseModel):
@@ -35,6 +38,7 @@ class TemplateResponse(BaseModel):
     descrizione: str | None
     contenuto_json: dict[str, Any]
     entita_richieste: list[str]
+    sotto_cartella_id: int | None
     creato_il: datetime
     aggiornato_il: datetime
 

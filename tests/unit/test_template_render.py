@@ -7,12 +7,20 @@ import time
 import pytest
 from docx import Document as DocxDocument
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.template import TemplateRenderError
+from app.models.sotto_cartella import SottoCartella
+from app.models.template import Template
 from app.services.render.docx_walker import build_docx
 from app.services.render.html_renderer import build_html
 from app.services.render.images import ImageAsset
 from app.services.render.pdf_renderer import build_pdf
+from app.services.template_service import (
+    _default_filename,
+    _resolve_filename,
+    _sanitize_filename,
+)
 
 # PNG 1x1 pixel valido, usato come contenuto immagine minimale nei test.
 _PNG_1X1 = base64.b64decode(
@@ -1536,3 +1544,178 @@ async def test_generate_pdf_endpoint_forbidden_senza_permesso(client: AsyncClien
         "/api/v1/templates/1/generate/pdf", json={"entities": {}}
     )
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Nome file (default e personalizzato) + sotto_cartella_id
+# ---------------------------------------------------------------------------
+
+
+def _template(nome: str = "Modulo") -> Template:
+    return Template(nome=nome, contenuto_json={}, entita_richieste=[])
+
+
+def test_sanitize_filename_sostituisce_caratteri_non_validi():
+    assert _sanitize_filename('a/b\\c:d*e?f"g<h>i|j') == "a_b_c_d_e_f_g_h_i_j"
+
+
+def test_sanitize_filename_senza_caratteri_non_validi_nessuna_regressione():
+    assert _sanitize_filename("Modulo Iscrizione 2026") == "Modulo Iscrizione 2026"
+
+
+def test_default_filename_con_socio_nel_context():
+    nome = _default_filename(
+        _template("Modulo"), {"socio": {"cognome": "Rossi", "nome": "Mario"}}
+    )
+    assert nome.startswith("Modulo_Rossi_Mario_")
+    timestamp = nome.removeprefix("Modulo_Rossi_Mario_")
+    assert len(timestamp) == len("AAAAMMGG_HHmm")
+    assert timestamp[8] == "_"
+
+
+def test_default_filename_con_esterno_nel_context_se_socio_assente():
+    nome = _default_filename(
+        _template("Modulo"), {"esterno": {"cognome": "Bianchi", "nome": "Luca"}}
+    )
+    assert nome.startswith("Modulo_Bianchi_Luca_")
+
+
+def test_default_filename_priorita_socio_su_esterno():
+    context = {
+        "socio": {"cognome": "Rossi", "nome": "Mario"},
+        "esterno": {"cognome": "Bianchi", "nome": "Luca"},
+    }
+    nome = _default_filename(_template("Modulo"), context)
+    assert nome.startswith("Modulo_Rossi_Mario_")
+
+
+def test_default_filename_senza_socio_ne_esterno():
+    nome = _default_filename(_template("Modulo"), {})
+    assert nome.startswith("Modulo_")
+    assert "Modulo__" not in nome
+
+
+def test_default_filename_sanifica_nome_template_con_caratteri_non_validi():
+    nome = _default_filename(_template("Modulo/Iscrizione"), {})
+    assert "/" not in nome
+    assert nome.startswith("Modulo_Iscrizione_")
+
+
+def test_resolve_filename_usa_nome_file_esplicito_con_estensione_gia_presente():
+    assert _resolve_filename(_template(), {}, "verbale.docx", ".docx") == "verbale.docx"
+
+
+def test_resolve_filename_appende_estensione_se_assente():
+    assert _resolve_filename(_template(), {}, "verbale", ".docx") == "verbale.docx"
+
+
+def test_resolve_filename_sanifica_nome_file_esplicito():
+    assert (
+        _resolve_filename(_template(), {}, "verbale/2026", ".pdf") == "verbale_2026.pdf"
+    )
+
+
+def test_resolve_filename_usa_default_se_nome_file_assente():
+    nome = _resolve_filename(_template("Modulo"), {}, None, ".pdf")
+    assert nome.startswith("Modulo_")
+    assert nome.endswith(".pdf")
+
+
+@pytest.fixture
+async def seeded_sotto_cartella(
+    seeded_macro_sezioni: None, db_session: AsyncSession
+) -> int:
+    sc = SottoCartella(nome="Cartella Generati", macro_sezione_codice=1)
+    db_session.add(sc)
+    await db_session.commit()
+    await db_session.refresh(sc)
+    return sc.id
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_con_nome_file_esplicito(client: AsyncClient):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/docx",
+        json={"entities": {"socio": socio_id}, "nome_file": "Modulo Personalizzato"},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    assert generate_resp.json()["nome"] == "Modulo Personalizzato.docx"
+
+
+@pytest.mark.asyncio
+async def test_generate_pdf_endpoint_con_nome_file_esplicito(client: AsyncClient):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/pdf",
+        json={"entities": {"socio": socio_id}, "nome_file": "Modulo Personalizzato"},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    assert generate_resp.json()["nome"] == "Modulo Personalizzato.pdf"
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_con_nome_file_caratteri_non_validi(
+    client: AsyncClient,
+):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/docx",
+        json={"entities": {"socio": socio_id}, "nome_file": "Modulo/2026:Iscrizione"},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    assert generate_resp.json()["nome"] == "Modulo_2026_Iscrizione.docx"
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_senza_nome_file_usa_default(
+    client: AsyncClient,
+):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/docx",
+        json={"entities": {"socio": socio_id}},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    nome = generate_resp.json()["nome"]
+    assert nome.startswith("Modulo Iscrizione_Rossi_Mario_")
+    assert nome.endswith(".docx")
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_con_sotto_cartella_del_template(
+    client: AsyncClient, seeded_sotto_cartella: int
+):
+    template_id, socio_id = await _create_socio_con_template(client)
+    update_resp = await client.patch(
+        f"/api/v1/templates/{template_id}",
+        json={"sotto_cartella_id": seeded_sotto_cartella},
+    )
+    assert update_resp.status_code == 200, update_resp.text
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/docx",
+        json={"entities": {"socio": socio_id}},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    assert generate_resp.json()["sotto_cartella_id"] == seeded_sotto_cartella
+
+
+@pytest.mark.asyncio
+async def test_generate_docx_endpoint_senza_sotto_cartella_retrocompatibile(
+    client: AsyncClient,
+):
+    template_id, socio_id = await _create_socio_con_template(client)
+
+    generate_resp = await client.post(
+        f"/api/v1/templates/{template_id}/generate/docx",
+        json={"entities": {"socio": socio_id}},
+    )
+    assert generate_resp.status_code == 200, generate_resp.text
+    documento = generate_resp.json()
+    assert documento["sotto_cartella_id"] is None
+    assert documento["nome"].startswith("Modulo Iscrizione_Rossi_Mario_")

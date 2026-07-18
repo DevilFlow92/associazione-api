@@ -141,7 +141,9 @@ async def generate_template_docx(
     service: TemplateService = Depends(get_service),
 ) -> DocumentoResponse:
     try:
-        return await service.generate_docx(template_id, data.entities, db)
+        return await service.generate_docx(
+            template_id, data.entities, db, data.nome_file
+        )
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (SocioNotFoundError, EsternoNotFoundError) as e:
@@ -169,7 +171,9 @@ async def generate_template_pdf(
     service: TemplateService = Depends(get_service),
 ) -> DocumentoResponse:
     try:
-        return await service.generate_pdf(template_id, data.entities, db)
+        return await service.generate_pdf(
+            template_id, data.entities, db, data.nome_file
+        )
     except TemplateNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (SocioNotFoundError, EsternoNotFoundError) as e:

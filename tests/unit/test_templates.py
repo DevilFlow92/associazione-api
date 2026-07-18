@@ -4,12 +4,25 @@ from collections.abc import Collection
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.models.permesso import Permesso
 from app.models.ruolo import Ruolo
+from app.models.sotto_cartella import SottoCartella
 from app.models.utente import TipoUtente, Utente
 from main import app
+
+
+@pytest.fixture
+async def seeded_sotto_cartella(
+    seeded_macro_sezioni: None, db_session: AsyncSession
+) -> int:
+    sc = SottoCartella(nome="Cartella Template", macro_sezione_codice=1)
+    db_session.add(sc)
+    await db_session.commit()
+    await db_session.refresh(sc)
+    return sc.id
 
 
 def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
@@ -49,7 +62,36 @@ async def test_create_template(client: AsyncClient):
     assert data["descrizione"] is None
     assert data["contenuto_json"] == {"type": "doc", "content": []}
     assert data["entita_richieste"] == ["socio", "banda"]
+    assert data["sotto_cartella_id"] is None
     assert "creato_il" in data
+
+
+@pytest.mark.asyncio
+async def test_create_template_con_sotto_cartella_id(
+    client: AsyncClient, seeded_sotto_cartella: int
+):
+    response = await client.post(
+        "/api/v1/templates/",
+        json=template_payload(sotto_cartella_id=seeded_sotto_cartella),
+    )
+    assert response.status_code == 201
+    assert response.json()["sotto_cartella_id"] == seeded_sotto_cartella
+
+
+@pytest.mark.asyncio
+async def test_update_template_sotto_cartella_id(
+    client: AsyncClient, seeded_sotto_cartella: int
+):
+    created = await client.post("/api/v1/templates/", json=template_payload())
+    template_id = created.json()["id"]
+    assert created.json()["sotto_cartella_id"] is None
+
+    response = await client.patch(
+        f"/api/v1/templates/{template_id}",
+        json={"sotto_cartella_id": seeded_sotto_cartella},
+    )
+    assert response.status_code == 200
+    assert response.json()["sotto_cartella_id"] == seeded_sotto_cartella
 
 
 @pytest.mark.asyncio
