@@ -30,7 +30,16 @@ class IscrizioneUpdate(BaseModel):
     note: str | None = None
 
 
+class DocumentoNested(BaseModel):
+    id: int
+    nome: str
+    mime_type: str
+
+    model_config = {"from_attributes": True}
+
+
 class IscrizioneResponse(IscrizioneBase):
     id: int
+    documento: DocumentoNested | None = None
 
     model_config = {"from_attributes": True}
