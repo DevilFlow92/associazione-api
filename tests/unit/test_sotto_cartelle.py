@@ -181,6 +181,37 @@ async def test_delete_sotto_cartella_requires_write_permission(
     assert r.status_code == 403
 
 
+async def test_create_sotto_cartella_template_images_requires_templates_write(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    db_session.add(
+        MacroSezione(
+            codice=5, nome="Template Images", permesso_prefisso="templates", ordine=1
+        )
+    )
+    await db_session.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.post(
+        "/api/v1/sotto-cartelle/",
+        json={"nome": "Test", "macro_sezione_codice": 5},
+    )
+    assert r.status_code == 403
+    assert "templates:write" in r.json()["detail"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"templates:write"}
+    )
+    r = await client.post(
+        "/api/v1/sotto-cartelle/",
+        json={"nome": "Test", "macro_sezione_codice": 5},
+    )
+    assert r.status_code == 201
+    assert r.json()["macro_sezione_codice"] == 5
+
+
 async def test_create_sotto_cartella_unknown_macro_sezione_404(
     client: AsyncClient, seeded_macro_sezioni: None
 ) -> None:
