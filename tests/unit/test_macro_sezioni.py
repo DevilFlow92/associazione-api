@@ -63,3 +63,32 @@ async def test_list_macro_sezioni_ordered_by_ordine(
     assert r.status_code == 200
     ordini = [row["ordine"] for row in r.json()]
     assert ordini == sorted(ordini)
+
+
+async def test_list_macro_sezioni_includes_template_images_first(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    db_session.add_all(
+        [
+            MacroSezione(
+                codice=5,
+                nome="Template Images",
+                permesso_prefisso="templates",
+                ordine=1,
+            ),
+            MacroSezione(
+                codice=1,
+                nome="Certificazioni Uniche",
+                permesso_prefisso="certificazioni",
+                ordine=2,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    r = await client.get("/api/v1/macro-sezioni/")
+    assert r.status_code == 200
+    data = r.json()
+    assert data[0]["nome"] == "Template Images"
+    assert data[0]["permesso_prefisso"] == "templates"
+    assert data[0]["ordine"] == 1
