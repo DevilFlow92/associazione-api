@@ -15,7 +15,8 @@ from app.schemas.iscrizione import IscrizioneCreate, IscrizioneUpdate
 
 def _with_rels():
     return select(Iscrizione).options(
-        selectinload(Iscrizione.socio).selectinload(Socio.persona)
+        selectinload(Iscrizione.socio).selectinload(Socio.persona),
+        selectinload(Iscrizione.documento),
     )
 
 

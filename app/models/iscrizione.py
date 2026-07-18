@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.documento import Documento
     from app.models.socio import Socio
 
 
@@ -51,3 +52,4 @@ class Iscrizione(Base):
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     socio: Mapped[Socio] = relationship(back_populates="iscrizioni")
+    documento: Mapped[Documento | None] = relationship(foreign_keys=[documento_id])
