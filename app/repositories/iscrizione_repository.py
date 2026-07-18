@@ -31,7 +31,7 @@ class IscrizioneRepository:
         offset: int = 0,
         limit: int = 20,
     ) -> list[Iscrizione]:
-        stmt = select(Iscrizione)
+        stmt = select(Iscrizione).options(selectinload(Iscrizione.documento))
         if socio_id is not None:
             stmt = stmt.where(Iscrizione.socio_id == socio_id)
         if anno is not None:
