@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime
+
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.storage import StorageFileNotFoundError, storage
 from app.exceptions.template import TemplateNotFoundError
 from app.mergefields.registry import resolve_context
+from app.models.template import Template
 from app.repositories.documento_repository import DocumentoRepository
 from app.repositories.template_repository import TemplateRepository
 from app.schemas.documento import DocumentoResponse
@@ -19,6 +23,45 @@ _DOCX_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
 _PDF_MIME_TYPE = "application/pdf"
+
+_INVALID_FILENAME_CHARS = re.compile(r'[/\\:*?"<>|]')
+
+
+def _sanitize_filename(nome: str) -> str:
+    return _INVALID_FILENAME_CHARS.sub("_", nome)
+
+
+def _identificativo_da_context(context: dict) -> str | None:
+    """Estrae ``cognome_nome`` dal socio o esterno risolto nel context.
+
+    Priorità: ``socio`` prima di ``esterno``. Restituisce ``None`` se
+    nessuna delle due entità è presente nel context.
+    """
+    persona = context.get("socio") or context.get("esterno")
+    if not persona:
+        return None
+    parti = [persona[campo] for campo in ("cognome", "nome") if persona.get(campo)]
+    return "_".join(parti) if parti else None
+
+
+def _default_filename(template: Template, context: dict) -> str:
+    identificativo = _identificativo_da_context(context)
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M")
+    parti = [template.nome]
+    if identificativo:
+        parti.append(identificativo)
+    parti.append(timestamp)
+    return _sanitize_filename("_".join(parti))
+
+
+def _resolve_filename(
+    template: Template, context: dict, nome_file: str | None, extension: str
+) -> str:
+    if nome_file:
+        stem = _sanitize_filename(nome_file)
+    else:
+        stem = _default_filename(template, context)
+    return stem if stem.lower().endswith(extension) else f"{stem}{extension}"
 
 
 def _find_image_documento_ids(node: dict) -> set[int]:
@@ -90,7 +133,11 @@ class TemplateService:
         return images
 
     async def generate_docx(
-        self, template_id: int, entities: dict[str, int], db: AsyncSession
+        self,
+        template_id: int,
+        entities: dict[str, int],
+        db: AsyncSession,
+        nome_file: str | None = None,
     ) -> DocumentoResponse:
         template = await self.repo.get_by_id(template_id)
         if not template:
@@ -100,7 +147,7 @@ class TemplateService:
         images = await self._load_images(template.contenuto_json)
         content = build_docx(template.contenuto_json, context, images)
 
-        filename = f"{template.nome}.docx"
+        filename = _resolve_filename(template, context, nome_file, ".docx")
         file_path, checksum, dimensione = await storage.save(
             content, "documenti/generati", filename
         )
@@ -110,6 +157,7 @@ class TemplateService:
             mime_type=_DOCX_MIME_TYPE,
             dimensione_bytes=dimensione,
             checksum=checksum,
+            sotto_cartella_id=template.sotto_cartella_id,
         )
         return DocumentoResponse.model_validate(documento)
 
@@ -129,7 +177,11 @@ class TemplateService:
         return build_html(contenuto_json, context, images)
 
     async def generate_pdf(
-        self, template_id: int, entities: dict[str, int], db: AsyncSession
+        self,
+        template_id: int,
+        entities: dict[str, int],
+        db: AsyncSession,
+        nome_file: str | None = None,
     ) -> DocumentoResponse:
         template = await self.repo.get_by_id(template_id)
         if not template:
@@ -140,7 +192,7 @@ class TemplateService:
         html = build_html(template.contenuto_json, context, images)
         content = await build_pdf(html)
 
-        filename = f"{template.nome}.pdf"
+        filename = _resolve_filename(template, context, nome_file, ".pdf")
         file_path, checksum, dimensione = await storage.save(
             content, "documenti/generati", filename
         )
@@ -150,5 +202,6 @@ class TemplateService:
             mime_type=_PDF_MIME_TYPE,
             dimensione_bytes=dimensione,
             checksum=checksum,
+            sotto_cartella_id=template.sotto_cartella_id,
         )
         return DocumentoResponse.model_validate(documento)
