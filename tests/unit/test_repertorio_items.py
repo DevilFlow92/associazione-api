@@ -52,6 +52,8 @@ async def test_create_repertorio_item(client: AsyncClient):
     assert data["nome_parte_id"] == nome_parte["id"]
     assert data["servizio_id"] == servizio["id"]
     assert data["ordine"] == 1
+    assert data["nome_parte"] is not None
+    assert data["nome_parte"]["nome"] == "Marcia Trionfale"
 
 
 @pytest.mark.asyncio
@@ -156,6 +158,8 @@ async def test_update_repertorio_item_ordine(client: AsyncClient):
     data = response.json()
     assert data["ordine"] == 5
     assert data["note"] == "Bis finale"
+    assert data["nome_parte"] is not None
+    assert data["nome_parte"]["nome"] == "Marcia Trionfale"
 
 
 @pytest.mark.asyncio
