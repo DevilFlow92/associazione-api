@@ -3,8 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.exceptions.committente import CommittenteNotFoundError
 from app.exceptions.indirizzo import IndirizzoNotFoundError
 from app.exceptions.servizio import ServizioHasRicevuteError, ServizioNotFoundError
+from app.repositories.committente_repository import CommittenteRepository
 from app.repositories.indirizzo_repository import IndirizzoRepository
 from app.repositories.servizio_repository import ServizioRepository
 from app.schemas.servizio import ServizioCreate, ServizioResponse, ServizioUpdate
@@ -14,7 +16,9 @@ router = APIRouter(prefix="/servizi", tags=["servizi"])
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> ServizioService:
-    return ServizioService(ServizioRepository(db), IndirizzoRepository(db))
+    return ServizioService(
+        ServizioRepository(db), IndirizzoRepository(db), CommittenteRepository(db)
+    )
 
 
 @router.get("/", response_model=PagedResponse[ServizioResponse])
@@ -43,7 +47,7 @@ async def create_servizio(
 ) -> ServizioResponse:
     try:
         return await service.create(data)
-    except IndirizzoNotFoundError as e:
+    except (IndirizzoNotFoundError, CommittenteNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
@@ -55,7 +59,11 @@ async def update_servizio(
 ) -> ServizioResponse:
     try:
         return await service.update(servizio_id, data)
-    except (ServizioNotFoundError, IndirizzoNotFoundError) as e:
+    except (
+        ServizioNotFoundError,
+        IndirizzoNotFoundError,
+        CommittenteNotFoundError,
+    ) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 

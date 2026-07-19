@@ -14,6 +14,7 @@ _LOAD_OPTS = [
     selectinload(Servizio.indirizzo)
     .selectinload(Indirizzo.comune)
     .selectinload(Comune.provincia),
+    selectinload(Servizio.committente),
 ]
 
 

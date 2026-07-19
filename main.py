@@ -9,6 +9,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.bande import public_router as bande_public_router
 from app.api.v1.bande import router as bande_router
 from app.api.v1.check_quote import router as check_quote_router
+from app.api.v1.committenti import router as committenti_router
 from app.api.v1.comuni import router as comuni_router
 from app.api.v1.configurazione_banda_anno import (
     router as configurazione_banda_anno_router,
@@ -207,6 +208,7 @@ _auth = [Depends(get_current_user)]
 # ── Anagrafica (entità core) ─────────────────────────────────────────────────
 app.include_router(persone_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(indirizzi_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(committenti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(contatti_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(soci_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(esterni_router, prefix="/api/v1", dependencies=_auth)

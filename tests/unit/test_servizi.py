@@ -32,6 +32,13 @@ async def create_servizio(client: AsyncClient) -> dict:
     return response.json()
 
 
+async def create_committente(client: AsyncClient, **overrides) -> dict:
+    payload = {"denominazione": "Parrocchia San Giovanni"}
+    payload.update(overrides)
+    response = await client.post("/api/v1/committenti/", json=payload)
+    return response.json()
+
+
 async def create_esterno(client: AsyncClient) -> dict:
     persona = await client.post(
         "/api/v1/persone/",
@@ -64,6 +71,74 @@ async def test_create_servizio(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_servizio_indirizzo_not_found(client: AsyncClient):
     response = await client.post("/api/v1/servizi/", json=servizio_payload(999))
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_servizio_senza_committente(client: AsyncClient):
+    """Un servizio può non avere committente (es. concerto proprio della banda)."""
+    indirizzo = await create_indirizzo(client)
+    response = await client.post(
+        "/api/v1/servizi/", json=servizio_payload(indirizzo["id"])
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["committente_id"] is None
+    assert data["committente"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_servizio_con_committente(client: AsyncClient):
+    indirizzo = await create_indirizzo(client)
+    committente = await create_committente(client)
+    response = await client.post(
+        "/api/v1/servizi/",
+        json=servizio_payload(
+            indirizzo["id"],
+            committente_id=committente["id"],
+            referente="Don Mario",
+            compenso_pattuito=350.0,
+        ),
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["committente_id"] == committente["id"]
+    assert data["referente"] == "Don Mario"
+    assert data["compenso_pattuito"] == 350.0
+    assert data["committente"]["id"] == committente["id"]
+    assert data["committente"]["denominazione"] == "Parrocchia San Giovanni"
+
+
+@pytest.mark.asyncio
+async def test_create_servizio_committente_not_found(client: AsyncClient):
+    indirizzo = await create_indirizzo(client)
+    response = await client.post(
+        "/api/v1/servizi/",
+        json=servizio_payload(indirizzo["id"], committente_id=999),
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_servizio_committente(client: AsyncClient):
+    servizio = await create_servizio(client)
+    committente = await create_committente(client)
+    response = await client.patch(
+        f"/api/v1/servizi/{servizio['id']}",
+        json={"committente_id": committente["id"], "referente": "Don Mario"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["committente_id"] == committente["id"]
+    assert data["referente"] == "Don Mario"
+
+
+@pytest.mark.asyncio
+async def test_update_servizio_committente_not_found(client: AsyncClient):
+    servizio = await create_servizio(client)
+    response = await client.patch(
+        f"/api/v1/servizi/{servizio['id']}", json={"committente_id": 999}
+    )
     assert response.status_code == 404
 
 
