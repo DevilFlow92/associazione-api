@@ -38,8 +38,11 @@ app/
 │       ├── soci.py                        # Members router
 │       ├── esterni.py                     # Externals router
 │       ├── iscrizioni.py                  # Annual subscriptions router
+│       ├── committenti.py                 # Event clients (committenti) router
 │       ├── servizi.py                     # Events router (filterable by year)
 │       ├── ricevute.py                    # Receipts router
+│       ├── presenze.py                    # Attendance / event roster router
+│       ├── repertorio_items.py            # Event programme (repertorio) router
 │       ├── voci_contabilita.py            # Accounting items router
 │       ├── flussi_cassa.py                # Cash-flow movements router
 │       ├── configurazione_banda_anno.py   # Annual band configuration router (year closure)
@@ -62,7 +65,8 @@ app/
 │       ├── tipi_spartito.py               # Score types lookup
 │       ├── stati_iscrizione.py            # Subscription states lookup
 │       ├── documenti.py                   # Documents router (file repository)
-│       ├── spartiti.py                    # Scores router
+│       ├── nome_parti.py                  # Compositions router (score archive, level 1)
+│       ├── spartiti.py                    # Scores router (score archive, level 2)
 │       └── templates.py                   # Templates router
 ├── core/
 │   ├── config.py        # Settings (pydantic-settings)
@@ -109,12 +113,32 @@ the receipt issued for the payment.
 Events and receipts are modelled by **Servizio** (T_Servizi) and **Ricevuta**
 (T_Ricevute). A receipt can cover either an external performer's fee for a
 service (`servizio_id` + `esterno_id`) or a member's annual subscription quota
-(both fields null, referenced from `Iscrizione`).
+(both fields null, referenced from `Iscrizione`). A service may optionally
+reference a **Committente** — the reusable client entity (parrocchia, comune,
+pro-loco, …) that commissioned it; the specific on-site contact for that one
+event lives on `Servizio.referente` instead, since it can change even for
+repeat clients.
 
-**Spartito** archives a musical score: it links to a `Documento` (the PDF file),
-a score type (marcia festiva, inno religioso, …), an optional instrument (null
-means a single PDF containing all parts), and optional physical location
-(scaffale / ripiano / cartella).
+**Presenza** tracks who is called to (and, later, actually attends) a
+service: it links a `Persona` to a `Servizio` (unique per pair), with a
+nullable `stato` (`PRESENTE` / `ASSENTE` / `GIUSTIFICATO`) — null while the
+person is only "in organico" and attendance hasn't been tracked yet.
+`servizio_id` is nullable with a `CHECK` requiring it for now, in
+anticipation of future arcs (`prova_id`, `lezione_id`) once rehearsals and
+lessons are modelled. **RepertorioItem** follows the same exclusive-arc
+pattern to build a service's programme: it links a `NomeParte` to a
+`Servizio` (unique per pair) with an explicit `ordine` (playing position)
+and optional `note` — the first step toward generating the concert
+libretto, which will cross-reference these entries against the `Spartito`
+records and the service's organico.
+
+The score archive is a two-level model: **NomeParte** is the musical
+composition (e.g. "Nessun dorma"), and **Spartito** is one physical/digital
+part of it — it links to a `Documento` (the PDF file), a score type
+(marcia festiva, inno religioso, …), an optional instrument (null means a
+single PDF containing all parts), and optional physical location (scaffale /
+ripiano / cartella). A `NomeParte` can have zero `Spartito` rows (a band can
+register a piece's existence before archiving its files).
 
 **Documento** is a pure file archive — a PDF repository decoupled from the
 membership model, classified by `TipoDocumento`. Other aggregates (Spartito,
@@ -184,6 +208,13 @@ eager-loaded via `selectinload`, so callers receive the city name without an ext
 lookup. This applies to all indirizzo endpoints and to the person's address list
 (`GET /persone/{id}/indirizzi`).
 
+### Committenti
+
+Standard CRUD under `/committenti`: `GET /` (paginated), `GET /{id}`, `POST /`,
+`PATCH /{id}`, `DELETE /{id}` (204; 409 if still referenced by a `Servizio`).
+`Committente.indirizzo_id`, if provided, must reference an existing `Indirizzo`
+(404 otherwise).
+
 ### Servizi · Ricevute (events & receipts)
 
 Standard CRUD under `/servizi` and `/ricevute`. In addition:
@@ -194,11 +225,53 @@ Standard CRUD under `/servizi` and `/ricevute`. In addition:
 | `GET` | `/ricevute/servizio/{servizio_id}` | Receipts for an event (paginated) |
 
 `Servizio` requires an existing `indirizzo_id` (404), and cannot be deleted while
-it has receipts (409). `Ricevuta` supports two use cases: an external
+it has receipts (409). Its optional `committente_id` is validated if provided
+(404). `Ricevuta` supports two use cases: an external
 performer's fee (`servizio_id` + `esterno_id`, both validated if provided) and a
 member's subscription receipt (both omitted, referenced from `Iscrizione`).
 Receipt responses embed the related `esterno` (with its `persona`), eager-loaded
 to avoid N+1 queries.
+
+### Presenze (event roster & attendance)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/presenze/servizio/{servizio_id}` | Roster/attendance for an event (paginated) |
+| `GET` | `/presenze/{id}` | Get a roster entry by ID |
+| `POST` | `/presenze/` | Add a person to an event's roster (`persona_id` + `servizio_id`) |
+| `PATCH` | `/presenze/{id}` | Update `stato` (`PRESENTE`/`ASSENTE`/`GIUSTIFICATO`) and/or `note` |
+| `DELETE` | `/presenze/{id}` | Remove a roster entry (204) |
+
+Requires existing `persona_id` and `servizio_id` (404 otherwise); rejects a
+person appearing twice on the same event's roster (409).
+
+### Repertorio (event programme)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/repertorio/servizio/{servizio_id}` | Programme for an event, ordered by `ordine` (paginated) |
+| `GET` | `/repertorio/{id}` | Get a programme entry by ID |
+| `POST` | `/repertorio/` | Add a piece to an event's programme (`nome_parte_id` + `servizio_id` + `ordine`) |
+| `PATCH` | `/repertorio/{id}` | Update `ordine` and/or `note` |
+| `DELETE` | `/repertorio/{id}` | Remove a programme entry (204) |
+
+Requires existing `nome_parte_id` and `servizio_id` (404 otherwise); rejects the
+same piece appearing twice in the same event's programme (409). `ordine` is not
+DB-unique per event — reordering the programme is expected to be a common
+operation, and enforcing uniqueness would force multi-step shuffles to avoid
+transient conflicts, for a constraint the application layer can keep sane
+either way.
+
+### NomeParti · Spartiti (score archive)
+
+Two-level archive: `NomeParte` is the composition, `Spartito` is one of its
+parts. Standard CRUD under `/nome-parti` and `/spartiti`. In addition:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/nome-parti/?banda_codice={codice}` | List compositions, filterable by `tipo_spartito_codice` / `nome` (paginated) |
+| `POST` | `/nome-parti/{id}/audio` | Attach a reference audio file (upload) |
+| `DELETE` | `/nome-parti/{id}/audio` | Detach the reference audio file (204) |
 
 ### Contabilità (accounting)
 
@@ -578,7 +651,10 @@ For an existing database, run the script's SQL manually as the schema owner.
   externals), annual financial reports populated from contabilità data, and other
   document types. Planned as a separate repository linked to this API.
 - Bulk import of members and externals from Excel files (via async worker)
-- Event management — processioni, concerti, prove — with attendance tracking
+- Rehearsals (`prova`) as a second arc alongside `Servizio` for `Presenza` and
+  `RepertorioItem` (both already carry a nullable `servizio_id` in anticipation)
+- Concert/event programme (libretto) PDF generation, cross-referencing
+  `RepertorioItem` with `Spartito` and the event's organico
 - Receipt generation for externals and event revenues
 - Assembly minutes editor with PDF template rendering
 - Telegram / email notification service

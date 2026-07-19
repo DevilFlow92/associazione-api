@@ -37,6 +37,7 @@ from app.models.relations import (  # noqa: F401
     ruoli_permessi,
     utenti_ruoli,
 )
+from app.models.repertorio_item import RepertorioItem  # noqa: F401
 from app.models.ricevuta import Ricevuta  # noqa: F401
 from app.models.ruolo import Ruolo  # noqa: F401
 from app.models.servizio import Servizio  # noqa: F401
