@@ -30,6 +30,14 @@ class IndirizzoInServizio(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CommittenteInServizio(BaseModel):
+    id: int
+    denominazione: str
+    codice_fiscale_piva: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class ServizioBase(BaseModel):
     banda_codice: int
     anno: int
@@ -37,6 +45,9 @@ class ServizioBase(BaseModel):
     data_servizio: TzNaiveDatetime
     indirizzo_id: int
     note: str | None = None
+    committente_id: int | None = None
+    referente: str | None = None
+    compenso_pattuito: float | None = None
 
 
 class ServizioCreate(ServizioBase):
@@ -50,10 +61,14 @@ class ServizioUpdate(BaseModel):
     data_servizio: TzNaiveDatetime | None = None
     indirizzo_id: int | None = None
     note: str | None = None
+    committente_id: int | None = None
+    referente: str | None = None
+    compenso_pattuito: float | None = None
 
 
 class ServizioResponse(ServizioBase):
     id: int
     indirizzo: IndirizzoInServizio | None = None
+    committente: CommittenteInServizio | None = None
 
     model_config = {"from_attributes": True}

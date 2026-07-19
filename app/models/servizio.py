@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, SmallInteger, String
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.committente import Committente
     from app.models.indirizzo import Indirizzo
     from app.models.ricevuta import Ricevuta
 
@@ -27,8 +28,18 @@ class Servizio(Base):
         ForeignKey("indirizzi.id"), nullable=False
     )
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    committente_id: Mapped[int | None] = mapped_column(
+        ForeignKey("committenti.id"), nullable=True
+    )
+    referente: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    compenso_pattuito: Mapped[float | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
 
     indirizzo: Mapped[Indirizzo] = relationship(
         "Indirizzo", foreign_keys=[indirizzo_id]
+    )
+    committente: Mapped[Committente | None] = relationship(
+        "Committente", foreign_keys=[committente_id]
     )
     ricevute: Mapped[list[Ricevuta]] = relationship(back_populates="servizio")

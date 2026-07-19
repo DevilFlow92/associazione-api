@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 
+from app.exceptions.committente import CommittenteNotFoundError
 from app.exceptions.indirizzo import IndirizzoNotFoundError
 from app.exceptions.servizio import ServizioHasRicevuteError, ServizioNotFoundError
+from app.repositories.committente_repository import CommittenteRepository
 from app.repositories.indirizzo_repository import IndirizzoRepository
 from app.repositories.servizio_repository import ServizioRepository
 from app.schemas.servizio import ServizioCreate, ServizioResponse, ServizioUpdate
@@ -11,10 +13,14 @@ from app.schemas.servizio import ServizioCreate, ServizioResponse, ServizioUpdat
 
 class ServizioService:
     def __init__(
-        self, repo: ServizioRepository, indirizzo_repo: IndirizzoRepository
+        self,
+        repo: ServizioRepository,
+        indirizzo_repo: IndirizzoRepository,
+        committente_repo: CommittenteRepository,
     ) -> None:
         self.repo = repo
         self.indirizzo_repo = indirizzo_repo
+        self.committente_repo = committente_repo
 
     async def get_all(
         self,
@@ -42,6 +48,10 @@ class ServizioService:
         indirizzo = await self.indirizzo_repo.get_by_id(data.indirizzo_id)
         if not indirizzo:
             raise IndirizzoNotFoundError(data.indirizzo_id)
+        if data.committente_id is not None:
+            committente = await self.committente_repo.get_by_id(data.committente_id)
+            if not committente:
+                raise CommittenteNotFoundError(data.committente_id)
         servizio = await self.repo.create(data)
         return ServizioResponse.model_validate(servizio)
 
@@ -53,6 +63,10 @@ class ServizioService:
             indirizzo = await self.indirizzo_repo.get_by_id(data.indirizzo_id)
             if not indirizzo:
                 raise IndirizzoNotFoundError(data.indirizzo_id)
+        if data.committente_id is not None:
+            committente = await self.committente_repo.get_by_id(data.committente_id)
+            if not committente:
+                raise CommittenteNotFoundError(data.committente_id)
         updated = await self.repo.update(servizio, data)
         return ServizioResponse.model_validate(updated)
 
