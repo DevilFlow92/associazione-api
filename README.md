@@ -28,7 +28,8 @@ app/
 ├── api/
 │   ├── deps.py          # Auth dependencies (current user, permission guards)
 │   └── v1/
-│       ├── auth.py                        # Login/logout (sessions), JWT issuance, /me
+│       ├── auth.py                        # Login/logout (sessions), JWT issuance, /me, register, password reset
+│       ├── oauth.py                       # OAuth2 SSO (Google, Facebook, Apple) redirect + callback
 │       ├── utenti.py                      # Users router (humans & service accounts)
 │       ├── ruoli.py                       # Roles router (RBAC)
 │       ├── permessi.py                    # Permissions catalogue (read-only)
@@ -39,7 +40,7 @@ app/
 │       ├── esterni.py                     # Externals router
 │       ├── iscrizioni.py                  # Annual subscriptions router
 │       ├── committenti.py                 # Event clients (committenti) router
-│       ├── servizi.py                     # Events router (filterable by year)
+│       ├── servizi.py                     # Events router (filterable by year) + libretto PDF generation
 │       ├── ricevute.py                    # Receipts router
 │       ├── presenze.py                    # Attendance / event roster router
 │       ├── repertorio_items.py            # Event programme (repertorio) router
@@ -65,21 +66,26 @@ app/
 │       ├── tipi_spartito.py               # Score types lookup
 │       ├── stati_iscrizione.py            # Subscription states lookup
 │       ├── documenti.py                   # Documents router (file repository)
+│       ├── macro_sezioni.py               # Archive macro-sections lookup (read-only, seeded)
+│       ├── sotto_cartelle.py              # User-managed sub-folders inside a macro-section
 │       ├── nome_parti.py                  # Compositions router (score archive, level 1)
 │       ├── spartiti.py                    # Scores router (score archive, level 2)
-│       └── templates.py                   # Templates router
+│       ├── templates.py                   # Templates router: CRUD + HTML preview + DOCX/PDF generation
+│       └── mergefields.py                 # Catalogue of merge fields available to templates
 ├── core/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── database.py      # Async engine & session factory
 │   ├── logging.py       # Shim → associazione_toolkit.logging
 │   ├── middleware.py     # Request ID & timing middleware
 │   ├── security.py      # Password hashing, JWT, session tokens
-│   └── storage.py       # File upload & validation
+│   └── storage.py       # File upload & validation (local filesystem or Cloudflare R2)
 ├── exceptions/          # Domain-specific exceptions
+├── mergefields/          # Per-entity merge-field providers + registry (dynamic templates)
 ├── models/              # SQLAlchemy models (lookups.py + entity modules)
 ├── repositories/        # Data access layer (lookup.py = generic lookup CRUD)
 ├── schemas/             # Pydantic request/response schemas
-└── services/            # Business logic layer (lookup.py = generic lookup CRUD)
+├── services/            # Business logic layer (lookup.py = generic lookup CRUD)
+│   └── render/           # Template rendering pipeline (HTML, DOCX, PDF via paged.js)
 migrations/              # Alembic revisions
 tests/
 ├── unit/
@@ -111,10 +117,18 @@ quota, a payment state, and optional references to the membership document and
 the receipt issued for the payment.
 
 Events and receipts are modelled by **Servizio** (T_Servizi) and **Ricevuta**
-(T_Ricevute). A receipt can cover either an external performer's fee for a
-service (`servizio_id` + `esterno_id`) or a member's annual subscription quota
-(both fields null, referenced from `Iscrizione`). A service may optionally
-reference a **Committente** — the reusable client entity (parrocchia, comune,
+(T_Ricevute). A receipt always refers to a **Persona** — a member or an
+external, whoever is being paid (`persona_id`, generalized from the earlier
+`esterno_id`-only model so a socio can be paid too) — or to neither
+(`servizio_id`/`persona_id` both null, for a member's annual subscription
+quota, referenced from `Iscrizione`). `esterno_id` is still present on the
+table for backward compatibility with historical rows but is no longer
+written by the application; it will be dropped in a future migration once
+the `persona_id` backfill is fully validated. A `tipo_ricevuta`
+(`PAGAMENTO` / `RISCOSSIONE`) distinguishes a fee paid out from a
+collection from a committente; it is nullable because it isn't derivable
+with certainty for older rows. A service may optionally reference a
+**Committente** — the reusable client entity (parrocchia, comune,
 pro-loco, …) that commissioned it; the specific on-site contact for that one
 event lives on `Servizio.referente` instead, since it can change even for
 repeat clients.
@@ -128,9 +142,7 @@ anticipation of future arcs (`prova_id`, `lezione_id`) once rehearsals and
 lessons are modelled. **RepertorioItem** follows the same exclusive-arc
 pattern to build a service's programme: it links a `NomeParte` to a
 `Servizio` (unique per pair) with an explicit `ordine` (playing position)
-and optional `note` — the first step toward generating the concert
-libretto, which will cross-reference these entries against the `Spartito`
-records and the service's organico.
+and optional `note`.
 
 The score archive is a two-level model: **NomeParte** is the musical
 composition (e.g. "Nessun dorma"), and **Spartito** is one physical/digital
@@ -140,13 +152,34 @@ single PDF containing all parts), and optional physical location (scaffale /
 ripiano / cartella). A `NomeParte` can have zero `Spartito` rows (a band can
 register a piece's existence before archiving its files).
 
-**Documento** is a pure file archive — a PDF repository decoupled from the
-membership model, classified by `TipoDocumento`. Other aggregates (Spartito,
-Iscrizione, Ricevuta, Template) reference documents by FK.
+`GET /servizi/{id}/libretto` cross-references `RepertorioItem` (ordered by
+`ordine`) against each person in the event's `Presenza` roster: for every
+piece it picks the `Spartito` matching that person's instrument (resolved
+from `Esterno.strumento_codice`, always set, or `Socio.strumento_codice`,
+optional), falling back to the instrument-agnostic `Spartito` if one
+exists, and merges the resulting PDFs with `pypdf` into a personalized
+booklet. Missing pieces (no matching score, or an instrument that couldn't
+be determined) are never silently dropped — they're reported explicitly
+(a response header for a single person, a JSON manifest entry for the
+whole roster).
 
-**Template** is a lightweight metadata record pointing to a `Documento`. It is
-the foundation of a future dynamic-document system (field configurator + frontend
-renderer for receipts, annual reports, etc.).
+**Documento** is a pure file archive — a PDF repository decoupled from the
+membership model, classified by `TipoDocumento` and optionally filed under a
+**SottoCartella** (a user-created sub-folder inside one of a fixed set of
+seeded **MacroSezione** — e.g. "Certificazioni Uniche", "Verbali" — each
+carrying its own RBAC permission prefix instead of the generic
+`archivio:*`). Other aggregates (Spartito, Iscrizione, Ricevuta, Template)
+reference documents by FK.
+
+**Template** is the dynamic-document system: a JSON-defined document body
+(`contenuto_json`) plus a list of required entity types (`entita_richieste`,
+e.g. `socio`, `servizio`, `ricevuta`), rendered by substituting **merge
+fields** resolved at request time from real records (`app/mergefields/` —
+one provider per entity: banda, socio, esterno, contatto, servizio,
+ricevuta, iscrizione). A template can be previewed as HTML, or generated as
+a DOCX (direct XML manipulation) or a PDF (HTML → paged.js pagination →
+headless-Chromium capture via Playwright); a PDF/DOCX generation persists
+its output as a new `Documento`.
 
 Accounting (contabilità) is modelled by **VoceContabilita** (S_VoceContabilita —
 a band's chart-of-accounts line, classified by rendiconto section/item/sub-item)
@@ -222,15 +255,33 @@ Standard CRUD under `/servizi` and `/ricevute`. In addition:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/servizi/?anno={anno}&banda_codice={codice}` | List events, filterable by year and/or band (paginated) |
+| `GET` | `/servizi/{servizio_id}/libretto?persona_id={id}` | Generate the concert booklet PDF (see below) |
 | `GET` | `/ricevute/servizio/{servizio_id}` | Receipts for an event (paginated) |
 
 `Servizio` requires an existing `indirizzo_id` (404), and cannot be deleted while
 it has receipts (409). Its optional `committente_id` is validated if provided
-(404). `Ricevuta` supports two use cases: an external
-performer's fee (`servizio_id` + `esterno_id`, both validated if provided) and a
-member's subscription receipt (both omitted, referenced from `Iscrizione`).
-Receipt responses embed the related `esterno` (with its `persona`), eager-loaded
-to avoid N+1 queries.
+(404). `Ricevuta` supports two use cases: a fee/collection tied to a person
+(`servizio_id` + `persona_id`, both validated if provided; the person can be a
+member or an external) and a member's subscription receipt (both omitted,
+referenced from `Iscrizione`). Receipt responses embed the related `persona`,
+eager-loaded to avoid N+1 queries.
+
+**`GET /servizi/{servizio_id}/libretto`** merges, for each person in the
+event's roster (`Presenza`), the scores matching their instrument across the
+whole programme (`RepertorioItem`, in `ordine`) into one PDF:
+
+- `?persona_id=` generates a single person's booklet: `Response` with
+  `media_type=application/pdf`; missing pieces (if any) are listed in the
+  `X-Brani-Mancanti` header. `404` if that person has literally no score for
+  any piece in the programme (an empty booklet isn't a valid download), if
+  the person isn't in the roster, or if the event has no roster/programme at
+  all.
+- without `persona_id`, generates the whole roster at once: a ZIP
+  (`application/zip`) with one PDF per person plus a `report.json` listing,
+  per person, missing pieces or a note that no score was found at all for
+  them — a person with an entirely empty booklet doesn't block the ZIP for
+  everyone else, they just get no PDF entry and an explicit `errore` in the
+  report instead.
 
 ### Presenze (event roster & attendance)
 
@@ -357,12 +408,27 @@ decoupled from the membership model.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/documenti/` | List documents (paginated, filterable by `tipo_documento_codice`) |
+| `GET` | `/documenti/` | List documents (paginated, filterable by `tipo_documento_codice`, `sotto_cartella_id`) |
 | `GET` | `/documenti/{id}` | Get a document by ID |
-| `POST` | `/documenti/?tipo_documento_codice={codice}&note={note}` | Upload a PDF document (optional `note`) |
+| `POST` | `/documenti/?tipo_documento_codice={codice}&sotto_cartella_id={id}&note={note}` | Upload a document (any file type; optional `note`) |
 | `GET` | `/documenti/{id}/download` | Download a document as attachment (404 if file missing) |
 | `GET` | `/documenti/{id}/preview` | Preview a document inline (404 if file missing) |
 | `DELETE` | `/documenti/{id}` | Delete a document and its file (204) |
+
+### Macro-sezioni · Sotto-cartelle (archive folders)
+
+The archive is organized in two tiers: a fixed, seeded set of **macro-sezioni**
+(e.g. "Certificazioni Uniche", "Verbali") — each with its own RBAC permission
+prefix instead of the generic `archivio:*` — containing user-managed
+**sotto-cartelle** that documents can be filed under.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/macro-sezioni/` | List the macro-section catalogue (read-only, seeded) |
+| `GET` | `/sotto-cartelle/?macro_sezione_codice={codice}` | List sub-folders in a macro-section |
+| `POST` | `/sotto-cartelle/` | Create a sub-folder (`nome` + `macro_sezione_codice`; 404 if unknown, 409 on duplicate name) |
+| `PATCH` | `/sotto-cartelle/{id}` | Rename a sub-folder |
+| `DELETE` | `/sotto-cartelle/{id}` | Delete a sub-folder (204) |
 
 ### Spartiti
 
@@ -378,19 +444,40 @@ parts) and physical location.
 | `PATCH` | `/spartiti/{id}` | Update score metadata |
 | `DELETE` | `/spartiti/{id}` | Delete a score record (204) |
 
-### Templates
+### Templates (dynamic document rendering)
 
-Lightweight metadata pointing to a `Documento`. Foundation of the future
-dynamic-document system (field configurator + frontend renderer).
+A `Template` holds a JSON document body (`contenuto_json`) and a list of
+required entity types (`entita_richieste`); rendering resolves **merge
+fields** from real records and substitutes them into the body, producing
+HTML, DOCX, or a paginated PDF.
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/templates/` | List templates (paginated, filterable by `documento_id`) |
-| `GET` | `/templates/{id}` | Get a template by ID |
-| `POST` | `/templates/` | Create a template (JSON: `documento_id`, `nome`, `descrizione`) |
-| `PATCH` | `/templates/{id}` | Update template name / description |
-| `GET` | `/templates/{id}/download` | Download the linked document's file (404 if missing) |
-| `DELETE` | `/templates/{id}` | Delete a template record (204; document is preserved) |
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/templates/` | List templates (paginated) | `templates:read` |
+| `GET` | `/templates/{id}` | Get a template by ID | `templates:read` |
+| `POST` | `/templates/` | Create a template (`nome`, `contenuto_json`, `entita_richieste`, optional `sotto_cartella_id`) | `templates:write` |
+| `PATCH` | `/templates/{id}` | Update a template | `templates:write` |
+| `DELETE` | `/templates/{id}` | Delete a template record (204) | `templates:write` |
+| `POST` | `/templates/{id}/preview` | Render `contenuto_json` against the given `entities` (`{entity_name: id}`) and return HTML | `templates:read` |
+| `POST` | `/templates/{id}/generate/docx` | Render the template and persist the result as a new `Documento` (.docx) | `templates:read` |
+| `POST` | `/templates/{id}/generate/pdf` | Render the template and persist the result as a new `Documento` (.pdf, via paged.js + headless Chromium) | `templates:read` |
+
+`generate/*` accepts `entities` (`{entity_name: id}`) and an optional
+`nome_file`; without it, the filename is derived from the template name, the
+resolved socio/esterno identity if present, and a timestamp. `404` if the
+template or a referenced entity doesn't exist; `400` for an entity name not
+covered by any merge-field provider; `422` if rendering itself fails.
+
+### Mergefields
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/mergefields/` | Catalogue of merge fields available per entity (`{chiave, etichetta, tipo}`), for building the template editor UI | `templates:read` |
+
+Each entity (`banda`, `socio`, `esterno`, `contatto`, `servizio`, `ricevuta`,
+`iscrizione`) has a dedicated provider under `app/mergefields/providers/`
+declaring its available fields and how to resolve them from the DB; adding a
+new entity to the template system means adding one provider.
 
 ### Autenticazione & RBAC
 
@@ -402,6 +489,11 @@ Due piani di autenticazione distinti (vedi [Authentication & access](#authentica
 | `POST` | `/auth/logout` | Revoca la sessione corrente e cancella il cookie |
 | `POST` | `/auth/token` | Rilascia un JWT a un *service account* (macchina-a-macchina) |
 | `GET` | `/auth/me` | Profilo, ruoli e permessi dell'utente autenticato |
+| `POST` | `/auth/register` | Auto-registrazione (email + password); assegna il ruolo globale `Ospite` (sola lettura, no contabilità/admin). 409 su email duplicata |
+| `POST` | `/auth/password-reset/request` | Richiede l'invio di un'email di reset password. Risponde sempre 200, anche se l'email non è registrata, per non rivelarne l'esistenza |
+| `POST` | `/auth/password-reset/confirm` | Consuma un token di reset (`token` + `new_password`); 400 se non valido o scaduto |
+| `GET` | `/auth/oauth/{provider}` | Avvia il flusso OAuth2 (`google`, `facebook`, `apple`): redirect 302 al provider |
+| `GET`/`POST` | `/auth/oauth/{provider}/callback` | Callback del provider: crea/collega l'utente e apre una sessione (cookie), poi redirect al frontend |
 
 Gestione utenti, ruoli e permessi (RBAC):
 
@@ -440,17 +532,25 @@ Il sistema RBAC include i seguenti permessi atomici nella forma `risorsa:azione`
 | `servizi:write` | Gestire eventi e ricevute |
 | `archivio:read` | Visualizzare archivio documentale e spartiti |
 | `archivio:write` | Gestire archivio documentale e spartiti |
+| `templates:read` | Visualizzare, previeware e generare documenti dai template |
+| `templates:write` | Gestire template (creazione, modifica, eliminazione) |
+
+Ogni **macro-sezione** dell'archivio (`/macro-sezioni`) porta inoltre un
+proprio prefisso di permesso dedicato (es. `certificazioni:read/write`),
+seedato via migrazione insieme alla macro-sezione stessa, in alternativa al
+generico `archivio:*`.
 
 **Permission enforcement status:**
 
 Currently enforced with `@require_permission()` guards:
 - `utenti:*` on all utenti endpoints
 - `ruoli:*` on all ruoli endpoints
-- `contabilita:*` on contabilità endpoints (`/voci-contabilita`, `/flussi-cassa/trasferimenti`, `/contabilita/rendiconto*`, `/contabilita/check-quote`)
+- `contabilita:*` on contabilità endpoints (`/voci-contabilita`, `/flussi-cassa/trasferimenti`, `/contabilita/rendiconto*`, `/contabilita/check-quote`, `/configurazioni-banda-anno`)
+- `templates:*` on `/templates` (all actions) and `/mergefields`
 - `ruoli:read` on permessi catalogue
 
 Defined but not yet enforced per-endpoint: `anagrafica:*`, `iscrizioni:*`, `servizi:*`, `archivio:*`.
-All domain endpoints still **require authentication** (`Depends(get_current_user)`): without a valid session or JWT, responses are `401`.
+All domain endpoints still **require authentication** (`Depends(get_current_user)`): without a valid session or JWT, responses are `401`. The `Ospite` role seeded for self-registration (`POST /auth/register`) is granted read-only permissions across the board, excluding `contabilita:*` and admin (`utenti:*`/`ruoli:*`).
 
 *Superuser* accounts bypass all permission checks.
 
@@ -550,10 +650,21 @@ This starts PostgreSQL 16 on port `5432` and the API on port `8000`.
 | `JWT_EXPIRE_MINUTES` | `10080` (7 days) | Lifetime of a service-account JWT |
 | `SESSION_EXPIRE_HOURS` | `12` | Lifetime of a human session |
 | `SESSION_COOKIE_NAME` | `session_token` | Name of the session cookie |
-| `SESSION_COOKIE_SECURE` | `false` | Mark the session cookie `Secure` (set `true` behind HTTPS) |
+| `SESSION_COOKIE_SECURE` | `true` | Mark the session cookie `Secure` (must be `true` behind HTTPS) |
+| `SESSION_COOKIE_SAMESITE` | `lax` | `SameSite` attribute of the session cookie (`lax`/`strict`/`none`) |
+| `SESSION_COOKIE_DOMAIN` | _(unset)_ | Cookie domain, needed to share the session across subdomains (e.g. `.cosequences.com`) |
 | `BOOTSTRAP_ADMIN_PASSWORD` | `changeme` | Password for the seeded `admin@cosequences.com` superuser (read by the auth migration) |
 | `APP_RW_PASSWORD` | `app_rw` | Password for the `app_rw` DB role (consumed by `db/01-roles.sh`) |
 | `APP_RO_PASSWORD` | `app_ro` | Password for the `app_ro` DB role (consumed by `db/01-roles.sh`) |
+| `STORAGE_BACKEND` | `local` | File storage backend: `local` (filesystem under `uploads/`) or `r2` (Cloudflare R2, S3-compatible) |
+| `R2_ENDPOINT_URL` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` | _(unset)_ | Required when `STORAGE_BACKEND=r2` |
+| `RESEND_API_KEY` | _(unset)_ | [Resend](https://resend.com) API key for transactional email (password reset); if unset, email sending is a no-op |
+| `EMAIL_FROM` | `noreply@cosequences.com` | From address for transactional email |
+| `FRONTEND_URL` | `https://bandapp.cosequences.com` | Frontend base URL — where OAuth callbacks redirect after login |
+| `API_BASE_URL` | `http://localhost:8000` | This API's own base URL — used to build the OAuth2 `redirect_uri` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | _(unset)_ | Google SSO credentials; `/auth/oauth/google` returns `503` if unset |
+| `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | _(unset)_ | Facebook SSO credentials; `/auth/oauth/facebook` returns `503` if unset |
+| `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | _(unset)_ | Apple "Sign in with Apple" credentials; `/auth/oauth/apple` returns `503` if unset |
 
 ## Database migrations
 
@@ -599,7 +710,8 @@ GitHub Actions runs on every push and pull request to `main`:
 ## Authentication & multi-user access
 
 The API separates two distinct authentication planes. Credentials are managed
-natively (email + bcrypt password hash) — no external OAuth2 provider.
+natively (email + bcrypt password hash), with optional OAuth2 SSO as an
+alternative human login path.
 
 **Machine-to-machine — JWT**
 Service accounts (`tipo = servizio`) for workers, bots, and bulk-import
@@ -610,7 +722,18 @@ services obtain a signed HS256 JWT from `POST /auth/token` and present it as
 Humans (`tipo = umano`) authenticate at `POST /auth/login`; the server opens a
 revocable session and returns an opaque token in the `session_token` cookie
 (only its SHA-256 hash is stored). `POST /auth/logout` revokes it. Sessions are
-revocable and expire after `SESSION_EXPIRE_HOURS`.
+revocable and expire after `SESSION_EXPIRE_HOURS`. Humans can also self-register
+(`POST /auth/register`, granted the read-only `Ospite` role) and reset a
+forgotten password via a one-time emailed token (`POST /auth/password-reset/request`
++ `/confirm`, sent through Resend if `RESEND_API_KEY` is configured).
+
+**Human users — OAuth2 SSO**
+`GET /auth/oauth/{google,facebook,apple}` redirects to the provider; on
+callback the API creates or links an `OAuthAccount` to a `Utente` and opens the
+same kind of server-side session as `/auth/login`, then redirects to
+`FRONTEND_URL`. Each provider is optional and returns `503` until its client
+ID/secret are configured. The `id_token`/claims are currently decoded without
+signature verification (see [Roadmap](#other-planned-features)).
 
 **RBAC — association-configurable**
 A single `Utente` principal (human or service) carries `Ruolo`s, and each role
@@ -620,11 +743,12 @@ permissions a direttivo carica (tesoriere, segretario, presidente, …) gets.
 `superuser` accounts bypass the permission check entirely.
 
 **Tables:** `utenti`, `ruoli`, `permessi`, `ruoli_permessi`, `utenti_ruoli`,
-`sessioni`.
+`sessioni`, `oauth_accounts`, `password_reset_tokens`.
 
 **Bootstrap:** the auth migration seeds the permission catalogue, a global
 `superuser` role, and an `admin@cosequences.com` superuser whose password
-comes from `BOOTSTRAP_ADMIN_PASSWORD` (default `changeme` — change it).
+comes from `BOOTSTRAP_ADMIN_PASSWORD` (default `changeme` — change it). A later
+migration adds the global read-only `Ospite` role used by self-registration.
 
 ### Database users (least-privilege roles)
 
@@ -646,18 +770,27 @@ For an existing database, run the script's SQL manually as the schema owner.
 
 ### Other planned features
 
-- **Dynamic document system** — a field configurator and frontend renderer built
-  on top of the `Template` model. Will support receipts (for members and
-  externals), annual financial reports populated from contabilità data, and other
-  document types. Planned as a separate repository linked to this API.
+- **Dynamic document system** — the backend (`Template` + `app/mergefields/` +
+  HTML/DOCX/PDF rendering) is implemented; still missing a frontend template
+  editor/configurator UI. Existing merge-field providers cover banda, socio,
+  esterno, contatto, servizio, ricevuta, iscrizione — new document types
+  (e.g. annual financial reports populated from contabilità data, assembly
+  minutes) mostly need a new provider plus a template body, not new backend
+  plumbing.
 - Bulk import of members and externals from Excel files (via async worker)
 - Rehearsals (`prova`) as a second arc alongside `Servizio` for `Presenza` and
   `RepertorioItem` (both already carry a nullable `servizio_id` in anticipation)
-- Concert/event programme (libretto) PDF generation, cross-referencing
-  `RepertorioItem` with `Spartito` and the event's organico
-- Receipt generation for externals and event revenues
-- Assembly minutes editor with PDF template rendering
-- Telegram / email notification service
+- Auto-posting of service-related receipts (compensi/riscossioni) to
+  `FlussoCassa`, on the pattern already used for `AUTO_ISCRIZIONE` — needs a
+  new accounting-item configuration primitive (the existing
+  `ConfigurazioneBandaAnno.voce_contabilita_quote_id` only covers membership
+  quotes) plus a rule for which `natura_flusso`/sign to use; deliberately left
+  out of the `Ricevuta.persona_id` generalization pending that design.
+- OAuth `id_token` signature verification (currently decoded without
+  signature check — acceptable short-term since the token arrives directly
+  from the provider over HTTPS in the same request, but should be hardened
+  before wider production reliance)
+- Telegram / email notification service (beyond the password-reset email)
 
 ## Related repositories
 

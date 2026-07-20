@@ -4,7 +4,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.nome_parte import NomeParte
 from app.models.repertorio_item import RepertorioItem
+from app.models.spartito import Spartito
 from app.schemas.repertorio_item import RepertorioItemCreate, RepertorioItemUpdate
 
 _LOAD_OPTS = [selectinload(RepertorioItem.nome_parte)]
@@ -45,6 +47,24 @@ class RepertorioItemRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one()
+
+    async def get_by_servizio_con_spartiti(
+        self, servizio_id: int
+    ) -> list[RepertorioItem]:
+        """Repertorio del servizio, ordinato, con nome_parte.spartiti (e il
+        documento di ciascuno spartito) caricati per il libretto PDF."""
+        stmt = (
+            select(RepertorioItem)
+            .where(RepertorioItem.servizio_id == servizio_id)
+            .options(
+                selectinload(RepertorioItem.nome_parte)
+                .selectinload(NomeParte.spartiti)
+                .selectinload(Spartito.documento)
+            )
+            .order_by(RepertorioItem.ordine)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def create(self, data: RepertorioItemCreate) -> RepertorioItem:
         item = RepertorioItem(**data.model_dump())
