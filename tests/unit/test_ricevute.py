@@ -38,6 +38,23 @@ async def create_esterno(client: AsyncClient, codice: str = "E001") -> dict:
     return response.json()
 
 
+async def create_socio(client: AsyncClient, codice: str = "S001") -> dict:
+    persona = await client.post(
+        "/api/v1/persone/",
+        json={"banda_codice": 1, "nome": "Mario", "cognome": "Rossi"},
+    )
+    response = await client.post(
+        "/api/v1/soci/",
+        json={
+            "persona_id": persona.json()["id"],
+            "codice_socio": codice,
+            "banda_codice": 1,
+            "ruolo_banda_codice": 10,
+        },
+    )
+    return response.json()
+
+
 def ricevuta_payload(**overrides) -> dict:
     payload = {
         "data_ricevuta": "2026-07-21T10:00:00",
@@ -49,23 +66,42 @@ def ricevuta_payload(**overrides) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_create_ricevuta_con_servizio_esterno(client: AsyncClient):
+async def test_create_ricevuta_con_servizio_persona_esterno(client: AsyncClient):
     servizio = await create_servizio(client)
     esterno = await create_esterno(client)
     response = await client.post(
         "/api/v1/ricevute/",
-        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno["id"]),
+        json=ricevuta_payload(
+            servizio_id=servizio["id"], persona_id=esterno["persona_id"]
+        ),
     )
     assert response.status_code == 201
     data = response.json()
     assert data["servizio_id"] == servizio["id"]
-    assert data["esterno_id"] == esterno["id"]
+    assert data["persona_id"] == esterno["persona_id"]
     assert data["importo"] == 150.50
 
 
 @pytest.mark.asyncio
-async def test_create_ricevuta_senza_servizio_esterno(client: AsyncClient):
-    """Ricevuta per quota di iscrizione: servizio/esterno assenti."""
+async def test_create_ricevuta_con_servizio_persona_socio(client: AsyncClient):
+    """Compenso a un socio: prima impossibile via esterno_id, ora percorribile."""
+    servizio = await create_servizio(client)
+    socio = await create_socio(client)
+    response = await client.post(
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(
+            servizio_id=servizio["id"], persona_id=socio["persona_id"]
+        ),
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["servizio_id"] == servizio["id"]
+    assert data["persona_id"] == socio["persona_id"]
+
+
+@pytest.mark.asyncio
+async def test_create_ricevuta_senza_servizio_persona(client: AsyncClient):
+    """Ricevuta per quota di iscrizione: servizio/persona assenti."""
     response = await client.post(
         "/api/v1/ricevute/",
         json=ricevuta_payload(importo=80.0),
@@ -73,7 +109,7 @@ async def test_create_ricevuta_senza_servizio_esterno(client: AsyncClient):
     assert response.status_code == 201
     data = response.json()
     assert data["servizio_id"] is None
-    assert data["esterno_id"] is None
+    assert data["persona_id"] is None
     assert data["importo"] == 80.0
 
 
@@ -82,19 +118,57 @@ async def test_create_ricevuta_servizio_not_found(client: AsyncClient):
     esterno = await create_esterno(client)
     response = await client.post(
         "/api/v1/ricevute/",
-        json=ricevuta_payload(servizio_id=999, esterno_id=esterno["id"]),
+        json=ricevuta_payload(servizio_id=999, persona_id=esterno["persona_id"]),
     )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_create_ricevuta_esterno_not_found(client: AsyncClient):
+async def test_create_ricevuta_persona_not_found(client: AsyncClient):
     servizio = await create_servizio(client)
     response = await client.post(
         "/api/v1/ricevute/",
-        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=999),
+        json=ricevuta_payload(servizio_id=servizio["id"], persona_id=999),
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_ricevuta_tipo_pagamento(client: AsyncClient):
+    servizio = await create_servizio(client)
+    esterno = await create_esterno(client)
+    response = await client.post(
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(
+            servizio_id=servizio["id"],
+            persona_id=esterno["persona_id"],
+            tipo_ricevuta="PAGAMENTO",
+        ),
+    )
+    assert response.status_code == 201
+    assert response.json()["tipo_ricevuta"] == "PAGAMENTO"
+
+
+@pytest.mark.asyncio
+async def test_create_ricevuta_tipo_riscossione(client: AsyncClient):
+    servizio = await create_servizio(client)
+    response = await client.post(
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(servizio_id=servizio["id"], tipo_ricevuta="RISCOSSIONE"),
+    )
+    assert response.status_code == 201
+    assert response.json()["tipo_ricevuta"] == "RISCOSSIONE"
+
+
+@pytest.mark.asyncio
+async def test_create_ricevuta_senza_tipo(client: AsyncClient):
+    """tipo_ricevuta è opzionale: i record storici non sempre lo hanno certo."""
+    response = await client.post(
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(),
+    )
+    assert response.status_code == 201
+    assert response.json()["tipo_ricevuta"] is None
 
 
 @pytest.mark.asyncio
@@ -110,11 +184,15 @@ async def test_get_ricevute_servizio(client: AsyncClient):
     esterno2 = await create_esterno(client, "E002")
     await client.post(
         "/api/v1/ricevute/",
-        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno1["id"]),
+        json=ricevuta_payload(
+            servizio_id=servizio["id"], persona_id=esterno1["persona_id"]
+        ),
     )
     await client.post(
         "/api/v1/ricevute/",
-        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno2["id"]),
+        json=ricevuta_payload(
+            servizio_id=servizio["id"], persona_id=esterno2["persona_id"]
+        ),
     )
     response = await client.get(f"/api/v1/ricevute/servizio/{servizio['id']}")
     assert response.status_code == 200
@@ -133,7 +211,9 @@ async def test_update_ricevuta(client: AsyncClient):
     esterno = await create_esterno(client)
     created = await client.post(
         "/api/v1/ricevute/",
-        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno["id"]),
+        json=ricevuta_payload(
+            servizio_id=servizio["id"], persona_id=esterno["persona_id"]
+        ),
     )
     ricevuta_id = created.json()["id"]
     response = await client.patch(
@@ -149,10 +229,39 @@ async def test_delete_ricevuta(client: AsyncClient):
     esterno = await create_esterno(client)
     created = await client.post(
         "/api/v1/ricevute/",
-        json=ricevuta_payload(servizio_id=servizio["id"], esterno_id=esterno["id"]),
+        json=ricevuta_payload(
+            servizio_id=servizio["id"], persona_id=esterno["persona_id"]
+        ),
     )
     ricevuta_id = created.json()["id"]
     response = await client.delete(f"/api/v1/ricevute/{ricevuta_id}")
     assert response.status_code == 204
     response = await client.get(f"/api/v1/ricevute/{ricevuta_id}")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_iscrizione_ricevuta_flow_invariato(client: AsyncClient):
+    """La quota di iscrizione continua a collegarsi via Iscrizione.ricevuta_id,
+    senza che la ricevuta stessa porti servizio/persona."""
+    socio = await create_socio(client)
+    ricevuta = await client.post(
+        "/api/v1/ricevute/",
+        json=ricevuta_payload(importo=80.0, tipo_ricevuta="RISCOSSIONE"),
+    )
+    assert ricevuta.status_code == 201
+    ricevuta_id = ricevuta.json()["id"]
+
+    iscrizione = await client.post(
+        "/api/v1/iscrizioni/",
+        json={
+            "socio_id": socio["id"],
+            "anno": 2026,
+            "quota_partecipazione": 80.0,
+            "stato_iscrizione_codice": 1,
+            "data_iscrizione": "2026-01-10",
+            "ricevuta_id": ricevuta_id,
+        },
+    )
+    assert iscrizione.status_code == 201
+    assert iscrizione.json()["ricevuta_id"] == ricevuta_id

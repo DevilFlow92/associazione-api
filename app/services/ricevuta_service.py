@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 
-from app.exceptions.esterno import EsternoNotFoundError
+from app.exceptions.persona import PersonaNotFoundError
 from app.exceptions.ricevuta import RicevutaNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
-from app.repositories.esterno_repository import EsternoRepository
+from app.repositories.persona_repository import PersonaRepository
 from app.repositories.ricevuta_repository import RicevutaRepository
 from app.repositories.servizio_repository import ServizioRepository
 from app.schemas.ricevuta import RicevutaCreate, RicevutaResponse, RicevutaUpdate
@@ -16,11 +16,11 @@ class RicevutaService:
         self,
         repo: RicevutaRepository,
         servizio_repo: ServizioRepository,
-        esterno_repo: EsternoRepository,
+        persona_repo: PersonaRepository,
     ) -> None:
         self.repo = repo
         self.servizio_repo = servizio_repo
-        self.esterno_repo = esterno_repo
+        self.persona_repo = persona_repo
 
     async def get_all(self, params: PageParams) -> PagedResponse[RicevutaResponse]:
         ricevute = await self.repo.get_all(offset=params.offset, limit=params.limit)
@@ -48,17 +48,17 @@ class RicevutaService:
         return RicevutaResponse.model_validate(ricevuta)
 
     async def create(self, data: RicevutaCreate) -> RicevutaResponse:
-        # servizio/esterno sono opzionali: una ricevuta può riguardare un
-        # servizio (compenso a un esterno) oppure una quota di iscrizione
-        # (collegata dall'iscrizione). Validati solo se forniti.
+        # servizio/persona sono opzionali: una ricevuta può riguardare un
+        # servizio (compenso a un socio o un esterno) oppure una quota di
+        # iscrizione (collegata dall'iscrizione). Validati solo se forniti.
         if data.servizio_id is not None:
             servizio = await self.servizio_repo.get_by_id(data.servizio_id)
             if not servizio:
                 raise ServizioNotFoundError(data.servizio_id)
-        if data.esterno_id is not None:
-            esterno = await self.esterno_repo.get_by_id(data.esterno_id)
-            if not esterno:
-                raise EsternoNotFoundError(data.esterno_id)
+        if data.persona_id is not None:
+            persona = await self.persona_repo.get_by_id(data.persona_id)
+            if not persona:
+                raise PersonaNotFoundError(data.persona_id)
         ricevuta = await self.repo.create(data)
         return RicevutaResponse.model_validate(ricevuta)
 
