@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.persona import Persona
 from app.models.presenza import Presenza
 from app.schemas.presenza import PresenzaCreate, PresenzaUpdate
 
@@ -40,6 +41,20 @@ class PresenzaRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one()
+
+    async def get_by_servizio_con_strumento(self, servizio_id: int) -> list[Presenza]:
+        """Organico del servizio con persona.soci/persona.esterni caricati,
+        necessari per risalire allo strumento di ciascuna persona (libretto)."""
+        stmt = (
+            select(Presenza)
+            .where(Presenza.servizio_id == servizio_id)
+            .options(
+                selectinload(Presenza.persona).selectinload(Persona.soci),
+                selectinload(Presenza.persona).selectinload(Persona.esterni),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def create(self, data: PresenzaCreate) -> Presenza:
         presenza = Presenza(**data.model_dump())
