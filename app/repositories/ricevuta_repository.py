@@ -4,12 +4,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.esterno import Esterno
 from app.models.ricevuta import Ricevuta
 from app.schemas.ricevuta import RicevutaCreate, RicevutaUpdate
 
 _LOAD_OPTS = [
-    selectinload(Ricevuta.esterno).selectinload(Esterno.persona),
+    selectinload(Ricevuta.persona),
 ]
 
 

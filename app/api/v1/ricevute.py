@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.exceptions.esterno import EsternoNotFoundError
+from app.exceptions.persona import PersonaNotFoundError
 from app.exceptions.ricevuta import RicevutaNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
-from app.repositories.esterno_repository import EsternoRepository
+from app.repositories.persona_repository import PersonaRepository
 from app.repositories.ricevuta_repository import RicevutaRepository
 from app.repositories.servizio_repository import ServizioRepository
 from app.schemas.ricevuta import RicevutaCreate, RicevutaResponse, RicevutaUpdate
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/ricevute", tags=["ricevute"])
 
 def get_service(db: AsyncSession = Depends(get_db)) -> RicevutaService:
     return RicevutaService(
-        RicevutaRepository(db), ServizioRepository(db), EsternoRepository(db)
+        RicevutaRepository(db), ServizioRepository(db), PersonaRepository(db)
     )
 
 
@@ -57,7 +57,7 @@ async def create_ricevuta(
 ) -> RicevutaResponse:
     try:
         return await service.create(data)
-    except (ServizioNotFoundError, EsternoNotFoundError) as e:
+    except (ServizioNotFoundError, PersonaNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
