@@ -356,3 +356,41 @@ async def test_libretto_prova_senza_organico(client: AsyncClient):
 async def test_libretto_prova_not_found(client: AsyncClient):
     response = await client.get("/api/v1/prove/999/libretto")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_libretto_prova_spartito_segnaposto_non_oscura_quello_con_documento(
+    client: AsyncClient,
+):
+    """Regressione: uno Spartito segnaposto senza documento, registrato per
+    lo stesso strumento prima di quello vero (``Spartito`` non ha vincolo di
+    unicità su nome_parte_id+strumento_codice), non deve far risultare il
+    brano "mancante" se esiste un'altra riga con lo stesso strumento e il
+    documento caricato. Stesso bug del path Servizio, riprodotto qui sulla
+    Prova perché è lo scenario segnalato originariamente."""
+    prova = await create_prova(client)
+    persona = await create_persona(client, "Mario", "Trombetta")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    await client.post(
+        "/api/v1/presenze/",
+        json={"persona_id": esterno["persona_id"], "prova_id": prova["id"]},
+    )
+
+    brano = await create_nome_parte(client, "Marcia Trionfale")
+    await client.post(
+        "/api/v1/repertorio/",
+        json={"nome_parte_id": brano["id"], "prova_id": prova["id"], "ordine": 1},
+    )
+
+    # Segnaposto: brano registrato prima di avere il file.
+    await create_spartito(client, brano["id"], None, STRUMENTO_TROMBA)
+    # Spartito vero, aggiunto dopo come riga separata per lo stesso strumento.
+    doc = await upload_documento(client, make_pdf("MARCIA_TROMBA"), "marcia.pdf")
+    await create_spartito(client, brano["id"], doc["id"], STRUMENTO_TROMBA)
+
+    response = await client.get(
+        f"/api/v1/prove/{prova['id']}/libretto",
+        params={"persona_id": esterno["persona_id"]},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"

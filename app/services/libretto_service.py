@@ -68,6 +68,19 @@ def _strumento_di(persona: Persona) -> int | None:
     return None
 
 
+def _migliore_candidato(candidati: list[Spartito]) -> Spartito | None:
+    """Tra più Spartiti dello stesso gruppo (stesso strumento), preferisce
+    quello con un documento caricato: ``Spartito`` non ha vincolo di unicità
+    su (nome_parte_id, strumento_codice), quindi convive con un segnaposto
+    "esiste il brano ma non ancora il file" (workflow esplicitamente
+    supportato, vedi docstring di ``NomeParte``) e la versione con il PDF
+    vero, aggiunta come riga separata invece di aggiornare il segnaposto."""
+    for spartito in candidati:
+        if spartito.documento_id is not None:
+            return spartito
+    return candidati[0] if candidati else None
+
+
 def _spartito_per_strumento(
     spartiti: list[Spartito], strumento_codice: int | None
 ) -> Spartito | None:
@@ -78,13 +91,11 @@ def _spartito_per_strumento(
     che contiene già tutte le parti).
     """
     if strumento_codice is not None:
-        for spartito in spartiti:
-            if spartito.strumento_codice == strumento_codice:
-                return spartito
-    for spartito in spartiti:
-        if spartito.strumento_codice is None:
-            return spartito
-    return None
+        specifici = [s for s in spartiti if s.strumento_codice == strumento_codice]
+        if specifici:
+            return _migliore_candidato(specifici)
+    universali = [s for s in spartiti if s.strumento_codice is None]
+    return _migliore_candidato(universali)
 
 
 class LibrettoService:

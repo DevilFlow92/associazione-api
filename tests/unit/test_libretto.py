@@ -382,3 +382,37 @@ async def test_libretto_persona_senza_nessuno_spartito_download_singolo(
     voce = report["persone"][0]
     assert voce["file"] is None
     assert voce["errore"] == "nessuno spartito trovato"
+
+
+@pytest.mark.asyncio
+async def test_libretto_spartito_segnaposto_non_oscura_quello_con_documento(
+    client: AsyncClient,
+):
+    """``Spartito`` non ha vincolo di unicità su (nome_parte_id,
+    strumento_codice): è possibile registrare prima un segnaposto senza
+    documento ("esiste il brano ma non ancora il file", workflow supportato
+    da NomeParte) e poi aggiungere, come riga separata, lo spartito vero con
+    il PDF per lo stesso strumento. La selezione deve preferire quello con il
+    documento, non il primo della lista."""
+    servizio = await create_servizio(client)
+    persona = await create_persona(client, "Mario", "Trombetta")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    await create_presenza(client, esterno["persona_id"], servizio["id"])
+
+    brano = await create_nome_parte(client, "Marcia Trionfale")
+    await create_repertorio_item(client, servizio["id"], brano["id"], ordine=1)
+
+    # Segnaposto: brano registrato prima di avere il file.
+    await create_spartito(client, brano["id"], None, STRUMENTO_TROMBA)
+    # Spartito vero, aggiunto dopo come riga separata per lo stesso strumento.
+    doc = await upload_documento(client, make_pdf("MARCIA_TROMBA"), "marcia.pdf")
+    await create_spartito(client, brano["id"], doc["id"], STRUMENTO_TROMBA)
+
+    response = await client.get(
+        f"/api/v1/servizi/{servizio['id']}/libretto",
+        params={"persona_id": esterno["persona_id"]},
+    )
+    assert response.status_code == 200
+    pages = pdf_pages_text(response.content)
+    assert len(pages) == 1
+    assert "MARCIA_TROMBA" in pages[0]
