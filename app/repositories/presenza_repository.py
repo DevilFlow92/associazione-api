@@ -56,6 +56,42 @@ class PresenzaRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_by_prova(
+        self, prova_id: int, offset: int = 0, limit: int = 20
+    ) -> list[Presenza]:
+        stmt = (
+            select(Presenza)
+            .where(Presenza.prova_id == prova_id)
+            .options(*_LOAD_OPTS)
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_prova(self, prova_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Presenza)
+            .where(Presenza.prova_id == prova_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
+    async def get_by_prova_con_strumento(self, prova_id: int) -> list[Presenza]:
+        """Analogo a ``get_by_servizio_con_strumento``, per l'organico di una
+        prova."""
+        stmt = (
+            select(Presenza)
+            .where(Presenza.prova_id == prova_id)
+            .options(
+                selectinload(Presenza.persona).selectinload(Persona.soci),
+                selectinload(Presenza.persona).selectinload(Persona.esterni),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def create(self, data: PresenzaCreate) -> Presenza:
         presenza = Presenza(**data.model_dump())
         self.db.add(presenza)

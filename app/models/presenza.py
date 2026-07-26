@@ -10,6 +10,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.persona import Persona
+    from app.models.prova import Prova
     from app.models.servizio import Servizio
 
 
@@ -20,12 +21,14 @@ class StatoPresenza(enum.StrEnum):
 
 
 class Presenza(Base):
-    """Organico e presenza effettiva di una persona a un servizio.
+    """Organico e presenza effettiva di una persona a un servizio o a una prova.
 
     ``stato`` è nullo finché la persona è solo "in organico" e non è ancora
-    stata tracciata la presenza effettiva. ``servizio_id`` è nullable in
-    previsione delle fasi successive (prova_id, lezione_id), ma per ora è
-    sempre valorizzato: il CHECK lo impone finché quelle fasi non arrivano.
+    stata tracciata la presenza effettiva. ``servizio_id`` e ``prova_id``
+    formano un arc esclusivo: esattamente uno dei due deve essere valorizzato
+    (una Presenza appartiene o a un Servizio o a una Prova, mai a entrambi né
+    a nessuno). Il CHECK è espresso con AND/OR anziché con un cast a intero
+    per restare portabile tra PostgreSQL (produzione) e SQLite (test).
     """
 
     __tablename__ = "presenze"
@@ -33,8 +36,11 @@ class Presenza(Base):
         UniqueConstraint(
             "persona_id", "servizio_id", name="uq_presenza_persona_servizio"
         ),
+        UniqueConstraint("persona_id", "prova_id", name="uq_presenza_persona_prova"),
         CheckConstraint(
-            "servizio_id IS NOT NULL", name="ck_presenza_servizio_id_required"
+            "(servizio_id IS NOT NULL AND prova_id IS NULL) OR "
+            "(servizio_id IS NULL AND prova_id IS NOT NULL)",
+            name="ck_presenza_arc_servizio_prova",
         ),
     )
 
@@ -43,6 +49,7 @@ class Presenza(Base):
     servizio_id: Mapped[int | None] = mapped_column(
         ForeignKey("servizi.id"), nullable=True
     )
+    prova_id: Mapped[int | None] = mapped_column(ForeignKey("prove.id"), nullable=True)
     stato: Mapped[StatoPresenza | None] = mapped_column(
         Enum(StatoPresenza, name="stato_presenza"), nullable=True
     )
@@ -50,3 +57,4 @@ class Presenza(Base):
 
     persona: Mapped[Persona] = relationship(foreign_keys=[persona_id])
     servizio: Mapped[Servizio | None] = relationship(foreign_keys=[servizio_id])
+    prova: Mapped[Prova | None] = relationship(foreign_keys=[prova_id])

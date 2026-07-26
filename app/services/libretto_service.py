@@ -8,15 +8,20 @@ from pypdf import PdfWriter
 from app.core.storage import Storage, StorageFileNotFoundError
 from app.exceptions.libretto import (
     PersonaNonInOrganicoError,
+    PersonaNonInOrganicoProvaError,
+    ProvaSenzaOrganicoError,
+    ProvaSenzaRepertorioError,
     ServizioSenzaOrganicoError,
     ServizioSenzaRepertorioError,
 )
+from app.exceptions.prova import ProvaNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
 from app.models.persona import Persona
 from app.models.presenza import Presenza
 from app.models.repertorio_item import RepertorioItem
 from app.models.spartito import Spartito
 from app.repositories.presenza_repository import PresenzaRepository
+from app.repositories.prova_repository import ProvaRepository
 from app.repositories.repertorio_item_repository import RepertorioItemRepository
 from app.repositories.servizio_repository import ServizioRepository
 
@@ -86,38 +91,70 @@ class LibrettoService:
     def __init__(
         self,
         servizio_repo: ServizioRepository,
+        prova_repo: ProvaRepository,
         presenza_repo: PresenzaRepository,
         repertorio_repo: RepertorioItemRepository,
         storage: Storage,
     ) -> None:
         self.servizio_repo = servizio_repo
+        self.prova_repo = prova_repo
         self.presenza_repo = presenza_repo
         self.repertorio_repo = repertorio_repo
         self.storage = storage
 
     async def build(
-        self, servizio_id: int, persona_id: int | None = None
+        self,
+        *,
+        servizio_id: int | None = None,
+        prova_id: int | None = None,
+        persona_id: int | None = None,
     ) -> list[LibrettoPersona]:
-        servizio = await self.servizio_repo.get_by_id(servizio_id)
-        if not servizio:
-            raise ServizioNotFoundError(servizio_id)
+        """Costruisce il libretto per un Servizio o una Prova (mutuamente
+        esclusivi, come l'arc su Presenza/RepertorioItem che li alimenta)."""
+        assert (servizio_id is None) != (prova_id is None)
 
-        presenze = await self.presenza_repo.get_by_servizio_con_strumento(servizio_id)
-        if not presenze:
-            raise ServizioSenzaOrganicoError(servizio_id)
+        presenze, repertorio = await self._fetch_organico_e_repertorio(
+            servizio_id, prova_id
+        )
 
         if persona_id is not None:
             presenze = [p for p in presenze if p.persona_id == persona_id]
             if not presenze:
-                raise PersonaNonInOrganicoError(servizio_id, persona_id)
-
-        repertorio = await self.repertorio_repo.get_by_servizio_con_spartiti(
-            servizio_id
-        )
-        if not repertorio:
-            raise ServizioSenzaRepertorioError(servizio_id)
+                if servizio_id is not None:
+                    raise PersonaNonInOrganicoError(servizio_id, persona_id)
+                assert prova_id is not None
+                raise PersonaNonInOrganicoProvaError(prova_id, persona_id)
 
         return [await self._build_persona(p, repertorio) for p in presenze]
+
+    async def _fetch_organico_e_repertorio(
+        self, servizio_id: int | None, prova_id: int | None
+    ) -> tuple[list[Presenza], list[RepertorioItem]]:
+        if servizio_id is not None:
+            if not await self.servizio_repo.get_by_id(servizio_id):
+                raise ServizioNotFoundError(servizio_id)
+            presenze = await self.presenza_repo.get_by_servizio_con_strumento(
+                servizio_id
+            )
+            if not presenze:
+                raise ServizioSenzaOrganicoError(servizio_id)
+            repertorio = await self.repertorio_repo.get_by_servizio_con_spartiti(
+                servizio_id
+            )
+            if not repertorio:
+                raise ServizioSenzaRepertorioError(servizio_id)
+            return presenze, repertorio
+
+        assert prova_id is not None
+        if not await self.prova_repo.get_by_id(prova_id):
+            raise ProvaNotFoundError(prova_id)
+        presenze = await self.presenza_repo.get_by_prova_con_strumento(prova_id)
+        if not presenze:
+            raise ProvaSenzaOrganicoError(prova_id)
+        repertorio = await self.repertorio_repo.get_by_prova_con_spartiti(prova_id)
+        if not repertorio:
+            raise ProvaSenzaRepertorioError(prova_id)
+        return presenze, repertorio
 
     async def _build_persona(
         self, presenza: Presenza, repertorio: list[RepertorioItem]

@@ -3,10 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.exceptions.prova import ProvaNotFoundError
 from app.exceptions.repertorio_item import RepertorioItemNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
 from app.exceptions.spartito import NomeParteNotFoundError
 from app.repositories.nome_parte_repository import NomeParteRepository
+from app.repositories.prova_repository import ProvaRepository
 from app.repositories.repertorio_item_repository import RepertorioItemRepository
 from app.repositories.servizio_repository import ServizioRepository
 from app.schemas.repertorio_item import (
@@ -21,7 +23,10 @@ router = APIRouter(prefix="/repertorio", tags=["repertorio"])
 
 def get_service(db: AsyncSession = Depends(get_db)) -> RepertorioItemService:
     return RepertorioItemService(
-        RepertorioItemRepository(db), NomeParteRepository(db), ServizioRepository(db)
+        RepertorioItemRepository(db),
+        NomeParteRepository(db),
+        ServizioRepository(db),
+        ProvaRepository(db),
     )
 
 
@@ -36,6 +41,18 @@ async def get_repertorio_servizio(
     try:
         return await service.get_by_servizio(servizio_id, params)
     except ServizioNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.get("/prova/{prova_id}", response_model=PagedResponse[RepertorioItemResponse])
+async def get_repertorio_prova(
+    prova_id: int,
+    params: PageParams = Depends(),
+    service: RepertorioItemService = Depends(get_service),
+) -> PagedResponse[RepertorioItemResponse]:
+    try:
+        return await service.get_by_prova(prova_id, params)
+    except ProvaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
@@ -57,7 +74,7 @@ async def create_repertorio_item(
 ) -> RepertorioItemResponse:
     try:
         return await service.create(data)
-    except (NomeParteNotFoundError, ServizioNotFoundError) as e:
+    except (NomeParteNotFoundError, ServizioNotFoundError, ProvaNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 

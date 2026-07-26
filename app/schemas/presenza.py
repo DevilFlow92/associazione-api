@@ -1,13 +1,22 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.models.presenza import StatoPresenza
 
 
 class PresenzaBase(BaseModel):
-    servizio_id: int
+    servizio_id: int | None = None
+    prova_id: int | None = None
     note: str | None = None
+
+    @model_validator(mode="after")
+    def _arc_esclusivo(self) -> PresenzaBase:
+        if (self.servizio_id is None) == (self.prova_id is None):
+            raise ValueError(
+                "Esattamente uno tra servizio_id e prova_id deve essere valorizzato"
+            )
+        return self
 
 
 class PresenzaCreate(PresenzaBase):
@@ -32,6 +41,7 @@ class PresenzaResponse(BaseModel):
     id: int
     persona_id: int
     servizio_id: int | None = None
+    prova_id: int | None = None
     stato: StatoPresenza | None = None
     note: str | None = None
     persona: PersonaInPresenza | None = None

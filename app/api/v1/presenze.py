@@ -5,9 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.exceptions.persona import PersonaNotFoundError
 from app.exceptions.presenza import PresenzaNotFoundError
+from app.exceptions.prova import ProvaNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.presenza_repository import PresenzaRepository
+from app.repositories.prova_repository import ProvaRepository
 from app.repositories.servizio_repository import ServizioRepository
 from app.schemas.presenza import PresenzaCreate, PresenzaResponse, PresenzaUpdate
 from app.services.presenza_service import PresenzaService
@@ -17,7 +19,10 @@ router = APIRouter(prefix="/presenze", tags=["presenze"])
 
 def get_service(db: AsyncSession = Depends(get_db)) -> PresenzaService:
     return PresenzaService(
-        PresenzaRepository(db), PersonaRepository(db), ServizioRepository(db)
+        PresenzaRepository(db),
+        PersonaRepository(db),
+        ServizioRepository(db),
+        ProvaRepository(db),
     )
 
 
@@ -30,6 +35,18 @@ async def get_organico_servizio(
     try:
         return await service.get_by_servizio(servizio_id, params)
     except ServizioNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.get("/prova/{prova_id}", response_model=PagedResponse[PresenzaResponse])
+async def get_organico_prova(
+    prova_id: int,
+    params: PageParams = Depends(),
+    service: PresenzaService = Depends(get_service),
+) -> PagedResponse[PresenzaResponse]:
+    try:
+        return await service.get_by_prova(prova_id, params)
+    except ProvaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
@@ -49,7 +66,7 @@ async def create_presenza(
 ) -> PresenzaResponse:
     try:
         return await service.create(data)
-    except (PersonaNotFoundError, ServizioNotFoundError) as e:
+    except (PersonaNotFoundError, ServizioNotFoundError, ProvaNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
