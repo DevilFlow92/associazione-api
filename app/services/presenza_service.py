@@ -3,14 +3,22 @@ from __future__ import annotations
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 
 from app.exceptions.persona import PersonaNotFoundError
-from app.exceptions.presenza import PresenzaNotFoundError
+from app.exceptions.presenza import (
+    PresenzaContainerMismatchError,
+    PresenzaNotFoundError,
+)
 from app.exceptions.prova import ProvaNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.presenza_repository import PresenzaRepository
 from app.repositories.prova_repository import ProvaRepository
 from app.repositories.servizio_repository import ServizioRepository
-from app.schemas.presenza import PresenzaCreate, PresenzaResponse, PresenzaUpdate
+from app.schemas.presenza import (
+    PresenzaBulkUpdate,
+    PresenzaCreate,
+    PresenzaResponse,
+    PresenzaUpdate,
+)
 
 
 class PresenzaService:
@@ -80,6 +88,32 @@ class PresenzaService:
             raise PresenzaNotFoundError(presenza_id)
         updated = await self.repo.update(presenza, data)
         return PresenzaResponse.model_validate(updated)
+
+    async def bulk_update(self, data: PresenzaBulkUpdate) -> list[PresenzaResponse]:
+        if not data.items:
+            return []
+
+        presenze_by_id = {
+            p.id: p
+            for p in await self.repo.get_by_ids([i.presenza_id for i in data.items])
+        }
+        for item in data.items:
+            if item.presenza_id not in presenze_by_id:
+                raise PresenzaNotFoundError(item.presenza_id)
+
+        presenze = [presenze_by_id[item.presenza_id] for item in data.items]
+        containers = {(p.servizio_id, p.prova_id) for p in presenze}
+        if len(containers) > 1:
+            raise PresenzaContainerMismatchError()
+
+        updates = [
+            PresenzaUpdate(
+                **item.model_dump(exclude_unset=True, exclude={"presenza_id"})
+            )
+            for item in data.items
+        ]
+        updated = await self.repo.bulk_update(presenze, updates)
+        return [PresenzaResponse.model_validate(p) for p in updated]
 
     async def delete(self, presenza_id: int) -> None:
         presenza = await self.repo.get_by_id(presenza_id)

@@ -154,3 +154,90 @@ async def test_update_presenza_stato(client: AsyncClient):
 async def test_update_presenza_not_found(client: AsyncClient):
     response = await client.patch("/api/v1/presenze/999", json={"stato": "ASSENTE"})
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_presenze_success(client: AsyncClient):
+    servizio = await create_servizio(client)
+    presenze_ids = []
+    for nome in ("Mario", "Luigi", "Peach"):
+        persona = await create_persona(client, nome=nome, cognome="Rossi")
+        created = await client.post(
+            "/api/v1/presenze/", json=presenza_payload(persona["id"], servizio["id"])
+        )
+        presenze_ids.append(created.json()["id"])
+
+    response = await client.patch(
+        "/api/v1/presenze/bulk",
+        json={
+            "items": [{"presenza_id": pid, "stato": "PRESENTE"} for pid in presenze_ids]
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 3
+    assert all(item["stato"] == "PRESENTE" for item in data["items"])
+    assert {item["id"] for item in data["items"]} == set(presenze_ids)
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_presenze_container_mismatch(client: AsyncClient):
+    servizio1 = await create_servizio(client)
+    servizio2 = await create_servizio(client)
+    persona1 = await create_persona(client, nome="Mario", cognome="Rossi")
+    persona2 = await create_persona(client, nome="Luigi", cognome="Bianchi")
+    p1 = await client.post(
+        "/api/v1/presenze/", json=presenza_payload(persona1["id"], servizio1["id"])
+    )
+    p2 = await client.post(
+        "/api/v1/presenze/", json=presenza_payload(persona2["id"], servizio2["id"])
+    )
+    p1_id = p1.json()["id"]
+    p2_id = p2.json()["id"]
+
+    response = await client.patch(
+        "/api/v1/presenze/bulk",
+        json={
+            "items": [
+                {"presenza_id": p1_id, "stato": "PRESENTE"},
+                {"presenza_id": p2_id, "stato": "PRESENTE"},
+            ]
+        },
+    )
+    assert response.status_code == 422
+
+    check1 = await client.get(f"/api/v1/presenze/{p1_id}")
+    check2 = await client.get(f"/api/v1/presenze/{p2_id}")
+    assert check1.json()["stato"] is None
+    assert check2.json()["stato"] is None
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_presenze_id_not_found(client: AsyncClient):
+    servizio = await create_servizio(client)
+    persona = await create_persona(client)
+    created = await client.post(
+        "/api/v1/presenze/", json=presenza_payload(persona["id"], servizio["id"])
+    )
+    presenza_id = created.json()["id"]
+
+    response = await client.patch(
+        "/api/v1/presenze/bulk",
+        json={
+            "items": [
+                {"presenza_id": presenza_id, "stato": "PRESENTE"},
+                {"presenza_id": 999, "stato": "PRESENTE"},
+            ]
+        },
+    )
+    assert response.status_code == 404
+
+    check = await client.get(f"/api/v1/presenze/{presenza_id}")
+    assert check.json()["stato"] is None
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_presenze_empty_list(client: AsyncClient):
+    response = await client.patch("/api/v1/presenze/bulk", json={"items": []})
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
