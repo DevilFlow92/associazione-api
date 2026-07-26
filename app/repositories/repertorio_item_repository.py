@@ -66,6 +66,45 @@ class RepertorioItemRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_by_prova(
+        self, prova_id: int, offset: int = 0, limit: int = 20
+    ) -> list[RepertorioItem]:
+        stmt = (
+            select(RepertorioItem)
+            .where(RepertorioItem.prova_id == prova_id)
+            .options(*_LOAD_OPTS)
+            .order_by(RepertorioItem.ordine)
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_prova(self, prova_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(RepertorioItem)
+            .where(RepertorioItem.prova_id == prova_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
+    async def get_by_prova_con_spartiti(self, prova_id: int) -> list[RepertorioItem]:
+        """Analogo a ``get_by_servizio_con_spartiti``, per il repertorio di una
+        prova."""
+        stmt = (
+            select(RepertorioItem)
+            .where(RepertorioItem.prova_id == prova_id)
+            .options(
+                selectinload(RepertorioItem.nome_parte)
+                .selectinload(NomeParte.spartiti)
+                .selectinload(Spartito.documento)
+            )
+            .order_by(RepertorioItem.ordine)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def create(self, data: RepertorioItemCreate) -> RepertorioItem:
         item = RepertorioItem(**data.model_dump())
         self.db.add(item)

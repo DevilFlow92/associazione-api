@@ -8,30 +8,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.storage import storage
-from app.exceptions.committente import CommittenteNotFoundError
 from app.exceptions.indirizzo import IndirizzoNotFoundError
 from app.exceptions.libretto import (
-    PersonaNonInOrganicoError,
-    ServizioSenzaOrganicoError,
-    ServizioSenzaRepertorioError,
+    PersonaNonInOrganicoProvaError,
+    ProvaSenzaOrganicoError,
+    ProvaSenzaRepertorioError,
 )
-from app.exceptions.servizio import ServizioHasRicevuteError, ServizioNotFoundError
-from app.repositories.committente_repository import CommittenteRepository
+from app.exceptions.prova import ProvaNotFoundError
+from app.exceptions.servizio import ServizioNotFoundError
 from app.repositories.indirizzo_repository import IndirizzoRepository
 from app.repositories.presenza_repository import PresenzaRepository
 from app.repositories.prova_repository import ProvaRepository
 from app.repositories.repertorio_item_repository import RepertorioItemRepository
 from app.repositories.servizio_repository import ServizioRepository
-from app.schemas.servizio import ServizioCreate, ServizioResponse, ServizioUpdate
+from app.schemas.prova import ProvaCreate, ProvaResponse, ProvaUpdate
 from app.services.libretto_service import LibrettoPersona, LibrettoService
-from app.services.servizio_service import ServizioService
+from app.services.prova_service import ProvaService
 
-router = APIRouter(prefix="/servizi", tags=["servizi"])
+router = APIRouter(prefix="/prove", tags=["prove"])
 
 
-def get_service(db: AsyncSession = Depends(get_db)) -> ServizioService:
-    return ServizioService(
-        ServizioRepository(db), IndirizzoRepository(db), CommittenteRepository(db)
+def get_service(db: AsyncSession = Depends(get_db)) -> ProvaService:
+    return ProvaService(
+        ProvaRepository(db), IndirizzoRepository(db), ServizioRepository(db)
     )
 
 
@@ -52,87 +51,77 @@ def _nome_file_persona(libretto: LibrettoPersona) -> str:
     return sicuro.replace(" ", "_") or f"persona_{libretto.persona_id}"
 
 
-@router.get("/", response_model=PagedResponse[ServizioResponse])
-async def list_servizi(
-    anno: int | None = None,
+@router.get("/", response_model=PagedResponse[ProvaResponse])
+async def list_prove(
     banda_codice: int | None = Query(None),
+    servizio_id: int | None = Query(None),
     params: PageParams = Depends(),
-    service: ServizioService = Depends(get_service),
-) -> PagedResponse[ServizioResponse]:
-    return await service.get_all(anno, params, banda_codice=banda_codice)
+    service: ProvaService = Depends(get_service),
+) -> PagedResponse[ProvaResponse]:
+    return await service.get_all(
+        params, banda_codice=banda_codice, servizio_id=servizio_id
+    )
 
 
-@router.get("/{servizio_id}", response_model=ServizioResponse)
-async def get_servizio(
-    servizio_id: int, service: ServizioService = Depends(get_service)
-) -> ServizioResponse:
+@router.get("/{prova_id}", response_model=ProvaResponse)
+async def get_prova(
+    prova_id: int, service: ProvaService = Depends(get_service)
+) -> ProvaResponse:
     try:
-        return await service.get_by_id(servizio_id)
-    except ServizioNotFoundError as e:
+        return await service.get_by_id(prova_id)
+    except ProvaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=ServizioResponse, status_code=status.HTTP_201_CREATED)
-async def create_servizio(
-    data: ServizioCreate, service: ServizioService = Depends(get_service)
-) -> ServizioResponse:
+@router.post("/", response_model=ProvaResponse, status_code=status.HTTP_201_CREATED)
+async def create_prova(
+    data: ProvaCreate, service: ProvaService = Depends(get_service)
+) -> ProvaResponse:
     try:
         return await service.create(data)
-    except (IndirizzoNotFoundError, CommittenteNotFoundError) as e:
+    except (IndirizzoNotFoundError, ServizioNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{servizio_id}", response_model=ServizioResponse)
-async def update_servizio(
-    servizio_id: int,
-    data: ServizioUpdate,
-    service: ServizioService = Depends(get_service),
-) -> ServizioResponse:
+@router.patch("/{prova_id}", response_model=ProvaResponse)
+async def update_prova(
+    prova_id: int,
+    data: ProvaUpdate,
+    service: ProvaService = Depends(get_service),
+) -> ProvaResponse:
     try:
-        return await service.update(servizio_id, data)
-    except (
-        ServizioNotFoundError,
-        IndirizzoNotFoundError,
-        CommittenteNotFoundError,
-    ) as e:
+        return await service.update(prova_id, data)
+    except (ProvaNotFoundError, IndirizzoNotFoundError, ServizioNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{servizio_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_servizio(
-    servizio_id: int, service: ServizioService = Depends(get_service)
+@router.delete("/{prova_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_prova(
+    prova_id: int, service: ProvaService = Depends(get_service)
 ) -> None:
     try:
-        await service.delete(servizio_id)
-    except ServizioNotFoundError as e:
+        await service.delete(prova_id)
+    except ProvaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except ServizioHasRicevuteError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-@router.get("/{servizio_id}/libretto")
+@router.get("/{prova_id}/libretto")
 async def get_libretto(
-    servizio_id: int,
+    prova_id: int,
     persona_id: int | None = Query(
         None, description="Genera il libretto di una sola persona in organico"
     ),
     service: LibrettoService = Depends(get_libretto_service),
 ) -> Response:
-    """Libretto PDF del servizio: le parti di ciascuna persona in organico
-    per i brani del repertorio, nell'ordine del programma.
-
-    Con ``persona_id`` restituisce il PDF della singola persona (eventuali
-    brani mancanti sono segnalati nell'header ``X-Brani-Mancanti``); senza,
-    restituisce uno ZIP con un PDF per persona più un ``report.json`` che
-    elenca, per ciascuna, i brani mancanti o l'assenza totale di spartiti.
-    """
+    """Libretto PDF della prova: stessa logica del libretto di Servizio,
+    riusando organico (Presenza) e repertorio (RepertorioItem) con prova_id."""
     try:
-        risultati = await service.build(servizio_id=servizio_id, persona_id=persona_id)
+        risultati = await service.build(prova_id=prova_id, persona_id=persona_id)
     except (
-        ServizioNotFoundError,
-        ServizioSenzaOrganicoError,
-        ServizioSenzaRepertorioError,
-        PersonaNonInOrganicoError,
+        ProvaNotFoundError,
+        ProvaSenzaOrganicoError,
+        ProvaSenzaRepertorioError,
+        PersonaNonInOrganicoProvaError,
     ) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -143,7 +132,7 @@ async def get_libretto(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=(
                     f"Nessuno spartito trovato per la persona {persona_id} "
-                    f"nel servizio {servizio_id}"
+                    f"nella prova {prova_id}"
                 ),
             )
         headers = {
@@ -161,10 +150,8 @@ async def get_libretto(
             headers=headers,
         )
 
-    # Organico completo: uno ZIP con un PDF per persona + un report.json che
-    # segnala esplicitamente brani mancanti e persone senza alcuno spartito.
     buffer = io.BytesIO()
-    report: dict = {"servizio_id": servizio_id, "persone": []}
+    report: dict = {"prova_id": prova_id, "persone": []}
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for libretto in risultati:
             voce = {
@@ -189,7 +176,7 @@ async def get_libretto(
         media_type="application/zip",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="libretto_servizio_{servizio_id}.zip"'
+                f'attachment; filename="libretto_prova_{prova_id}.zip"'
             )
         },
     )
