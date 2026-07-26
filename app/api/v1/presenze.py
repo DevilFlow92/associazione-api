@@ -4,14 +4,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.exceptions.persona import PersonaNotFoundError
-from app.exceptions.presenza import PresenzaNotFoundError
+from app.exceptions.presenza import (
+    PresenzaContainerMismatchError,
+    PresenzaNotFoundError,
+)
 from app.exceptions.prova import ProvaNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.presenza_repository import PresenzaRepository
 from app.repositories.prova_repository import ProvaRepository
 from app.repositories.servizio_repository import ServizioRepository
-from app.schemas.presenza import PresenzaCreate, PresenzaResponse, PresenzaUpdate
+from app.schemas.presenza import (
+    PresenzaBulkUpdate,
+    PresenzaBulkUpdateResponse,
+    PresenzaCreate,
+    PresenzaResponse,
+    PresenzaUpdate,
+)
 from app.services.presenza_service import PresenzaService
 
 router = APIRouter(prefix="/presenze", tags=["presenze"])
@@ -68,6 +77,22 @@ async def create_presenza(
         return await service.create(data)
     except (PersonaNotFoundError, ServizioNotFoundError, ProvaNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.patch("/bulk", response_model=PresenzaBulkUpdateResponse)
+async def bulk_update_presenze(
+    data: PresenzaBulkUpdate,
+    service: PresenzaService = Depends(get_service),
+) -> PresenzaBulkUpdateResponse:
+    try:
+        items = await service.bulk_update(data)
+        return PresenzaBulkUpdateResponse(items=items)
+    except PresenzaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except PresenzaContainerMismatchError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
 
 
 @router.patch("/{presenza_id}", response_model=PresenzaResponse)

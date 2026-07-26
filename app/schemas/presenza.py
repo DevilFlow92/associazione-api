@@ -47,3 +47,17 @@ class PresenzaResponse(BaseModel):
     persona: PersonaInPresenza | None = None
 
     model_config = {"from_attributes": True}
+
+
+class PresenzaBulkUpdateItem(BaseModel):
+    presenza_id: int
+    stato: StatoPresenza | None = None
+    note: str | None = None
+
+
+class PresenzaBulkUpdate(BaseModel):
+    items: list[PresenzaBulkUpdateItem]
+
+
+class PresenzaBulkUpdateResponse(BaseModel):
+    items: list[PresenzaResponse]
