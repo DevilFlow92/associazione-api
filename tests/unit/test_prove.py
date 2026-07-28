@@ -173,6 +173,27 @@ async def test_update_prova(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_update_prova_aggiunge_indirizzo(client: AsyncClient):
+    """Regressione: stesso bug scoperto in ServizioRepository.update() (la
+    sessione usa expire_on_commit=False, quindi senza un expire esplicito la
+    rilettura post-commit restituisce le relazioni stantie precedenti
+    all'update). Una PATCH che assegna indirizzo_id a una prova che non ne
+    aveva uno deve restituire anche l'oggetto indirizzo annidato popolato."""
+    prova = await create_prova(client)
+    assert prova["indirizzo_id"] is None
+    indirizzo = await create_indirizzo(client)
+
+    response = await client.patch(
+        f"/api/v1/prove/{prova['id']}", json={"indirizzo_id": indirizzo["id"]}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["indirizzo_id"] == indirizzo["id"]
+    assert data["indirizzo"] is not None
+    assert data["indirizzo"]["id"] == indirizzo["id"]
+
+
+@pytest.mark.asyncio
 async def test_delete_prova(client: AsyncClient):
     prova = await create_prova(client)
     response = await client.delete(f"/api/v1/prove/{prova['id']}")

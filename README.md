@@ -770,16 +770,11 @@ For an existing database, run the script's SQL manually as the schema owner.
 
 ### Other planned features
 
-- **Dynamic document system** — the backend (`Template` + `app/mergefields/` +
-  HTML/DOCX/PDF rendering) is implemented; still missing a frontend template
-  editor/configurator UI. Existing merge-field providers cover banda, socio,
-  esterno, contatto, servizio, ricevuta, iscrizione — new document types
-  (e.g. annual financial reports populated from contabilità data, assembly
-  minutes) mostly need a new provider plus a template body, not new backend
-  plumbing.
+- New document types beyond the existing merge-field providers (banda, socio,
+  esterno, contatto, servizio, ricevuta, iscrizione) — e.g. annual financial
+  reports populated from contabilità data, assembly minutes. Mostly need a new
+  provider plus a template body, not new backend plumbing.
 - Bulk import of members and externals from Excel files (via async worker)
-- Rehearsals (`prova`) as a second arc alongside `Servizio` for `Presenza` and
-  `RepertorioItem` (both already carry a nullable `servizio_id` in anticipation)
 - Auto-posting of service-related receipts (compensi/riscossioni) to
   `FlussoCassa`, on the pattern already used for `AUTO_ISCRIZIONE` — needs a
   new accounting-item configuration primitive (the existing
