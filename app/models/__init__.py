@@ -1,6 +1,7 @@
 from app.models.committente import Committente  # noqa: F401
 from app.models.configurazione_banda_anno import ConfigurazioneBandaAnno  # noqa: F401
 from app.models.contatto import Contatto  # noqa: F401
+from app.models.corso import Corso  # noqa: F401
 from app.models.documento import Documento  # noqa: F401
 from app.models.esterno import Esterno  # noqa: F401
 from app.models.flusso_cassa import FlussoCassa  # noqa: F401
@@ -19,6 +20,7 @@ from app.models.lookups import (  # noqa: F401
     Stato,
     StatoIscrizione,
     Strumento,
+    TipoCorso,
     TipoDocumento,
     TipoIndirizzo,
     TipoSpartito,

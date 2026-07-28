@@ -103,10 +103,10 @@ anagrafica entities — **Persona**, **Indirizzo**, **Contatto**, **Socio**,
 `Provincia`, `Comune`), organizational (`Banda`, `Strumento`, `TipoIndirizzo`,
 `RuoloBanda`, `RuoloContatto`), accounting (`SezioneRendiconto`, `VoceRendiconto`,
 `SottovoceRendiconto`, `NaturaFlusso`), and documentary (`TipoDocumento`, `TipoSpartito`,
-`StatoIscrizione`). A person can hold several addresses (many-to-many via `persone_indirizzi`);
+`StatoIscrizione`, `TipoCorso`). A person can hold several addresses (many-to-many via `persone_indirizzi`);
 a band can hold several addresses too (`bande_indirizzi`). Band membership (`banda_codice`)
 is held on **Persona** and inherited by **Socio** and **Esterno** through their person —
-there is no separate band column on those entities. All 16 lookup tables share a
+there is no separate band column on those entities. All 17 lookup tables share a
 generic CRUD stack (`repositories/lookup.py`, `services/lookup.py`) to avoid
 duplication; the generic list supports optional equality filters (used e.g. by
 `/comuni/?provincia_codice=`).
@@ -196,6 +196,16 @@ opening balances, the expected membership quota, and a reference to the
 (`chiuso = True`), all mutations on `FlussoCassa` rows belonging to that
 (banda, anno) pair are blocked with `409`. The year is re-openable by a
 superuser via `POST /{id}/riapri`.
+
+**Corso** models a band's music course for a given year (e.g. brass,
+percussion, woodwind, piano — classified by the **TipoCorso** lookup), with
+an optional **coordinatore** and **insegnante**. Both reference `Persona`
+directly (`coordinatore_persona_id`/`insegnante_persona_id`), not `Socio` —
+the same generalization already used by `Ricevuta.persona_id`, since a
+teacher can be an external hire rather than a member. No uniqueness
+constraint is enforced on `(tipo_corso_codice, anno, banda_codice)`: running
+several parallel courses of the same type in the same year (different
+levels, different teachers) is a legitimate case in this domain.
 
 ## API endpoints
 
@@ -313,6 +323,27 @@ operation, and enforcing uniqueness would force multi-step shuffles to avoid
 transient conflicts, for a constraint the application layer can keep sane
 either way.
 
+### Corsi (music courses)
+
+Standard CRUD under `/corsi`.
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/corsi/?banda_codice={b}&anno={a}&tipo_corso_codice={c}` | List courses, filterable by band, year, and/or type (paginated) | `corsi:read` |
+| `GET` | `/corsi/{id}` | Get a course by ID | `corsi:read` |
+| `POST` | `/corsi/` | Create a course | `corsi:write` |
+| `PATCH` | `/corsi/{id}` | Update a course | `corsi:write` |
+| `DELETE` | `/corsi/{id}` | Delete a course (204) | `corsi:write` |
+
+`Corso` requires an existing `tipo_corso_codice` (404). Its optional
+`coordinatore_persona_id`/`insegnante_persona_id` are validated if provided
+(404) and reference `Persona` directly, not `Socio` — consistent with
+`Ricevuta.persona_id`, since a teacher can be an external hire, not
+necessarily a member. No uniqueness constraint on
+`(tipo_corso_codice, anno, banda_codice)`: parallel courses of the same type
+in the same year (e.g. different levels, different teachers) are a legitimate
+case, not an anomaly to block.
+
 ### NomeParti · Spartiti (score archive)
 
 Two-level archive: `NomeParte` is the composition, `Spartito` is one of its
@@ -378,7 +409,7 @@ Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 `/regioni`, `/province`, `/comuni`, `/strumenti`, `/tipi-indirizzo`, `/bande`,
 `/ruoli-contatto`, `/ruoli-banda`, `/sezioni-rendiconto`, `/voci-rendiconto`,
 `/sottovoci-rendiconto`, `/nature-flusso`, `/tipi-documento`, `/tipi-spartito`,
-`/stati-iscrizione`.
+`/stati-iscrizione`, `/tipi-corso`.
 
 | Method | Path | Description |
 |---|---|---|
@@ -534,6 +565,8 @@ Il sistema RBAC include i seguenti permessi atomici nella forma `risorsa:azione`
 | `archivio:write` | Gestire archivio documentale e spartiti |
 | `templates:read` | Visualizzare, previeware e generare documenti dai template |
 | `templates:write` | Gestire template (creazione, modifica, eliminazione) |
+| `corsi:read` | Visualizzare i corsi musicali |
+| `corsi:write` | Gestire i corsi musicali |
 
 Ogni **macro-sezione** dell'archivio (`/macro-sezioni`) porta inoltre un
 proprio prefisso di permesso dedicato (es. `certificazioni:read/write`),

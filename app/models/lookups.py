@@ -140,3 +140,8 @@ class TipoSpartito(LookupBase):
 
 class StatoIscrizione(LookupBase):
     __tablename__ = "stati_iscrizione"
+
+
+# ── Corsi musicali (Fase 3) ──────────────────────────────────────────────────
+class TipoCorso(LookupBase):
+    __tablename__ = "tipi_corso"
