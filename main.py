@@ -15,6 +15,7 @@ from app.api.v1.configurazione_banda_anno import (
     router as configurazione_banda_anno_router,
 )
 from app.api.v1.contatti import router as contatti_router
+from app.api.v1.corsi import router as corsi_router
 from app.api.v1.documenti import router as documenti_router
 from app.api.v1.esterni import router as esterni_router
 from app.api.v1.flussi_cassa import router as flussi_cassa_router
@@ -47,6 +48,7 @@ from app.api.v1.stati import router as stati_router
 from app.api.v1.stati_iscrizione import router as stati_iscrizione_router
 from app.api.v1.strumenti import router as strumenti_router
 from app.api.v1.templates import router as template_router
+from app.api.v1.tipi_corso import router as tipi_corso_router
 from app.api.v1.tipi_documento import router as tipi_documento_router
 from app.api.v1.tipi_indirizzo import router as tipi_indirizzo_router
 from app.api.v1.tipi_spartito import router as tipi_spartito_router
@@ -224,6 +226,9 @@ app.include_router(ricevute_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(presenze_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(repertorio_items_router, prefix="/api/v1", dependencies=_auth)
 
+# ── Corsi musicali ───────────────────────────────────────────────────────────
+app.include_router(corsi_router, prefix="/api/v1", dependencies=_auth)
+
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(flussi_cassa_router, prefix="/api/v1", dependencies=_auth)
@@ -251,6 +256,7 @@ app.include_router(nature_flusso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(tipi_documento_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(tipi_spartito_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(stati_iscrizione_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(tipi_corso_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Archivio documentale (file) ──────────────────────────────────────────────
 app.include_router(documenti_router, prefix="/api/v1", dependencies=_auth)
