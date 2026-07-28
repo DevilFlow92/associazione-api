@@ -43,7 +43,7 @@ class ServizioBase(BaseModel):
     anno: int
     descrizione_servizio: str
     data_servizio: TzNaiveDatetime
-    indirizzo_id: int
+    indirizzo_id: int | None = None
     note: str | None = None
     committente_id: int | None = None
     referente: str | None = None

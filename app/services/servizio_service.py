@@ -45,9 +45,10 @@ class ServizioService:
         return ServizioResponse.model_validate(servizio)
 
     async def create(self, data: ServizioCreate) -> ServizioResponse:
-        indirizzo = await self.indirizzo_repo.get_by_id(data.indirizzo_id)
-        if not indirizzo:
-            raise IndirizzoNotFoundError(data.indirizzo_id)
+        if data.indirizzo_id is not None:
+            indirizzo = await self.indirizzo_repo.get_by_id(data.indirizzo_id)
+            if not indirizzo:
+                raise IndirizzoNotFoundError(data.indirizzo_id)
         if data.committente_id is not None:
             committente = await self.committente_repo.get_by_id(data.committente_id)
             if not committente:

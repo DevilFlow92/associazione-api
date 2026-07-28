@@ -77,6 +77,13 @@ class ServizioRepository:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(servizio, field, value)
         await self.db.commit()
+        # La sessione usa expire_on_commit=False: senza expire esplicito
+        # l'istanza resta nell'identity map con le relazioni caricate *prima*
+        # dell'update, e ``get_by_id`` non le sovrascriverebbe. La risposta
+        # conterrebbe così un ``indirizzo``/``committente`` stantio rispetto
+        # alla FK appena scritta (es. null su un servizio a cui l'indirizzo è
+        # stato appena assegnato).
+        self.db.expire(servizio)
         result = await self.get_by_id(servizio_id)
         assert result is not None
         return result

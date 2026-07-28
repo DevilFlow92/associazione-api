@@ -15,6 +15,13 @@ if TYPE_CHECKING:
 
 
 class Servizio(Base):
+    """Servizio della banda (concerto, processione, evento).
+
+    ``indirizzo_id`` è nullable, come per ``Prova``: un servizio può essere
+    organizzato rapidamente senza che il luogo sia ancora stato deciso, e
+    l'indirizzo essere confermato in un secondo momento.
+    """
+
     __tablename__ = "servizi"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -24,8 +31,8 @@ class Servizio(Base):
     anno: Mapped[int] = mapped_column(Integer, nullable=False)
     descrizione_servizio: Mapped[str] = mapped_column(String(255))
     data_servizio: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    indirizzo_id: Mapped[int] = mapped_column(
-        ForeignKey("indirizzi.id"), nullable=False
+    indirizzo_id: Mapped[int | None] = mapped_column(
+        ForeignKey("indirizzi.id"), nullable=True
     )
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     committente_id: Mapped[int | None] = mapped_column(
@@ -36,7 +43,7 @@ class Servizio(Base):
         Numeric(10, 2), nullable=True
     )
 
-    indirizzo: Mapped[Indirizzo] = relationship(
+    indirizzo: Mapped[Indirizzo | None] = relationship(
         "Indirizzo", foreign_keys=[indirizzo_id]
     )
     committente: Mapped[Committente | None] = relationship(
