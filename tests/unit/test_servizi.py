@@ -12,14 +12,15 @@ async def create_indirizzo(client: AsyncClient) -> dict:
     return response.json()
 
 
-def servizio_payload(indirizzo_id: int, **overrides) -> dict:
+def servizio_payload(indirizzo_id: int | None = None, **overrides) -> dict:
     payload = {
         "banda_codice": 1,
         "anno": 2026,
         "descrizione_servizio": "Processione Sant'Antonio",
         "data_servizio": "2026-06-13T18:00:00",
-        "indirizzo_id": indirizzo_id,
     }
+    if indirizzo_id is not None:
+        payload["indirizzo_id"] = indirizzo_id
     payload.update(overrides)
     return payload
 
@@ -66,12 +67,49 @@ async def test_create_servizio(client: AsyncClient):
     assert data["descrizione_servizio"] == "Processione Sant'Antonio"
     assert data["anno"] == 2026
     assert data["indirizzo_id"] == indirizzo["id"]
+    assert data["indirizzo"]["id"] == indirizzo["id"]
 
 
 @pytest.mark.asyncio
 async def test_create_servizio_indirizzo_not_found(client: AsyncClient):
     response = await client.post("/api/v1/servizi/", json=servizio_payload(999))
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_servizio_senza_indirizzo(client: AsyncClient):
+    """Un servizio può nascere senza indirizzo (luogo da confermare dopo)."""
+    response = await client.post("/api/v1/servizi/", json=servizio_payload())
+    assert response.status_code == 201
+    data = response.json()
+    assert data["indirizzo_id"] is None
+    assert data["indirizzo"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_servizio_senza_indirizzo(client: AsyncClient):
+    """Anche in lettura l'indirizzo assente è serializzato come null."""
+    creato = await client.post("/api/v1/servizi/", json=servizio_payload())
+    response = await client.get(f"/api/v1/servizi/{creato.json()['id']}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["indirizzo_id"] is None
+    assert data["indirizzo"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_servizio_aggiunge_indirizzo(client: AsyncClient):
+    """L'indirizzo confermato in un secondo momento si aggancia via PATCH."""
+    creato = await client.post("/api/v1/servizi/", json=servizio_payload())
+    indirizzo = await create_indirizzo(client)
+    response = await client.patch(
+        f"/api/v1/servizi/{creato.json()['id']}",
+        json={"indirizzo_id": indirizzo["id"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["indirizzo_id"] == indirizzo["id"]
+    assert data["indirizzo"]["id"] == indirizzo["id"]
 
 
 @pytest.mark.asyncio

@@ -384,6 +384,27 @@ async def test_servizio_provider_resolve(client: AsyncClient, db_session: AsyncS
 
 
 @pytest.mark.asyncio
+async def test_servizio_provider_resolve_senza_indirizzo(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """Un servizio senza indirizzo risolve ``indirizzo_completo`` a None."""
+    resp = await client.post(
+        "/api/v1/servizi/",
+        json={
+            "banda_codice": 1,
+            "anno": 2026,
+            "descrizione_servizio": "Concerto estivo",
+            "data_servizio": "2026-07-20T21:00:00",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    result = await ServizioProvider().resolve(resp.json()["id"], db_session)
+    assert result["indirizzo_completo"] is None
+    assert result["descrizione_servizio"] == "Concerto estivo"
+
+
+@pytest.mark.asyncio
 async def test_ricevuta_provider_resolve(client: AsyncClient, db_session: AsyncSession):
     servizio = await _create_servizio(client)
 
