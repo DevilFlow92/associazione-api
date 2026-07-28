@@ -68,6 +68,13 @@ class ProvaRepository:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(prova, field, value)
         await self.db.commit()
+        # La sessione usa expire_on_commit=False: senza expire esplicito
+        # l'istanza resta nell'identity map con le relazioni caricate *prima*
+        # dell'update, e ``get_by_id`` non le sovrascriverebbe. La risposta
+        # conterrebbe così un ``indirizzo``/``servizio`` stantio rispetto alla
+        # FK appena scritta (es. null su una prova a cui l'indirizzo è stato
+        # appena assegnato).
+        self.db.expire(prova)
         result = await self.get_by_id(prova_id)
         assert result is not None
         return result
