@@ -92,6 +92,28 @@ class PresenzaRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_by_lezione(
+        self, lezione_id: int, offset: int = 0, limit: int = 20
+    ) -> list[Presenza]:
+        stmt = (
+            select(Presenza)
+            .where(Presenza.lezione_id == lezione_id)
+            .options(*_LOAD_OPTS)
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_lezione(self, lezione_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Presenza)
+            .where(Presenza.lezione_id == lezione_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
     async def create(self, data: PresenzaCreate) -> Presenza:
         presenza = Presenza(**data.model_dump())
         self.db.add(presenza)

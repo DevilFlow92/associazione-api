@@ -21,6 +21,7 @@ from app.api.v1.esterni import router as esterni_router
 from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.iscrizioni import router as iscrizioni_router
+from app.api.v1.lezioni import router as lezioni_router
 from app.api.v1.macro_sezioni import router as macro_sezioni_router
 from app.api.v1.mergefields import router as mergefields_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
@@ -228,6 +229,7 @@ app.include_router(repertorio_items_router, prefix="/api/v1", dependencies=_auth
 
 # ── Corsi musicali ───────────────────────────────────────────────────────────
 app.include_router(corsi_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(lezioni_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
 
+from app.exceptions.lezione import LezioneNotFoundError
 from app.exceptions.persona import PersonaNotFoundError
 from app.exceptions.presenza import (
     PresenzaContainerMismatchError,
@@ -9,6 +10,7 @@ from app.exceptions.presenza import (
 )
 from app.exceptions.prova import ProvaNotFoundError
 from app.exceptions.servizio import ServizioNotFoundError
+from app.repositories.lezione_repository import LezioneRepository
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.presenza_repository import PresenzaRepository
 from app.repositories.prova_repository import ProvaRepository
@@ -28,11 +30,13 @@ class PresenzaService:
         persona_repo: PersonaRepository,
         servizio_repo: ServizioRepository,
         prova_repo: ProvaRepository,
+        lezione_repo: LezioneRepository,
     ) -> None:
         self.repo = repo
         self.persona_repo = persona_repo
         self.servizio_repo = servizio_repo
         self.prova_repo = prova_repo
+        self.lezione_repo = lezione_repo
 
     async def get_by_servizio(
         self, servizio_id: int, params: PageParams
@@ -60,6 +64,19 @@ class PresenzaService:
         items = [PresenzaResponse.model_validate(p) for p in presenze]
         return paginate(items, total, params)
 
+    async def get_by_lezione(
+        self, lezione_id: int, params: PageParams
+    ) -> PagedResponse[PresenzaResponse]:
+        lezione = await self.lezione_repo.get_by_id(lezione_id)
+        if not lezione:
+            raise LezioneNotFoundError(lezione_id)
+        presenze = await self.repo.get_by_lezione(
+            lezione_id, offset=params.offset, limit=params.limit
+        )
+        total = await self.repo.count_by_lezione(lezione_id)
+        items = [PresenzaResponse.model_validate(p) for p in presenze]
+        return paginate(items, total, params)
+
     async def get_by_id(self, presenza_id: int) -> PresenzaResponse:
         presenza = await self.repo.get_by_id(presenza_id)
         if not presenza:
@@ -74,11 +91,15 @@ class PresenzaService:
             servizio = await self.servizio_repo.get_by_id(data.servizio_id)
             if not servizio:
                 raise ServizioNotFoundError(data.servizio_id)
-        else:
-            assert data.prova_id is not None
+        elif data.prova_id is not None:
             prova = await self.prova_repo.get_by_id(data.prova_id)
             if not prova:
                 raise ProvaNotFoundError(data.prova_id)
+        else:
+            assert data.lezione_id is not None
+            lezione = await self.lezione_repo.get_by_id(data.lezione_id)
+            if not lezione:
+                raise LezioneNotFoundError(data.lezione_id)
         presenza = await self.repo.create(data)
         return PresenzaResponse.model_validate(presenza)
 
@@ -102,7 +123,7 @@ class PresenzaService:
                 raise PresenzaNotFoundError(item.presenza_id)
 
         presenze = [presenze_by_id[item.presenza_id] for item in data.items]
-        containers = {(p.servizio_id, p.prova_id) for p in presenze}
+        containers = {(p.servizio_id, p.prova_id, p.lezione_id) for p in presenze}
         if len(containers) > 1:
             raise PresenzaContainerMismatchError()
 
