@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lookups import VoceRendiconto
 from app.repositories.lookup import LookupRepository
@@ -25,7 +26,11 @@ def get_service(
     )
 
 
-@router.get("/", response_model=PagedResponse[VoceRendicontoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[VoceRendicontoResponse],
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def list_voci_rendiconto(
     params: PageParams = Depends(),
     sezione_codice: int | None = Query(None),
@@ -35,7 +40,11 @@ async def list_voci_rendiconto(
     return await service.get_all(params, filters=filters)
 
 
-@router.get("/{codice}", response_model=VoceRendicontoResponse)
+@router.get(
+    "/{codice}",
+    response_model=VoceRendicontoResponse,
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def get_voce_rendiconto(
     codice: int,
     service: LookupService[VoceRendicontoResponse] = Depends(get_service),
@@ -44,7 +53,10 @@ async def get_voce_rendiconto(
 
 
 @router.post(
-    "/", response_model=VoceRendicontoResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=VoceRendicontoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contabilita:write"))],
 )
 async def create_voce_rendiconto(
     data: VoceRendicontoCreate,
@@ -53,7 +65,11 @@ async def create_voce_rendiconto(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=VoceRendicontoResponse)
+@router.patch(
+    "/{codice}",
+    response_model=VoceRendicontoResponse,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def update_voce_rendiconto(
     codice: int,
     data: VoceRendicontoUpdate,
@@ -62,7 +78,11 @@ async def update_voce_rendiconto(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def delete_voce_rendiconto(
     codice: int,
     service: LookupService[VoceRendicontoResponse] = Depends(get_service),

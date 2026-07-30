@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lookups import Provincia
 from app.repositories.lookup import LookupRepository
@@ -17,7 +18,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> LookupService[ProvinciaRe
     )
 
 
-@router.get("/", response_model=PagedResponse[ProvinciaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[ProvinciaResponse],
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def list_province(
     params: PageParams = Depends(),
     regione_codice: int | None = Query(None),
@@ -27,14 +32,23 @@ async def list_province(
     return await service.get_all(params, filters=filters)
 
 
-@router.get("/{codice}", response_model=ProvinciaResponse)
+@router.get(
+    "/{codice}",
+    response_model=ProvinciaResponse,
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def get_provincia(
     codice: int, service: LookupService[ProvinciaResponse] = Depends(get_service)
 ) -> ProvinciaResponse:
     return await service.get_by_codice(codice)
 
 
-@router.post("/", response_model=ProvinciaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ProvinciaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def create_provincia(
     data: ProvinciaCreate,
     service: LookupService[ProvinciaResponse] = Depends(get_service),
@@ -42,7 +56,11 @@ async def create_provincia(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=ProvinciaResponse)
+@router.patch(
+    "/{codice}",
+    response_model=ProvinciaResponse,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def update_provincia(
     codice: int,
     data: ProvinciaUpdate,
@@ -51,7 +69,11 @@ async def update_provincia(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def delete_provincia(
     codice: int, service: LookupService[ProvinciaResponse] = Depends(get_service)
 ) -> None:

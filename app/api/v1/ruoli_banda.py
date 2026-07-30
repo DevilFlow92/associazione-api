@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lookups import RuoloBanda
 from app.repositories.lookup import LookupRepository
@@ -19,7 +20,11 @@ def get_service(
     )
 
 
-@router.get("/", response_model=PagedResponse[RuoloBandaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[RuoloBandaResponse],
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def list_ruoli_banda(
     params: PageParams = Depends(),
     service: LookupService[RuoloBandaResponse] = Depends(get_service),
@@ -27,7 +32,11 @@ async def list_ruoli_banda(
     return await service.get_all(params)
 
 
-@router.get("/{codice}", response_model=RuoloBandaResponse)
+@router.get(
+    "/{codice}",
+    response_model=RuoloBandaResponse,
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def get_ruolo_banda(
     codice: int,
     service: LookupService[RuoloBandaResponse] = Depends(get_service),
@@ -36,7 +45,10 @@ async def get_ruolo_banda(
 
 
 @router.post(
-    "/", response_model=RuoloBandaResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=RuoloBandaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("lookup:write"))],
 )
 async def create_ruolo_banda(
     data: RuoloBandaCreate,
@@ -45,7 +57,11 @@ async def create_ruolo_banda(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=RuoloBandaResponse)
+@router.patch(
+    "/{codice}",
+    response_model=RuoloBandaResponse,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def update_ruolo_banda(
     codice: int,
     data: RuoloBandaUpdate,
@@ -54,7 +70,11 @@ async def update_ruolo_banda(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def delete_ruolo_banda(
     codice: int,
     service: LookupService[RuoloBandaResponse] = Depends(get_service),

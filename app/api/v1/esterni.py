@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.esterno import EsternoDuplicateCodiceError, EsternoNotFoundError
 from app.exceptions.persona import PersonaNotFoundError
@@ -17,7 +18,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> EsternoService:
     return EsternoService(EsternoRepository(db), PersonaRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[EsternoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[EsternoResponse],
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def list_esterni(
     banda_codice: int | None = Query(None),
     params: PageParams = Depends(),
@@ -26,7 +31,11 @@ async def list_esterni(
     return await service.get_all(params, banda_codice=banda_codice)
 
 
-@router.get("/{esterno_id}", response_model=EsternoResponse)
+@router.get(
+    "/{esterno_id}",
+    response_model=EsternoResponse,
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def get_esterno(
     esterno_id: int, service: EsternoService = Depends(get_service)
 ) -> EsternoResponse:
@@ -36,7 +45,12 @@ async def get_esterno(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=EsternoResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=EsternoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def create_esterno(
     data: EsternoCreate, service: EsternoService = Depends(get_service)
 ) -> EsternoResponse:
@@ -48,7 +62,11 @@ async def create_esterno(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-@router.patch("/{esterno_id}", response_model=EsternoResponse)
+@router.patch(
+    "/{esterno_id}",
+    response_model=EsternoResponse,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def update_esterno(
     esterno_id: int,
     data: EsternoUpdate,
@@ -62,7 +80,11 @@ async def update_esterno(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-@router.delete("/{esterno_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{esterno_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def delete_esterno(
     esterno_id: int, service: EsternoService = Depends(get_service)
 ) -> None:

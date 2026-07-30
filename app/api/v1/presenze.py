@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.persona import PersonaNotFoundError
 from app.exceptions.presenza import (
@@ -35,7 +36,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> PresenzaService:
     )
 
 
-@router.get("/servizio/{servizio_id}", response_model=PagedResponse[PresenzaResponse])
+@router.get(
+    "/servizio/{servizio_id}",
+    response_model=PagedResponse[PresenzaResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_organico_servizio(
     servizio_id: int,
     params: PageParams = Depends(),
@@ -47,7 +52,11 @@ async def get_organico_servizio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/prova/{prova_id}", response_model=PagedResponse[PresenzaResponse])
+@router.get(
+    "/prova/{prova_id}",
+    response_model=PagedResponse[PresenzaResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_organico_prova(
     prova_id: int,
     params: PageParams = Depends(),
@@ -59,7 +68,11 @@ async def get_organico_prova(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/{presenza_id}", response_model=PresenzaResponse)
+@router.get(
+    "/{presenza_id}",
+    response_model=PresenzaResponse,
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_presenza(
     presenza_id: int, service: PresenzaService = Depends(get_service)
 ) -> PresenzaResponse:
@@ -69,7 +82,12 @@ async def get_presenza(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=PresenzaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PresenzaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def create_presenza(
     data: PresenzaCreate, service: PresenzaService = Depends(get_service)
 ) -> PresenzaResponse:
@@ -79,7 +97,11 @@ async def create_presenza(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/bulk", response_model=PresenzaBulkUpdateResponse)
+@router.patch(
+    "/bulk",
+    response_model=PresenzaBulkUpdateResponse,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def bulk_update_presenze(
     data: PresenzaBulkUpdate,
     service: PresenzaService = Depends(get_service),
@@ -95,7 +117,11 @@ async def bulk_update_presenze(
         ) from e
 
 
-@router.patch("/{presenza_id}", response_model=PresenzaResponse)
+@router.patch(
+    "/{presenza_id}",
+    response_model=PresenzaResponse,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def update_presenza(
     presenza_id: int,
     data: PresenzaUpdate,
@@ -107,7 +133,11 @@ async def update_presenza(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{presenza_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{presenza_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def delete_presenza(
     presenza_id: int, service: PresenzaService = Depends(get_service)
 ) -> None:

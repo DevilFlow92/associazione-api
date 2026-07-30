@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.iscrizione import IscrizioneNotFoundError
 from app.exceptions.socio import SocioNotFoundError
@@ -34,7 +35,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> IscrizioneService:
     )
 
 
-@router.get("/", response_model=PagedResponse[IscrizioneResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[IscrizioneResponse],
+    dependencies=[Depends(require_permission("iscrizioni:read"))],
+)
 async def list_iscrizioni(
     socio_id: int | None = Query(None),
     anno: int | None = Query(None),
@@ -44,7 +49,11 @@ async def list_iscrizioni(
     return await service.get_all(socio_id, anno, params)
 
 
-@router.get("/{iscrizione_id}", response_model=IscrizioneResponse)
+@router.get(
+    "/{iscrizione_id}",
+    response_model=IscrizioneResponse,
+    dependencies=[Depends(require_permission("iscrizioni:read"))],
+)
 async def get_iscrizione(
     iscrizione_id: int, service: IscrizioneService = Depends(get_service)
 ) -> IscrizioneResponse:
@@ -55,7 +64,10 @@ async def get_iscrizione(
 
 
 @router.post(
-    "/", response_model=IscrizioneResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=IscrizioneResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("iscrizioni:write"))],
 )
 async def create_iscrizione(
     data: IscrizioneCreate, service: IscrizioneService = Depends(get_service)
@@ -66,7 +78,11 @@ async def create_iscrizione(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{iscrizione_id}", response_model=IscrizioneResponse)
+@router.patch(
+    "/{iscrizione_id}",
+    response_model=IscrizioneResponse,
+    dependencies=[Depends(require_permission("iscrizioni:write"))],
+)
 async def update_iscrizione(
     iscrizione_id: int,
     data: IscrizioneUpdate,
@@ -78,7 +94,11 @@ async def update_iscrizione(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{iscrizione_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{iscrizione_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("iscrizioni:write"))],
+)
 async def delete_iscrizione(
     iscrizione_id: int, service: IscrizioneService = Depends(get_service)
 ) -> None:

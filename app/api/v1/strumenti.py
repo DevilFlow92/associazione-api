@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lookups import Strumento
 from app.repositories.lookup import LookupRepository
@@ -17,7 +18,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> LookupService[StrumentoRe
     )
 
 
-@router.get("/", response_model=PagedResponse[StrumentoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[StrumentoResponse],
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def list_strumenti(
     params: PageParams = Depends(),
     service: LookupService[StrumentoResponse] = Depends(get_service),
@@ -25,14 +30,23 @@ async def list_strumenti(
     return await service.get_all(params)
 
 
-@router.get("/{codice}", response_model=StrumentoResponse)
+@router.get(
+    "/{codice}",
+    response_model=StrumentoResponse,
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def get_strumento(
     codice: int, service: LookupService[StrumentoResponse] = Depends(get_service)
 ) -> StrumentoResponse:
     return await service.get_by_codice(codice)
 
 
-@router.post("/", response_model=StrumentoResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=StrumentoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def create_strumento(
     data: StrumentoCreate,
     service: LookupService[StrumentoResponse] = Depends(get_service),
@@ -40,7 +54,11 @@ async def create_strumento(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=StrumentoResponse)
+@router.patch(
+    "/{codice}",
+    response_model=StrumentoResponse,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def update_strumento(
     codice: int,
     data: StrumentoUpdate,
@@ -49,7 +67,11 @@ async def update_strumento(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def delete_strumento(
     codice: int, service: LookupService[StrumentoResponse] = Depends(get_service)
 ) -> None:

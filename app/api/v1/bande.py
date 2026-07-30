@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.indirizzo import IndirizzoNotFoundError
 from app.models.lookups import Banda
@@ -26,7 +27,11 @@ def get_indirizzo_service(
     return BandaIndirizzoService(BandaIndirizzoRepository(db), IndirizzoRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[BandaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[BandaResponse],
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def list_bande(
     params: PageParams = Depends(),
     service: LookupService[BandaResponse] = Depends(get_service),
@@ -34,21 +39,34 @@ async def list_bande(
     return await service.get_all(params)
 
 
-@router.get("/{codice}", response_model=BandaResponse)
+@router.get(
+    "/{codice}",
+    response_model=BandaResponse,
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def get_banda(
     codice: int, service: LookupService[BandaResponse] = Depends(get_service)
 ) -> BandaResponse:
     return await service.get_by_codice(codice)
 
 
-@router.post("/", response_model=BandaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=BandaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def create_banda(
     data: BandaCreate, service: LookupService[BandaResponse] = Depends(get_service)
 ) -> BandaResponse:
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=BandaResponse)
+@router.patch(
+    "/{codice}",
+    response_model=BandaResponse,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def update_banda(
     codice: int,
     data: BandaUpdate,
@@ -57,7 +75,11 @@ async def update_banda(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def delete_banda(
     codice: int, service: LookupService[BandaResponse] = Depends(get_service)
 ) -> None:
@@ -65,7 +87,11 @@ async def delete_banda(
 
 
 # ── Indirizzi della banda (relazione molti-a-molti) ──────────────────────────
-@router.get("/{codice}/indirizzi", response_model=list[IndirizzoResponse])
+@router.get(
+    "/{codice}/indirizzi",
+    response_model=list[IndirizzoResponse],
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def list_indirizzi_banda(
     codice: int,
     service: BandaIndirizzoService = Depends(get_indirizzo_service),
@@ -74,7 +100,9 @@ async def list_indirizzi_banda(
 
 
 @router.put(
-    "/{codice}/indirizzi/{indirizzo_id}", response_model=list[IndirizzoResponse]
+    "/{codice}/indirizzi/{indirizzo_id}",
+    response_model=list[IndirizzoResponse],
+    dependencies=[Depends(require_permission("lookup:write"))],
 )
 async def add_indirizzo_banda(
     codice: int,
@@ -88,7 +116,9 @@ async def add_indirizzo_banda(
 
 
 @router.delete(
-    "/{codice}/indirizzi/{indirizzo_id}", status_code=status.HTTP_204_NO_CONTENT
+    "/{codice}/indirizzi/{indirizzo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("lookup:write"))],
 )
 async def remove_indirizzo_banda(
     codice: int,

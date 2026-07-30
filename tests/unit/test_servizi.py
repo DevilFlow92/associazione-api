@@ -1,7 +1,33 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import pytest
 from httpx import AsyncClient
+
+from app.api.deps import get_current_user
+from app.models.permesso import Permesso
+from app.models.ruolo import Ruolo
+from app.models.utente import TipoUtente, Utente
+from main import app
+
+
+def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
+    ruoli: list[Ruolo] = []
+    if permessi:
+        ruoli = [
+            Ruolo(
+                nome="test",
+                permessi=[Permesso(codice=c, descrizione=c) for c in permessi],
+            )
+        ]
+    return Utente(
+        id=1,
+        tipo=TipoUtente.UMANO,
+        email="test@example.com",
+        superuser=superuser,
+        ruoli=ruoli,
+    )
 
 
 async def create_indirizzo(client: AsyncClient) -> dict:
@@ -243,3 +269,39 @@ async def test_delete_servizio_with_ricevuta_blocked(client: AsyncClient):
     )
     response = await client.delete(f"/api/v1/servizi/{servizio['id']}")
     assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_list_servizi_forbidden_without_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    response = await client.get("/api/v1/servizi/")
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_servizi_succeeds_with_read_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"servizi:read"}
+    )
+    response = await client.get("/api/v1/servizi/")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_servizio_forbidden_without_write_permission(
+    client: AsyncClient,
+):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"servizi:read"}
+    )
+    response = await client.post("/api/v1/servizi/", json=servizio_payload())
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_servizio_succeeds_with_write_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"servizi:write"}
+    )
+    response = await client.post("/api/v1/servizi/", json=servizio_payload())
+    assert response.status_code == 201

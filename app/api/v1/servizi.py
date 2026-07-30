@@ -6,6 +6,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.core.storage import storage
 from app.exceptions.committente import CommittenteNotFoundError
@@ -52,7 +53,11 @@ def _nome_file_persona(libretto: LibrettoPersona) -> str:
     return sicuro.replace(" ", "_") or f"persona_{libretto.persona_id}"
 
 
-@router.get("/", response_model=PagedResponse[ServizioResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[ServizioResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def list_servizi(
     anno: int | None = None,
     banda_codice: int | None = Query(None),
@@ -62,7 +67,11 @@ async def list_servizi(
     return await service.get_all(anno, params, banda_codice=banda_codice)
 
 
-@router.get("/{servizio_id}", response_model=ServizioResponse)
+@router.get(
+    "/{servizio_id}",
+    response_model=ServizioResponse,
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_servizio(
     servizio_id: int, service: ServizioService = Depends(get_service)
 ) -> ServizioResponse:
@@ -72,7 +81,12 @@ async def get_servizio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=ServizioResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ServizioResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def create_servizio(
     data: ServizioCreate, service: ServizioService = Depends(get_service)
 ) -> ServizioResponse:
@@ -82,7 +96,11 @@ async def create_servizio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{servizio_id}", response_model=ServizioResponse)
+@router.patch(
+    "/{servizio_id}",
+    response_model=ServizioResponse,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def update_servizio(
     servizio_id: int,
     data: ServizioUpdate,
@@ -98,7 +116,11 @@ async def update_servizio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{servizio_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{servizio_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def delete_servizio(
     servizio_id: int, service: ServizioService = Depends(get_service)
 ) -> None:
@@ -110,7 +132,10 @@ async def delete_servizio(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-@router.get("/{servizio_id}/libretto")
+@router.get(
+    "/{servizio_id}/libretto",
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_libretto(
     servizio_id: int,
     persona_id: int | None = Query(
