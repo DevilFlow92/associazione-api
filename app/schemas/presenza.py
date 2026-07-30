@@ -8,13 +8,18 @@ from app.models.presenza import StatoPresenza
 class PresenzaBase(BaseModel):
     servizio_id: int | None = None
     prova_id: int | None = None
+    lezione_id: int | None = None
     note: str | None = None
 
     @model_validator(mode="after")
     def _arc_esclusivo(self) -> PresenzaBase:
-        if (self.servizio_id is None) == (self.prova_id is None):
+        valorizzati = sum(
+            x is not None for x in (self.servizio_id, self.prova_id, self.lezione_id)
+        )
+        if valorizzati != 1:
             raise ValueError(
-                "Esattamente uno tra servizio_id e prova_id deve essere valorizzato"
+                "Esattamente uno tra servizio_id, prova_id e lezione_id "
+                "deve essere valorizzato"
             )
         return self
 
@@ -42,6 +47,7 @@ class PresenzaResponse(BaseModel):
     persona_id: int
     servizio_id: int | None = None
     prova_id: int | None = None
+    lezione_id: int | None = None
     stato: StatoPresenza | None = None
     note: str | None = None
     persona: PersonaInPresenza | None = None
