@@ -145,3 +145,15 @@ class StatoIscrizione(LookupBase):
 # ── Corsi musicali (Fase 3) ──────────────────────────────────────────────────
 class TipoCorso(LookupBase):
     __tablename__ = "tipi_corso"
+
+
+class StatoIscrizioneCorso(LookupBase):
+    """Stato dell'iscrizione di una persona a un Corso.
+
+    Tabella dedicata, distinta da ``stati_iscrizione``: quest'ultima è
+    accoppiata alla logica di quota annuale socio (``IscrizioneService._is_pagata``
+    innesca un FlussoCassa automatico), semantica che non si applica a
+    un'iscrizione a un corso (Richiesta/Confermata/Annullata/Completata).
+    """
+
+    __tablename__ = "stati_iscrizione_corso"

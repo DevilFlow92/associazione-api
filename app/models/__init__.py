@@ -7,6 +7,7 @@ from app.models.esterno import Esterno  # noqa: F401
 from app.models.flusso_cassa import FlussoCassa  # noqa: F401
 from app.models.indirizzo import Indirizzo  # noqa: F401
 from app.models.iscrizione import Iscrizione  # noqa: F401
+from app.models.iscrizione_corso import IscrizioneCorso  # noqa: F401
 from app.models.lezione import Lezione  # noqa: F401
 from app.models.lookups import (  # noqa: F401
     Banda,
@@ -20,6 +21,7 @@ from app.models.lookups import (  # noqa: F401
     SottovoceRendiconto,
     Stato,
     StatoIscrizione,
+    StatoIscrizioneCorso,
     Strumento,
     TipoCorso,
     TipoDocumento,

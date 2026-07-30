@@ -244,3 +244,16 @@ class TipoCorsoUpdate(LookupUpdate):
 
 class TipoCorsoResponse(LookupResponse):
     pass
+
+
+# ── StatoIscrizioneCorso ─────────────────────────────────────────────────────
+class StatoIscrizioneCorsoCreate(LookupCreate):
+    pass
+
+
+class StatoIscrizioneCorsoUpdate(LookupUpdate):
+    pass
+
+
+class StatoIscrizioneCorsoResponse(LookupResponse):
+    pass
