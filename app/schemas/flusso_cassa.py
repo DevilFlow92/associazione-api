@@ -43,6 +43,7 @@ class FlussoCassaBase(BaseModel):
     natura_flusso_codice: int
     tipo: TipoFlussoCassa = TipoFlussoCassa.MOVIMENTO
     iscrizione_id: int | None = None
+    pagamento_corso_id: int | None = None
     trasferimento_id: UUID | None = None
 
 
@@ -59,6 +60,7 @@ class FlussoCassaUpdate(BaseModel):
     natura_flusso_codice: int | None = None
     tipo: TipoFlussoCassa | None = None
     iscrizione_id: int | None = None
+    pagamento_corso_id: int | None = None
     trasferimento_id: UUID | None = None
 
 

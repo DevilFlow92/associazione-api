@@ -22,6 +22,7 @@ class ConfigurazioneBandaAnnoBase(BaseModel):
     saldo_iniziale_cassa: Decimal = Decimal("0")
     saldo_iniziale_banca: Decimal = Decimal("0")
     voce_contabilita_quote_id: int | None = None
+    voce_contabilita_corsi_id: int | None = None
     chiuso: bool = False
     data_chiusura: datetime | None = None
     chiuso_da_utente_id: int | None = None
@@ -36,6 +37,7 @@ class ConfigurazioneBandaAnnoUpdate(BaseModel):
     saldo_iniziale_cassa: Decimal | None = None
     saldo_iniziale_banca: Decimal | None = None
     voce_contabilita_quote_id: int | None = None
+    voce_contabilita_corsi_id: int | None = None
     chiuso: bool | None = None
     data_chiusura: datetime | None = None
     chiuso_da_utente_id: int | None = None
@@ -44,6 +46,7 @@ class ConfigurazioneBandaAnnoUpdate(BaseModel):
 class ConfigurazioneBandaAnnoResponse(ConfigurazioneBandaAnnoBase):
     id: int
     voce_contabilita_quote: VoceContabilitaResponse | None = None
+    voce_contabilita_corsi: VoceContabilitaResponse | None = None
     chiuso_da_utente: UtenteMinimal | None = None
 
     model_config = {"from_attributes": True}
