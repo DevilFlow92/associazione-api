@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lookups import StatoIscrizione
 from app.repositories.lookup import LookupRepository
@@ -25,7 +26,11 @@ def get_service(
     )
 
 
-@router.get("/", response_model=PagedResponse[StatoIscrizioneResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[StatoIscrizioneResponse],
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def list_stati_iscrizione(
     params: PageParams = Depends(),
     service: LookupService[StatoIscrizioneResponse] = Depends(get_service),
@@ -33,7 +38,11 @@ async def list_stati_iscrizione(
     return await service.get_all(params)
 
 
-@router.get("/{codice}", response_model=StatoIscrizioneResponse)
+@router.get(
+    "/{codice}",
+    response_model=StatoIscrizioneResponse,
+    dependencies=[Depends(require_permission("lookup:read"))],
+)
 async def get_stato_iscrizione(
     codice: int, service: LookupService[StatoIscrizioneResponse] = Depends(get_service)
 ) -> StatoIscrizioneResponse:
@@ -41,7 +50,10 @@ async def get_stato_iscrizione(
 
 
 @router.post(
-    "/", response_model=StatoIscrizioneResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=StatoIscrizioneResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("lookup:write"))],
 )
 async def create_stato_iscrizione(
     data: StatoIscrizioneCreate,
@@ -50,7 +62,11 @@ async def create_stato_iscrizione(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=StatoIscrizioneResponse)
+@router.patch(
+    "/{codice}",
+    response_model=StatoIscrizioneResponse,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def update_stato_iscrizione(
     codice: int,
     data: StatoIscrizioneUpdate,
@@ -59,7 +75,11 @@ async def update_stato_iscrizione(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("lookup:write"))],
+)
 async def delete_stato_iscrizione(
     codice: int, service: LookupService[StatoIscrizioneResponse] = Depends(get_service)
 ) -> None:

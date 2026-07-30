@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lookups import NaturaFlusso
 from app.repositories.lookup import LookupRepository
@@ -23,7 +24,11 @@ def get_service(
     )
 
 
-@router.get("/", response_model=PagedResponse[NaturaFlussoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[NaturaFlussoResponse],
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def list_nature_flusso(
     params: PageParams = Depends(),
     service: LookupService[NaturaFlussoResponse] = Depends(get_service),
@@ -31,7 +36,11 @@ async def list_nature_flusso(
     return await service.get_all(params)
 
 
-@router.get("/{codice}", response_model=NaturaFlussoResponse)
+@router.get(
+    "/{codice}",
+    response_model=NaturaFlussoResponse,
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def get_natura_flusso(
     codice: int,
     service: LookupService[NaturaFlussoResponse] = Depends(get_service),
@@ -40,7 +49,10 @@ async def get_natura_flusso(
 
 
 @router.post(
-    "/", response_model=NaturaFlussoResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=NaturaFlussoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contabilita:write"))],
 )
 async def create_natura_flusso(
     data: NaturaFlussoCreate,
@@ -49,7 +61,11 @@ async def create_natura_flusso(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=NaturaFlussoResponse)
+@router.patch(
+    "/{codice}",
+    response_model=NaturaFlussoResponse,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def update_natura_flusso(
     codice: int,
     data: NaturaFlussoUpdate,
@@ -58,7 +74,11 @@ async def update_natura_flusso(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def delete_natura_flusso(
     codice: int,
     service: LookupService[NaturaFlussoResponse] = Depends(get_service),

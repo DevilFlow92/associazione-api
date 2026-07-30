@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.indirizzo import IndirizzoNotFoundError
 from app.exceptions.persona import PersonaHasDependentsError, PersonaNotFoundError
@@ -18,7 +19,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> PersonaService:
     return PersonaService(PersonaRepository(db), IndirizzoRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[PersonaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[PersonaResponse],
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def list_persone(
     banda_codice: int | None = Query(None),
     params: PageParams = Depends(),
@@ -27,7 +32,11 @@ async def list_persone(
     return await service.get_all(params, banda_codice=banda_codice)
 
 
-@router.get("/{persona_id}", response_model=PersonaResponse)
+@router.get(
+    "/{persona_id}",
+    response_model=PersonaResponse,
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def get_persona(
     persona_id: int, service: PersonaService = Depends(get_service)
 ) -> PersonaResponse:
@@ -37,14 +46,23 @@ async def get_persona(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=PersonaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PersonaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def create_persona(
     data: PersonaCreate, service: PersonaService = Depends(get_service)
 ) -> PersonaResponse:
     return await service.create(data)
 
 
-@router.patch("/{persona_id}", response_model=PersonaResponse)
+@router.patch(
+    "/{persona_id}",
+    response_model=PersonaResponse,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def update_persona(
     persona_id: int,
     data: PersonaUpdate,
@@ -56,7 +74,11 @@ async def update_persona(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{persona_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def delete_persona(
     persona_id: int, service: PersonaService = Depends(get_service)
 ) -> None:
@@ -69,7 +91,11 @@ async def delete_persona(
 
 
 # ── Indirizzi della persona (relazione molti-a-molti) ────────────────────────
-@router.get("/{persona_id}/indirizzi", response_model=list[IndirizzoResponse])
+@router.get(
+    "/{persona_id}/indirizzi",
+    response_model=list[IndirizzoResponse],
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def list_indirizzi_persona(
     persona_id: int, service: PersonaService = Depends(get_service)
 ) -> list[IndirizzoResponse]:
@@ -82,6 +108,7 @@ async def list_indirizzi_persona(
 @router.put(
     "/{persona_id}/indirizzi/{indirizzo_id}",
     response_model=list[IndirizzoResponse],
+    dependencies=[Depends(require_permission("anagrafica:write"))],
 )
 async def add_indirizzo_persona(
     persona_id: int,
@@ -97,6 +124,7 @@ async def add_indirizzo_persona(
 @router.delete(
     "/{persona_id}/indirizzi/{indirizzo_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
 )
 async def remove_indirizzo_persona(
     persona_id: int,

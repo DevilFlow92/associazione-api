@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.indirizzo import IndirizzoNotFoundError
 from app.repositories.indirizzo_repository import IndirizzoRepository
@@ -15,7 +16,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> IndirizzoService:
     return IndirizzoService(IndirizzoRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[IndirizzoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[IndirizzoResponse],
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def list_indirizzi(
     params: PageParams = Depends(),
     service: IndirizzoService = Depends(get_service),
@@ -23,7 +28,11 @@ async def list_indirizzi(
     return await service.get_all(params)
 
 
-@router.get("/{indirizzo_id}", response_model=IndirizzoResponse)
+@router.get(
+    "/{indirizzo_id}",
+    response_model=IndirizzoResponse,
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def get_indirizzo(
     indirizzo_id: int, service: IndirizzoService = Depends(get_service)
 ) -> IndirizzoResponse:
@@ -33,14 +42,23 @@ async def get_indirizzo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=IndirizzoResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=IndirizzoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def create_indirizzo(
     data: IndirizzoCreate, service: IndirizzoService = Depends(get_service)
 ) -> IndirizzoResponse:
     return await service.create(data)
 
 
-@router.patch("/{indirizzo_id}", response_model=IndirizzoResponse)
+@router.patch(
+    "/{indirizzo_id}",
+    response_model=IndirizzoResponse,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def update_indirizzo(
     indirizzo_id: int,
     data: IndirizzoUpdate,
@@ -52,7 +70,11 @@ async def update_indirizzo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{indirizzo_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{indirizzo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def delete_indirizzo(
     indirizzo_id: int, service: IndirizzoService = Depends(get_service)
 ) -> None:

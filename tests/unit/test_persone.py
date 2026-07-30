@@ -1,7 +1,33 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import pytest
 from httpx import AsyncClient
+
+from app.api.deps import get_current_user
+from app.models.permesso import Permesso
+from app.models.ruolo import Ruolo
+from app.models.utente import TipoUtente, Utente
+from main import app
+
+
+def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
+    ruoli: list[Ruolo] = []
+    if permessi:
+        ruoli = [
+            Ruolo(
+                nome="test",
+                permessi=[Permesso(codice=c, descrizione=c) for c in permessi],
+            )
+        ]
+    return Utente(
+        id=1,
+        tipo=TipoUtente.UMANO,
+        email="test@example.com",
+        superuser=superuser,
+        ruoli=ruoli,
+    )
 
 
 async def create_persona(client: AsyncClient, **overrides) -> dict:
@@ -136,3 +162,43 @@ async def test_link_indirizzo_not_found(client: AsyncClient):
     persona = await create_persona(client)
     response = await client.put(f"/api/v1/persone/{persona['id']}/indirizzi/999")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_persone_forbidden_without_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    response = await client.get("/api/v1/persone/")
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_persone_succeeds_with_read_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"anagrafica:read"}
+    )
+    response = await client.get("/api/v1/persone/")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_persona_forbidden_without_write_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"anagrafica:read"}
+    )
+    response = await client.post(
+        "/api/v1/persone/",
+        json={"banda_codice": 1, "nome": "Mario", "cognome": "Rossi"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_persona_succeeds_with_write_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"anagrafica:write"}
+    )
+    response = await client.post(
+        "/api/v1/persone/",
+        json={"banda_codice": 1, "nome": "Mario", "cognome": "Rossi"},
+    )
+    assert response.status_code == 201

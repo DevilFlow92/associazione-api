@@ -1,7 +1,33 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import pytest
 from httpx import AsyncClient
+
+from app.api.deps import get_current_user
+from app.models.permesso import Permesso
+from app.models.ruolo import Ruolo
+from app.models.utente import TipoUtente, Utente
+from main import app
+
+
+def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
+    ruoli: list[Ruolo] = []
+    if permessi:
+        ruoli = [
+            Ruolo(
+                nome="test",
+                permessi=[Permesso(codice=c, descrizione=c) for c in permessi],
+            )
+        ]
+    return Utente(
+        id=1,
+        tipo=TipoUtente.UMANO,
+        email="test@example.com",
+        superuser=superuser,
+        ruoli=ruoli,
+    )
 
 
 def voce_payload(**overrides) -> dict:
@@ -112,3 +138,45 @@ async def test_delete_voce_contabilita_with_flusso_blocked(client: AsyncClient):
     )
     response = await client.delete(f"/api/v1/voci-contabilita/{voce['id']}")
     assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_list_voci_contabilita_forbidden_without_permission(
+    client: AsyncClient,
+):
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    response = await client.get("/api/v1/voci-contabilita/")
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_voci_contabilita_succeeds_with_read_permission(
+    client: AsyncClient,
+):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"contabilita:read"}
+    )
+    response = await client.get("/api/v1/voci-contabilita/")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_voce_contabilita_forbidden_without_write_permission(
+    client: AsyncClient,
+):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"contabilita:read"}
+    )
+    response = await client.post("/api/v1/voci-contabilita/", json=voce_payload())
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_voce_contabilita_succeeds_with_write_permission(
+    client: AsyncClient,
+):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"contabilita:write"}
+    )
+    response = await client.post("/api/v1/voci-contabilita/", json=voce_payload())
+    assert response.status_code == 201

@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.persona import PersonaNotFoundError
 from app.exceptions.socio import SocioDuplicateCodiceError, SocioNotFoundError
@@ -17,7 +18,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> SocioService:
     return SocioService(SocioRepository(db), PersonaRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[SocioResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[SocioResponse],
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def list_soci(
     banda_codice: int | None = Query(None),
     params: PageParams = Depends(),
@@ -26,7 +31,11 @@ async def list_soci(
     return await service.get_all(params, banda_codice=banda_codice)
 
 
-@router.get("/{socio_id}", response_model=SocioResponse)
+@router.get(
+    "/{socio_id}",
+    response_model=SocioResponse,
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def get_socio(
     socio_id: int, service: SocioService = Depends(get_service)
 ) -> SocioResponse:
@@ -36,7 +45,12 @@ async def get_socio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=SocioResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=SocioResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def create_socio(
     data: SocioCreate, service: SocioService = Depends(get_service)
 ) -> SocioResponse:
@@ -48,7 +62,11 @@ async def create_socio(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-@router.patch("/{socio_id}", response_model=SocioResponse)
+@router.patch(
+    "/{socio_id}",
+    response_model=SocioResponse,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def update_socio(
     socio_id: int, data: SocioUpdate, service: SocioService = Depends(get_service)
 ) -> SocioResponse:
@@ -60,7 +78,11 @@ async def update_socio(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-@router.delete("/{socio_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{socio_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def delete_socio(
     socio_id: int, service: SocioService = Depends(get_service)
 ) -> None:

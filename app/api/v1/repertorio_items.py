@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.prova import ProvaNotFoundError
 from app.exceptions.repertorio_item import RepertorioItemNotFoundError
@@ -31,7 +32,9 @@ def get_service(db: AsyncSession = Depends(get_db)) -> RepertorioItemService:
 
 
 @router.get(
-    "/servizio/{servizio_id}", response_model=PagedResponse[RepertorioItemResponse]
+    "/servizio/{servizio_id}",
+    response_model=PagedResponse[RepertorioItemResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
 )
 async def get_repertorio_servizio(
     servizio_id: int,
@@ -44,7 +47,11 @@ async def get_repertorio_servizio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/prova/{prova_id}", response_model=PagedResponse[RepertorioItemResponse])
+@router.get(
+    "/prova/{prova_id}",
+    response_model=PagedResponse[RepertorioItemResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_repertorio_prova(
     prova_id: int,
     params: PageParams = Depends(),
@@ -56,7 +63,11 @@ async def get_repertorio_prova(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/{repertorio_item_id}", response_model=RepertorioItemResponse)
+@router.get(
+    "/{repertorio_item_id}",
+    response_model=RepertorioItemResponse,
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_repertorio_item(
     repertorio_item_id: int, service: RepertorioItemService = Depends(get_service)
 ) -> RepertorioItemResponse:
@@ -67,7 +78,10 @@ async def get_repertorio_item(
 
 
 @router.post(
-    "/", response_model=RepertorioItemResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=RepertorioItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("servizi:write"))],
 )
 async def create_repertorio_item(
     data: RepertorioItemCreate, service: RepertorioItemService = Depends(get_service)
@@ -78,7 +92,11 @@ async def create_repertorio_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{repertorio_item_id}", response_model=RepertorioItemResponse)
+@router.patch(
+    "/{repertorio_item_id}",
+    response_model=RepertorioItemResponse,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def update_repertorio_item(
     repertorio_item_id: int,
     data: RepertorioItemUpdate,
@@ -90,7 +108,11 @@ async def update_repertorio_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{repertorio_item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{repertorio_item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def delete_repertorio_item(
     repertorio_item_id: int, service: RepertorioItemService = Depends(get_service)
 ) -> None:

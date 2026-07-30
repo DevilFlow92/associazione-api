@@ -6,6 +6,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.core.storage import storage
 from app.exceptions.indirizzo import IndirizzoNotFoundError
@@ -51,7 +52,11 @@ def _nome_file_persona(libretto: LibrettoPersona) -> str:
     return sicuro.replace(" ", "_") or f"persona_{libretto.persona_id}"
 
 
-@router.get("/", response_model=PagedResponse[ProvaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[ProvaResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def list_prove(
     banda_codice: int | None = Query(None),
     servizio_id: int | None = Query(None),
@@ -63,7 +68,11 @@ async def list_prove(
     )
 
 
-@router.get("/{prova_id}", response_model=ProvaResponse)
+@router.get(
+    "/{prova_id}",
+    response_model=ProvaResponse,
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_prova(
     prova_id: int, service: ProvaService = Depends(get_service)
 ) -> ProvaResponse:
@@ -73,7 +82,12 @@ async def get_prova(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=ProvaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ProvaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def create_prova(
     data: ProvaCreate, service: ProvaService = Depends(get_service)
 ) -> ProvaResponse:
@@ -83,7 +97,11 @@ async def create_prova(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{prova_id}", response_model=ProvaResponse)
+@router.patch(
+    "/{prova_id}",
+    response_model=ProvaResponse,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def update_prova(
     prova_id: int,
     data: ProvaUpdate,
@@ -95,7 +113,11 @@ async def update_prova(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{prova_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{prova_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def delete_prova(
     prova_id: int, service: ProvaService = Depends(get_service)
 ) -> None:
@@ -105,7 +127,10 @@ async def delete_prova(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/{prova_id}/libretto")
+@router.get(
+    "/{prova_id}/libretto",
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_libretto(
     prova_id: int,
     persona_id: int | None = Query(

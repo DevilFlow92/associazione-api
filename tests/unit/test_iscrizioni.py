@@ -1,7 +1,33 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import pytest
 from httpx import AsyncClient
+
+from app.api.deps import get_current_user
+from app.models.permesso import Permesso
+from app.models.ruolo import Ruolo
+from app.models.utente import TipoUtente, Utente
+from main import app
+
+
+def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
+    ruoli: list[Ruolo] = []
+    if permessi:
+        ruoli = [
+            Ruolo(
+                nome="test",
+                permessi=[Permesso(codice=c, descrizione=c) for c in permessi],
+            )
+        ]
+    return Utente(
+        id=1,
+        tipo=TipoUtente.UMANO,
+        email="test@example.com",
+        superuser=superuser,
+        ruoli=ruoli,
+    )
 
 
 async def create_socio(client: AsyncClient, codice: str = "S001") -> dict:
@@ -366,3 +392,45 @@ async def test_create_pagata_anno_chiuso_409(client: AsyncClient):
     # Iscrizione must NOT have been persisted
     iscrizioni_resp = await client.get("/api/v1/iscrizioni/")
     assert iscrizioni_resp.json()["meta"]["total_items"] == 0
+
+
+@pytest.mark.asyncio
+async def test_list_iscrizioni_forbidden_without_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    response = await client.get("/api/v1/iscrizioni/")
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_iscrizioni_succeeds_with_read_permission(client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"iscrizioni:read"}
+    )
+    response = await client.get("/api/v1/iscrizioni/")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_iscrizione_forbidden_without_write_permission(
+    client: AsyncClient,
+):
+    socio = await create_socio(client)
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"iscrizioni:read"}
+    )
+    response = await client.post(
+        "/api/v1/iscrizioni/", json=iscrizione_payload(socio["id"])
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_iscrizione_succeeds_with_write_permission(client: AsyncClient):
+    socio = await create_socio(client)
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"iscrizioni:write"}
+    )
+    response = await client.post(
+        "/api/v1/iscrizioni/", json=iscrizione_payload(socio["id"])
+    )
+    assert response.status_code == 201

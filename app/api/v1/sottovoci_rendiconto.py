@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.repositories.sottovoce_rendiconto_repository import (
     SottovoceRendicontoRepository,
@@ -26,7 +27,11 @@ def get_service(
     )
 
 
-@router.get("/", response_model=PagedResponse[SottovoceRendicontoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[SottovoceRendicontoResponse],
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def list_sottovoci_rendiconto(
     params: PageParams = Depends(),
     voce_codice: int | None = Query(None),
@@ -36,7 +41,11 @@ async def list_sottovoci_rendiconto(
     return await service.get_all(params, filters=filters)
 
 
-@router.get("/{codice}", response_model=SottovoceRendicontoResponse)
+@router.get(
+    "/{codice}",
+    response_model=SottovoceRendicontoResponse,
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def get_sottovoce_rendiconto(
     codice: int,
     service: LookupService[SottovoceRendicontoResponse] = Depends(get_service),
@@ -48,6 +57,7 @@ async def get_sottovoce_rendiconto(
     "/",
     response_model=SottovoceRendicontoResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contabilita:write"))],
 )
 async def create_sottovoce_rendiconto(
     data: SottovoceRendicontoCreate,
@@ -56,7 +66,11 @@ async def create_sottovoce_rendiconto(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=SottovoceRendicontoResponse)
+@router.patch(
+    "/{codice}",
+    response_model=SottovoceRendicontoResponse,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def update_sottovoce_rendiconto(
     codice: int,
     data: SottovoceRendicontoUpdate,
@@ -65,7 +79,11 @@ async def update_sottovoce_rendiconto(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def delete_sottovoce_rendiconto(
     codice: int,
     service: LookupService[SottovoceRendicontoResponse] = Depends(get_service),

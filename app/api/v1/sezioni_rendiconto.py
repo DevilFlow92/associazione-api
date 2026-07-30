@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lookups import SezioneRendiconto
 from app.repositories.lookup import LookupRepository
@@ -25,7 +26,11 @@ def get_service(
     )
 
 
-@router.get("/", response_model=PagedResponse[SezioneRendicontoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[SezioneRendicontoResponse],
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def list_sezioni_rendiconto(
     params: PageParams = Depends(),
     service: LookupService[SezioneRendicontoResponse] = Depends(get_service),
@@ -33,7 +38,11 @@ async def list_sezioni_rendiconto(
     return await service.get_all(params)
 
 
-@router.get("/{codice}", response_model=SezioneRendicontoResponse)
+@router.get(
+    "/{codice}",
+    response_model=SezioneRendicontoResponse,
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def get_sezione_rendiconto(
     codice: int,
     service: LookupService[SezioneRendicontoResponse] = Depends(get_service),
@@ -42,7 +51,10 @@ async def get_sezione_rendiconto(
 
 
 @router.post(
-    "/", response_model=SezioneRendicontoResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=SezioneRendicontoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contabilita:write"))],
 )
 async def create_sezione_rendiconto(
     data: SezioneRendicontoCreate,
@@ -51,7 +63,11 @@ async def create_sezione_rendiconto(
     return await service.create(data)
 
 
-@router.patch("/{codice}", response_model=SezioneRendicontoResponse)
+@router.patch(
+    "/{codice}",
+    response_model=SezioneRendicontoResponse,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def update_sezione_rendiconto(
     codice: int,
     data: SezioneRendicontoUpdate,
@@ -60,7 +76,11 @@ async def update_sezione_rendiconto(
     return await service.update(codice, data)
 
 
-@router.delete("/{codice}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{codice}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def delete_sezione_rendiconto(
     codice: int,
     service: LookupService[SezioneRendicontoResponse] = Depends(get_service),

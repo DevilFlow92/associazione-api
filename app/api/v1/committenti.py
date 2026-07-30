@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.committente import (
     CommittenteHasServiziError,
@@ -24,7 +25,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> CommittenteService:
     return CommittenteService(CommittenteRepository(db), IndirizzoRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[CommittenteResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[CommittenteResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def list_committenti(
     params: PageParams = Depends(),
     service: CommittenteService = Depends(get_service),
@@ -32,7 +37,11 @@ async def list_committenti(
     return await service.get_all(params)
 
 
-@router.get("/{committente_id}", response_model=CommittenteResponse)
+@router.get(
+    "/{committente_id}",
+    response_model=CommittenteResponse,
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_committente(
     committente_id: int, service: CommittenteService = Depends(get_service)
 ) -> CommittenteResponse:
@@ -43,7 +52,10 @@ async def get_committente(
 
 
 @router.post(
-    "/", response_model=CommittenteResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=CommittenteResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("servizi:write"))],
 )
 async def create_committente(
     data: CommittenteCreate, service: CommittenteService = Depends(get_service)
@@ -54,7 +66,11 @@ async def create_committente(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{committente_id}", response_model=CommittenteResponse)
+@router.patch(
+    "/{committente_id}",
+    response_model=CommittenteResponse,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def update_committente(
     committente_id: int,
     data: CommittenteUpdate,
@@ -66,7 +82,11 @@ async def update_committente(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{committente_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{committente_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def delete_committente(
     committente_id: int, service: CommittenteService = Depends(get_service)
 ) -> None:

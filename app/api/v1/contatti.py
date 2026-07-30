@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.contatto import ContattoNotFoundError
 from app.exceptions.persona import PersonaNotFoundError
@@ -17,7 +18,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> ContattoService:
     return ContattoService(ContattoRepository(db), PersonaRepository(db))
 
 
-@router.get("/persona/{persona_id}", response_model=PagedResponse[ContattoResponse])
+@router.get(
+    "/persona/{persona_id}",
+    response_model=PagedResponse[ContattoResponse],
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def get_contatti_persona(
     persona_id: int,
     params: PageParams = Depends(),
@@ -29,7 +34,11 @@ async def get_contatti_persona(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/{contatto_id}", response_model=ContattoResponse)
+@router.get(
+    "/{contatto_id}",
+    response_model=ContattoResponse,
+    dependencies=[Depends(require_permission("anagrafica:read"))],
+)
 async def get_contatto(
     contatto_id: int, service: ContattoService = Depends(get_service)
 ) -> ContattoResponse:
@@ -39,7 +48,12 @@ async def get_contatto(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=ContattoResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ContattoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def create_contatto(
     data: ContattoCreate, service: ContattoService = Depends(get_service)
 ) -> ContattoResponse:
@@ -49,7 +63,11 @@ async def create_contatto(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{contatto_id}", response_model=ContattoResponse)
+@router.patch(
+    "/{contatto_id}",
+    response_model=ContattoResponse,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def update_contatto(
     contatto_id: int,
     data: ContattoUpdate,
@@ -61,7 +79,11 @@ async def update_contatto(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{contatto_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{contatto_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("anagrafica:write"))],
+)
 async def delete_contatto(
     contatto_id: int, service: ContattoService = Depends(get_service)
 ) -> None:

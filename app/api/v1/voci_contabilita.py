@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.voce_contabilita import (
     VoceContabilitaHasFlussiError,
@@ -22,7 +23,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> VoceContabilitaService:
     return VoceContabilitaService(VoceContabilitaRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[VoceContabilitaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[VoceContabilitaResponse],
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def list_voci_contabilita(
     banda_codice: int | None = None,
     params: PageParams = Depends(),
@@ -31,7 +36,11 @@ async def list_voci_contabilita(
     return await service.get_all(banda_codice, params)
 
 
-@router.get("/{voce_id}", response_model=VoceContabilitaResponse)
+@router.get(
+    "/{voce_id}",
+    response_model=VoceContabilitaResponse,
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def get_voce_contabilita(
     voce_id: int, service: VoceContabilitaService = Depends(get_service)
 ) -> VoceContabilitaResponse:
@@ -42,7 +51,10 @@ async def get_voce_contabilita(
 
 
 @router.post(
-    "/", response_model=VoceContabilitaResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=VoceContabilitaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contabilita:write"))],
 )
 async def create_voce_contabilita(
     data: VoceContabilitaCreate,
@@ -51,7 +63,11 @@ async def create_voce_contabilita(
     return await service.create(data)
 
 
-@router.patch("/{voce_id}", response_model=VoceContabilitaResponse)
+@router.patch(
+    "/{voce_id}",
+    response_model=VoceContabilitaResponse,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def update_voce_contabilita(
     voce_id: int,
     data: VoceContabilitaUpdate,
@@ -63,7 +79,11 @@ async def update_voce_contabilita(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{voce_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{voce_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def delete_voce_contabilita(
     voce_id: int, service: VoceContabilitaService = Depends(get_service)
 ) -> None:

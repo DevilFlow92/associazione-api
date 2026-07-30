@@ -34,7 +34,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> FlussoCassaService:
     )
 
 
-@router.get("/", response_model=PagedResponse[FlussoCassaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[FlussoCassaResponse],
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def list_flussi_cassa(
     params: PageParams = Depends(),
     anno: int | None = Query(None),
@@ -46,6 +50,7 @@ async def list_flussi_cassa(
 @router.get(
     "/voce-contabilita/{voce_contabilita_id}",
     response_model=PagedResponse[FlussoCassaResponse],
+    dependencies=[Depends(require_permission("contabilita:read"))],
 )
 async def get_flussi_voce_contabilita(
     voce_contabilita_id: int,
@@ -79,7 +84,11 @@ async def crea_trasferimento(
     )
 
 
-@router.get("/{flusso_id}", response_model=FlussoCassaResponse)
+@router.get(
+    "/{flusso_id}",
+    response_model=FlussoCassaResponse,
+    dependencies=[Depends(require_permission("contabilita:read"))],
+)
 async def get_flusso_cassa(
     flusso_id: int, service: FlussoCassaService = Depends(get_service)
 ) -> FlussoCassaResponse:
@@ -90,7 +99,10 @@ async def get_flusso_cassa(
 
 
 @router.post(
-    "/", response_model=FlussoCassaResponse, status_code=status.HTTP_201_CREATED
+    "/",
+    response_model=FlussoCassaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contabilita:write"))],
 )
 async def create_flusso_cassa(
     data: FlussoCassaCreate, service: FlussoCassaService = Depends(get_service)
@@ -101,7 +113,11 @@ async def create_flusso_cassa(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{flusso_id}", response_model=FlussoCassaResponse)
+@router.patch(
+    "/{flusso_id}",
+    response_model=FlussoCassaResponse,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def update_flusso_cassa(
     flusso_id: int,
     data: FlussoCassaUpdate,
@@ -113,7 +129,11 @@ async def update_flusso_cassa(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{flusso_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{flusso_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("contabilita:write"))],
+)
 async def delete_flusso_cassa(
     flusso_id: int, service: FlussoCassaService = Depends(get_service)
 ) -> None:

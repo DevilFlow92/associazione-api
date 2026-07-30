@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.persona import PersonaNotFoundError
 from app.exceptions.ricevuta import RicevutaNotFoundError
@@ -21,7 +22,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> RicevutaService:
     )
 
 
-@router.get("/", response_model=PagedResponse[RicevutaResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[RicevutaResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def list_ricevute(
     params: PageParams = Depends(),
     service: RicevutaService = Depends(get_service),
@@ -29,7 +34,11 @@ async def list_ricevute(
     return await service.get_all(params)
 
 
-@router.get("/servizio/{servizio_id}", response_model=PagedResponse[RicevutaResponse])
+@router.get(
+    "/servizio/{servizio_id}",
+    response_model=PagedResponse[RicevutaResponse],
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_ricevute_servizio(
     servizio_id: int,
     params: PageParams = Depends(),
@@ -41,7 +50,11 @@ async def get_ricevute_servizio(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.get("/{ricevuta_id}", response_model=RicevutaResponse)
+@router.get(
+    "/{ricevuta_id}",
+    response_model=RicevutaResponse,
+    dependencies=[Depends(require_permission("servizi:read"))],
+)
 async def get_ricevuta(
     ricevuta_id: int, service: RicevutaService = Depends(get_service)
 ) -> RicevutaResponse:
@@ -51,7 +64,12 @@ async def get_ricevuta(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=RicevutaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=RicevutaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def create_ricevuta(
     data: RicevutaCreate, service: RicevutaService = Depends(get_service)
 ) -> RicevutaResponse:
@@ -61,7 +79,11 @@ async def create_ricevuta(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{ricevuta_id}", response_model=RicevutaResponse)
+@router.patch(
+    "/{ricevuta_id}",
+    response_model=RicevutaResponse,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def update_ricevuta(
     ricevuta_id: int,
     data: RicevutaUpdate,
@@ -73,7 +95,11 @@ async def update_ricevuta(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{ricevuta_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{ricevuta_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("servizi:write"))],
+)
 async def delete_ricevuta(
     ricevuta_id: int, service: RicevutaService = Depends(get_service)
 ) -> None:
