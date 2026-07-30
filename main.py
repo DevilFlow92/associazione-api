@@ -21,6 +21,7 @@ from app.api.v1.esterni import router as esterni_router
 from app.api.v1.flussi_cassa import router as flussi_cassa_router
 from app.api.v1.indirizzi import router as indirizzi_router
 from app.api.v1.iscrizioni import router as iscrizioni_router
+from app.api.v1.iscrizioni_corso import router as iscrizioni_corso_router
 from app.api.v1.lezioni import router as lezioni_router
 from app.api.v1.macro_sezioni import router as macro_sezioni_router
 from app.api.v1.mergefields import router as mergefields_router
@@ -47,6 +48,7 @@ from app.api.v1.sottovoci_rendiconto import router as sottovoci_rendiconto_route
 from app.api.v1.spartiti import router as spartiti_router
 from app.api.v1.stati import router as stati_router
 from app.api.v1.stati_iscrizione import router as stati_iscrizione_router
+from app.api.v1.stati_iscrizione_corso import router as stati_iscrizione_corso_router
 from app.api.v1.strumenti import router as strumenti_router
 from app.api.v1.templates import router as template_router
 from app.api.v1.tipi_corso import router as tipi_corso_router
@@ -230,6 +232,7 @@ app.include_router(repertorio_items_router, prefix="/api/v1", dependencies=_auth
 # ── Corsi musicali ───────────────────────────────────────────────────────────
 app.include_router(corsi_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(lezioni_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(iscrizioni_corso_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)
@@ -258,6 +261,7 @@ app.include_router(nature_flusso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(tipi_documento_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(tipi_spartito_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(stati_iscrizione_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(stati_iscrizione_corso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(tipi_corso_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Archivio documentale (file) ──────────────────────────────────────────────
