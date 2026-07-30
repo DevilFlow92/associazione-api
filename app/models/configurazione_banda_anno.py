@@ -42,6 +42,9 @@ class ConfigurazioneBandaAnno(Base):
     voce_contabilita_quote_id: Mapped[int | None] = mapped_column(
         ForeignKey("voci_contabilita.id"), nullable=True
     )
+    voce_contabilita_corsi_id: Mapped[int | None] = mapped_column(
+        ForeignKey("voci_contabilita.id"), nullable=True
+    )
     chiuso: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     data_chiusura: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     chiuso_da_utente_id: Mapped[int | None] = mapped_column(
@@ -54,6 +57,9 @@ class ConfigurazioneBandaAnno(Base):
 
     voce_contabilita_quote: Mapped[VoceContabilita | None] = relationship(
         foreign_keys=[voce_contabilita_quote_id]
+    )
+    voce_contabilita_corsi: Mapped[VoceContabilita | None] = relationship(
+        foreign_keys=[voce_contabilita_corsi_id]
     )
     chiuso_da_utente: Mapped[Utente | None] = relationship(
         foreign_keys=[chiuso_da_utente_id]

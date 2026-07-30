@@ -13,6 +13,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.iscrizione import Iscrizione
     from app.models.lookups import NaturaFlusso
+    from app.models.pagamento_corso import PagamentoCorso
     from app.models.voce_contabilita import VoceContabilita
 
 
@@ -22,6 +23,7 @@ class TipoFlussoCassa(enum.StrEnum):
     TRASFERIMENTO_USCITA = "TRASFERIMENTO_USCITA"
     TRASFERIMENTO_ENTRATA = "TRASFERIMENTO_ENTRATA"
     AUTO_ISCRIZIONE = "AUTO_ISCRIZIONE"
+    AUTO_PAGAMENTO_CORSO = "AUTO_PAGAMENTO_CORSO"
 
 
 class FlussoCassa(Base):
@@ -49,6 +51,10 @@ class FlussoCassa(Base):
         ForeignKey("iscrizioni.id", name="fk_flussi_cassa_iscrizione_id"),
         nullable=True,
     )
+    pagamento_corso_id: Mapped[int | None] = mapped_column(
+        ForeignKey("pagamenti_corso.id", name="fk_flussi_cassa_pagamento_corso_id"),
+        nullable=True,
+    )
     trasferimento_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )
@@ -62,3 +68,4 @@ class FlussoCassa(Base):
         lazy="selectin",
     )
     iscrizione: Mapped[Iscrizione | None] = relationship()
+    pagamento_corso: Mapped[PagamentoCorso | None] = relationship()

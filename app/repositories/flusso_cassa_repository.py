@@ -48,6 +48,15 @@ class FlussoCassaRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_pagamento_corso_id(
+        self, pagamento_corso_id: int
+    ) -> FlussoCassa | None:
+        stmt = select(FlussoCassa).where(
+            FlussoCassa.pagamento_corso_id == pagamento_corso_id
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_other_leg_by_trasferimento_id(
         self, trasferimento_id: UUID, exclude_id: int
     ) -> FlussoCassa | None:

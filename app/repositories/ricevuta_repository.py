@@ -75,3 +75,17 @@ class RicevutaRepository:
     async def delete(self, ricevuta: Ricevuta) -> None:
         await self.db.delete(ricevuta)
         await self.db.commit()
+
+    # ── Operazioni transazionali (commit gestito dal service) ────────────────
+    def add_no_commit(self, ricevuta: Ricevuta) -> None:
+        """Accoda un insert senza fare commit (per inserimenti atomici)."""
+        self.db.add(ricevuta)
+
+    def update_no_commit(self, ricevuta: Ricevuta, **fields) -> None:
+        """Applica aggiornamenti di campo senza fare commit."""
+        for field, value in fields.items():
+            setattr(ricevuta, field, value)
+
+    async def delete_no_commit(self, ricevuta: Ricevuta) -> None:
+        """Accoda una delete senza fare commit (per cancellazioni atomiche)."""
+        await self.db.delete(ricevuta)

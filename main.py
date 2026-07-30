@@ -28,6 +28,7 @@ from app.api.v1.mergefields import router as mergefields_router
 from app.api.v1.nature_flusso import router as nature_flusso_router
 from app.api.v1.nome_parti import router as nome_parti_router
 from app.api.v1.oauth import router as oauth_router
+from app.api.v1.pagamenti_corso import router as pagamenti_corso_router
 from app.api.v1.permessi import router as permessi_router
 from app.api.v1.persone import router as persone_router
 from app.api.v1.presenze import router as presenze_router
@@ -75,6 +76,7 @@ from app.exceptions.flusso_cassa import (
 )
 from app.exceptions.iscrizione import ConfigurazioneContabileMancanteError
 from app.exceptions.lookup import LookupDuplicateCodiceError, LookupNotFoundError
+from app.exceptions.pagamento_corso import ConfigurazioneContabileCorsiMancanteError
 
 # Configura logging prima di tutto il resto.
 # In development: output colorato human-readable.
@@ -117,6 +119,13 @@ async def anno_chiuso_handler(request: Request, exc: AnnoChiusoError) -> JSONRes
 @app.exception_handler(ConfigurazioneContabileMancanteError)
 async def configurazione_contabile_mancante_handler(
     request: Request, exc: ConfigurazioneContabileMancanteError
+) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+@app.exception_handler(ConfigurazioneContabileCorsiMancanteError)
+async def configurazione_contabile_corsi_mancante_handler(
+    request: Request, exc: ConfigurazioneContabileCorsiMancanteError
 ) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": str(exc)})
 
@@ -233,6 +242,7 @@ app.include_router(repertorio_items_router, prefix="/api/v1", dependencies=_auth
 app.include_router(corsi_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(lezioni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(iscrizioni_corso_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(pagamenti_corso_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)

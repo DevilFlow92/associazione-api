@@ -18,6 +18,7 @@ from app.schemas.configurazione_banda_anno import (
 def _with_rels():
     return select(ConfigurazioneBandaAnno).options(
         selectinload(ConfigurazioneBandaAnno.voce_contabilita_quote),
+        selectinload(ConfigurazioneBandaAnno.voce_contabilita_corsi),
         selectinload(ConfigurazioneBandaAnno.chiuso_da_utente),
     )
 
