@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.models.nome_parte import NomeParte
+from app.models.permesso import Permesso
+from app.models.ruolo import Ruolo
+from app.models.utente import TipoUtente, Utente
+from main import app
 
 
 def pdf_file(filename: str = "spartito.pdf") -> tuple[str, tuple[str, bytes, str]]:
@@ -162,3 +169,91 @@ async def test_create_spartito_without_documento(
     data = response.json()
     assert data["documento_id"] is None
     assert data["nome_parte_id"] == seeded_nome_parte.id
+
+
+# ---------------------------------------------------------------------------
+# RBAC: archivio:read/write (spartiti non ha macro-sezione, permesso statico)
+# ---------------------------------------------------------------------------
+
+
+def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
+    ruoli: list[Ruolo] = []
+    if permessi:
+        ruoli = [
+            Ruolo(
+                nome="test",
+                permessi=[Permesso(codice=c, descrizione=c) for c in permessi],
+            )
+        ]
+    return Utente(
+        id=1,
+        tipo=TipoUtente.UMANO,
+        email="test@example.com",
+        superuser=superuser,
+        ruoli=ruoli,
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_spartiti_requires_authentication(client: AsyncClient) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.get("/api/v1/spartiti/")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_list_spartiti_forbidden_without_permission(client: AsyncClient) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi=set())
+    r = await client.get("/api/v1/spartiti/")
+    assert r.status_code == 403
+    assert "archivio:read" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_list_spartiti_succeeds_with_permission(client: AsyncClient) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.get("/api/v1/spartiti/")
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_spartito_requires_authentication(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.post(
+        "/api/v1/spartiti/",
+        json=spartito_payload(1, seeded_nome_parte.id),
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_spartito_forbidden_without_write_permission(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.post(
+        "/api/v1/spartiti/",
+        json=spartito_payload(1, seeded_nome_parte.id),
+    )
+    assert r.status_code == 403
+    assert "archivio:write" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_spartito_succeeds_with_write_permission(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:write"}
+    )
+    r = await client.post(
+        "/api/v1/spartiti/",
+        json=spartito_payload(1, seeded_nome_parte.id),
+    )
+    assert r.status_code == 201

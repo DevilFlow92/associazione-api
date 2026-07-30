@@ -12,11 +12,15 @@ if TYPE_CHECKING:
 
 
 class MacroSezione(Base):
-    """Macro-sezione fissa dell'archivio (es. Certificazioni Uniche, Verbali...).
+    """Macro-sezione fissa dell'archivio amministrativo (es. Certificazioni
+    Uniche, Verbali...).
 
     Seedata via migrazione, non creabile a runtime. Ogni macro-sezione porta
-    un permesso RBAC dedicato (es. ``certificazioni:read``) anziché il
-    generico ``archivio:read/write``.
+    un permesso RBAC dedicato (es. ``certificazioni:read``). Il permesso
+    statico ``archivio:read/write`` non è generico/inutilizzato: copre gli
+    aggregati che non appartengono a nessuna macro-sezione — spartiti,
+    nome_parti e i documenti senza ``sotto_cartella_id`` (vedi
+    ``app.services.permessi_archivio``).
     """
 
     __tablename__ = "macro_sezioni"

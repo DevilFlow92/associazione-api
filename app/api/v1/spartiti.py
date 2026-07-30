@@ -2,6 +2,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.exceptions.spartito import SpartitoNotFoundError
 from app.repositories.spartito_repository import SpartitoRepository
@@ -15,7 +16,11 @@ def get_service(db: AsyncSession = Depends(get_db)) -> SpartitoService:
     return SpartitoService(SpartitoRepository(db))
 
 
-@router.get("/", response_model=PagedResponse[SpartitoResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[SpartitoResponse],
+    dependencies=[Depends(require_permission("archivio:read"))],
+)
 async def list_spartiti(
     tipo_spartito_codice: int | None = Query(None),
     strumento_codice: int | None = Query(None),
@@ -33,7 +38,11 @@ async def list_spartiti(
     )
 
 
-@router.get("/{spartito_id}", response_model=SpartitoResponse)
+@router.get(
+    "/{spartito_id}",
+    response_model=SpartitoResponse,
+    dependencies=[Depends(require_permission("archivio:read"))],
+)
 async def get_spartito(
     spartito_id: int, service: SpartitoService = Depends(get_service)
 ) -> SpartitoResponse:
@@ -43,14 +52,23 @@ async def get_spartito(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=SpartitoResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=SpartitoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("archivio:write"))],
+)
 async def create_spartito(
     data: SpartitoCreate, service: SpartitoService = Depends(get_service)
 ) -> SpartitoResponse:
     return await service.create(data)
 
 
-@router.patch("/{spartito_id}", response_model=SpartitoResponse)
+@router.patch(
+    "/{spartito_id}",
+    response_model=SpartitoResponse,
+    dependencies=[Depends(require_permission("archivio:write"))],
+)
 async def update_spartito(
     spartito_id: int,
     data: SpartitoUpdate,
@@ -62,7 +80,11 @@ async def update_spartito(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{spartito_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{spartito_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("archivio:write"))],
+)
 async def delete_spartito(
     spartito_id: int, service: SpartitoService = Depends(get_service)
 ) -> None:

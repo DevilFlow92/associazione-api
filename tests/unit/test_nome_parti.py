@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.models.nome_parte import NomeParte
+from app.models.permesso import Permesso
+from app.models.ruolo import Ruolo
+from app.models.utente import TipoUtente, Utente
+from main import app
 
 
 @pytest.fixture
@@ -189,3 +196,132 @@ async def test_delete_audio_when_none_is_noop(
     get_r = await client.get(f"/api/v1/nome-parti/{seeded_nome_parte.id}")
     assert get_r.status_code == 200
     assert get_r.json()["documento_audio_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# RBAC: archivio:read/write (nome_parti non ha macro-sezione, permesso statico)
+# ---------------------------------------------------------------------------
+
+
+def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
+    ruoli: list[Ruolo] = []
+    if permessi:
+        ruoli = [
+            Ruolo(
+                nome="test",
+                permessi=[Permesso(codice=c, descrizione=c) for c in permessi],
+            )
+        ]
+    return Utente(
+        id=1,
+        tipo=TipoUtente.UMANO,
+        email="test@example.com",
+        superuser=superuser,
+        ruoli=ruoli,
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_nome_parti_requires_authentication(client: AsyncClient) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.get("/api/v1/nome-parti/?banda_codice=1")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_list_nome_parti_forbidden_without_permission(
+    client: AsyncClient,
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi=set())
+    r = await client.get("/api/v1/nome-parti/?banda_codice=1")
+    assert r.status_code == 403
+    assert "archivio:read" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_list_nome_parti_succeeds_with_permission(client: AsyncClient) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.get("/api/v1/nome-parti/?banda_codice=1")
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_nome_parte_requires_authentication(client: AsyncClient) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.post(
+        "/api/v1/nome-parti/",
+        json={"nome": "Bolero", "tipo_spartito_codice": 1, "banda_codice": 1},
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_nome_parte_forbidden_without_write_permission(
+    client: AsyncClient,
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.post(
+        "/api/v1/nome-parti/",
+        json={"nome": "Bolero", "tipo_spartito_codice": 1, "banda_codice": 1},
+    )
+    assert r.status_code == 403
+    assert "archivio:write" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_nome_parte_succeeds_with_write_permission(
+    client: AsyncClient,
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:write"}
+    )
+    r = await client.post(
+        "/api/v1/nome-parti/",
+        json={"nome": "Bolero", "tipo_spartito_codice": 1, "banda_codice": 1},
+    )
+    assert r.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_requires_authentication(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.post(
+        f"/api/v1/nome-parti/{seeded_nome_parte.id}/audio",
+        files=[_pdf_file("traccia.pdf")],
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_forbidden_without_write_permission(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.post(
+        f"/api/v1/nome-parti/{seeded_nome_parte.id}/audio",
+        files=[_pdf_file("traccia.pdf")],
+    )
+    assert r.status_code == 403
+    assert "archivio:write" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_succeeds_with_write_permission(
+    client: AsyncClient, seeded_nome_parte: NomeParte
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:write"}
+    )
+    r = await client.post(
+        f"/api/v1/nome-parti/{seeded_nome_parte.id}/audio",
+        files=[_pdf_file("traccia.pdf")],
+    )
+    assert r.status_code == 200

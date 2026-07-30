@@ -58,13 +58,12 @@ async def list_documenti(
 
 @router.get("/{documento_id}", response_model=DocumentoResponse)
 async def get_documento(
-    # No RBAC gate: direct-by-ID access requires already knowing the ID;
-    # gating single-doc reads is out of scope for this CR.
     documento_id: int,
+    user: Utente = Depends(get_current_user),
     service: DocumentoService = Depends(get_service),
 ) -> DocumentoResponse:
     try:
-        return await service.get_by_id(documento_id)
+        return await service.get_by_id(documento_id, user)
     except DocumentoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -90,10 +89,11 @@ async def upload_documento(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-# download/preview share the same no-gate rationale as get_documento above.
-async def _resolve_documento(documento_id: int, service: DocumentoService):  # type: ignore[return]
+async def _resolve_documento_for_download(
+    documento_id: int, user: Utente, service: DocumentoService
+):  # type: ignore[return]
     try:
-        return await service.get_by_id(documento_id)
+        return await service.get_for_download(documento_id, user)
     except DocumentoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -101,9 +101,10 @@ async def _resolve_documento(documento_id: int, service: DocumentoService):  # t
 @router.get("/{documento_id}/download")
 async def download_documento(
     documento_id: int,
+    user: Utente = Depends(get_current_user),
     service: DocumentoService = Depends(get_service),
 ) -> Response:
-    doc = await _resolve_documento(documento_id, service)
+    doc = await _resolve_documento_for_download(documento_id, user, service)
     try:
         content = await storage.get_bytes(doc.file_path)
     except StorageFileNotFoundError:
@@ -120,9 +121,10 @@ async def download_documento(
 @router.get("/{documento_id}/preview")
 async def preview_documento(
     documento_id: int,
+    user: Utente = Depends(get_current_user),
     service: DocumentoService = Depends(get_service),
 ) -> Response:
-    doc = await _resolve_documento(documento_id, service)
+    doc = await _resolve_documento_for_download(documento_id, user, service)
     try:
         content = await storage.get_bytes(doc.file_path)
     except StorageFileNotFoundError:
