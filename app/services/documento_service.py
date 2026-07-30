@@ -8,6 +8,7 @@ from app.exceptions.documento import (
     DocumentoNotFoundError,
     DocumentoSottoCartellaNotFoundError,
 )
+from app.models.documento import Documento
 from app.models.macro_sezione import MacroSezione
 from app.models.utente import Utente
 from app.repositories.documento_repository import DocumentoRepository
@@ -46,6 +47,15 @@ class DocumentoService:
             )
         return macro_sezione
 
+    async def _macro_sezione_for_documento(
+        self, documento: Documento
+    ) -> MacroSezione | None:
+        if documento.sotto_cartella_id is None:
+            return None
+        return await self._resolve_macro_sezione_for_sotto_cartella(
+            documento.sotto_cartella_id
+        )
+
     async def get_all(
         self,
         tipo_documento_codice: int | None,
@@ -53,11 +63,12 @@ class DocumentoService:
         user: Utente,
         sotto_cartella_id: int | None = None,
     ) -> PagedResponse[DocumentoResponse]:
-        if sotto_cartella_id is not None:
-            macro_sezione = await self._resolve_macro_sezione_for_sotto_cartella(
-                sotto_cartella_id
-            )
-            require_read(user, macro_sezione)
+        macro_sezione = (
+            await self._resolve_macro_sezione_for_sotto_cartella(sotto_cartella_id)
+            if sotto_cartella_id is not None
+            else None
+        )
+        require_read(user, macro_sezione)
         documenti = await self.repo.get_all(
             tipo_documento_codice=tipo_documento_codice,
             sotto_cartella_id=sotto_cartella_id,
@@ -71,11 +82,21 @@ class DocumentoService:
         items = [DocumentoResponse.model_validate(d) for d in documenti]
         return paginate(items, total, params)
 
-    async def get_by_id(self, documento_id: int) -> DocumentoResponse:
+    async def get_by_id(self, documento_id: int, user: Utente) -> DocumentoResponse:
         documento = await self.repo.get_by_id(documento_id)
         if not documento:
             raise DocumentoNotFoundError(documento_id)
+        macro_sezione = await self._macro_sezione_for_documento(documento)
+        require_read(user, macro_sezione)
         return DocumentoResponse.model_validate(documento)
+
+    async def get_for_download(self, documento_id: int, user: Utente) -> Documento:
+        documento = await self.repo.get_by_id(documento_id)
+        if not documento:
+            raise DocumentoNotFoundError(documento_id)
+        macro_sezione = await self._macro_sezione_for_documento(documento)
+        require_read(user, macro_sezione)
+        return documento
 
     async def upload(
         self,
@@ -89,11 +110,12 @@ class DocumentoService:
         # responsabilità del client. File eseguibili (.exe, .bat, ecc.)
         # non sono bloccati a livello di backend ma dovrebbero essere
         # filtrati dal frontend tramite l'attributo `accept`.
-        if sotto_cartella_id is not None:
-            macro_sezione = await self._resolve_macro_sezione_for_sotto_cartella(
-                sotto_cartella_id
-            )
-            require_write(user, macro_sezione)
+        macro_sezione = (
+            await self._resolve_macro_sezione_for_sotto_cartella(sotto_cartella_id)
+            if sotto_cartella_id is not None
+            else None
+        )
+        require_write(user, macro_sezione)
 
         sottocartella = (
             f"documenti/{tipo_documento_codice}"
@@ -118,10 +140,7 @@ class DocumentoService:
         documento = await self.repo.get_by_id(documento_id)
         if not documento:
             raise DocumentoNotFoundError(documento_id)
-        if documento.sotto_cartella_id is not None:
-            macro_sezione = await self._resolve_macro_sezione_for_sotto_cartella(
-                documento.sotto_cartella_id
-            )
-            require_write(user, macro_sezione)
+        macro_sezione = await self._macro_sezione_for_documento(documento)
+        require_write(user, macro_sezione)
         await delete_file(documento.file_path)
         await self.repo.delete(documento)

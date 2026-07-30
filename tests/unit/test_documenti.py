@@ -205,13 +205,25 @@ async def test_upload_documento_with_sotto_cartella_succeeds_with_permission(
 
 
 @pytest.mark.asyncio
-async def test_upload_documento_without_sotto_cartella_still_works_ungated(
+async def test_upload_documento_without_sotto_cartella_requires_archivio_write(
     client: AsyncClient,
 ) -> None:
-    # Regression guard: a user with no archivio permissions can still upload
-    # a document that has no sotto_cartella_id (pre-CR behavior preserved).
+    # A documento senza sotto_cartella_id non ha macro-sezione risolvibile:
+    # il fallback statico archivio:write si applica (gap chiuso in questa CR).
     app.dependency_overrides[get_current_user] = lambda: _user(permessi=set())
     r = await client.post("/api/v1/documenti/", files=[pdf_file("ungated.pdf")])
+    assert r.status_code == 403
+    assert "archivio:write" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_documento_without_sotto_cartella_succeeds_with_archivio_write(
+    client: AsyncClient,
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:write"}
+    )
+    r = await client.post("/api/v1/documenti/", files=[pdf_file("consentito.pdf")])
     assert r.status_code == 201
     assert r.json()["sotto_cartella_id"] is None
 
@@ -246,12 +258,24 @@ async def test_list_documenti_filtered_by_sotto_cartella_succeeds_with_permissio
 
 
 @pytest.mark.asyncio
-async def test_list_documenti_without_sotto_cartella_filter_still_ungated(
+async def test_list_documenti_without_sotto_cartella_filter_requires_archivio_read(
     client: AsyncClient,
 ) -> None:
-    # Regression guard: listing without a sotto_cartella_id filter requires no
-    # specific archivio permission (pre-CR behavior preserved).
+    # Gap chiuso in questa CR: senza filtro sotto_cartella_id il fallback
+    # statico archivio:read si applica comunque.
     app.dependency_overrides[get_current_user] = lambda: _user(permessi=set())
+    r = await client.get("/api/v1/documenti/")
+    assert r.status_code == 403
+    assert "archivio:read" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_list_documenti_without_sotto_cartella_filter_succeeds_with_read(
+    client: AsyncClient,
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
     r = await client.get("/api/v1/documenti/")
     assert r.status_code == 200
     assert r.json()["items"] == []
@@ -286,3 +310,158 @@ async def test_upload_documento_unknown_sotto_cartella_404(
         files=[pdf_file("orphan.pdf")],
     )
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# RBAC: accesso diretto per ID (get/download/preview) — gap più grave
+# dell'audit: prima di questa CR queste rotte non avevano nemmeno
+# get_current_user (zero autenticazione, non solo zero RBAC).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_documento_requires_authentication(client: AsyncClient) -> None:
+    upload = await client.post("/api/v1/documenti/", files=[pdf_file("auth.pdf")])
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.get(f"/api/v1/documenti/{doc_id}")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_documento_orfano_forbidden_without_archivio_read(
+    client: AsyncClient,
+) -> None:
+    upload = await client.post("/api/v1/documenti/", files=[pdf_file("orfano.pdf")])
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi=set())
+    r = await client.get(f"/api/v1/documenti/{doc_id}")
+    assert r.status_code == 403
+    assert "archivio:read" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_documento_orfano_succeeds_with_archivio_read(
+    client: AsyncClient,
+) -> None:
+    upload = await client.post("/api/v1/documenti/", files=[pdf_file("orfano2.pdf")])
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.get(f"/api/v1/documenti/{doc_id}")
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_documento_in_sotto_cartella_requires_dynamic_permission(
+    client: AsyncClient, seeded_sotto_cartella: int
+) -> None:
+    upload = await client.post(
+        f"/api/v1/documenti/?sotto_cartella_id={seeded_sotto_cartella}",
+        files=[pdf_file("in_cartella.pdf")],
+    )
+    doc_id = upload.json()["id"]
+
+    # archivio:read (fallback statico) non basta: serve certificazioni:read.
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.get(f"/api/v1/documenti/{doc_id}")
+    assert r.status_code == 403
+    assert "certificazioni:read" in r.json()["detail"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"certificazioni:read"}
+    )
+    r = await client.get(f"/api/v1/documenti/{doc_id}")
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_download_documento_requires_authentication(client: AsyncClient) -> None:
+    upload = await client.post(
+        "/api/v1/documenti/", files=[pdf_file("scaricabile_auth.pdf")]
+    )
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.get(f"/api/v1/documenti/{doc_id}/download")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_download_documento_forbidden_without_archivio_read(
+    client: AsyncClient,
+) -> None:
+    upload = await client.post(
+        "/api/v1/documenti/", files=[pdf_file("scaricabile_403.pdf")]
+    )
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi=set())
+    r = await client.get(f"/api/v1/documenti/{doc_id}/download")
+    assert r.status_code == 403
+    assert "archivio:read" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_download_documento_succeeds_with_archivio_read(
+    client: AsyncClient,
+) -> None:
+    upload = await client.post(
+        "/api/v1/documenti/", files=[pdf_file("scaricabile_200.pdf")]
+    )
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.get(f"/api/v1/documenti/{doc_id}/download")
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_preview_documento_requires_authentication(client: AsyncClient) -> None:
+    upload = await client.post(
+        "/api/v1/documenti/", files=[pdf_file("anteprima_auth.pdf")]
+    )
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides.pop(get_current_user, None)
+    r = await client.get(f"/api/v1/documenti/{doc_id}/preview")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_preview_documento_forbidden_without_archivio_read(
+    client: AsyncClient,
+) -> None:
+    upload = await client.post(
+        "/api/v1/documenti/", files=[pdf_file("anteprima_403.pdf")]
+    )
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi=set())
+    r = await client.get(f"/api/v1/documenti/{doc_id}/preview")
+    assert r.status_code == 403
+    assert "archivio:read" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_preview_documento_succeeds_with_archivio_read(
+    client: AsyncClient,
+) -> None:
+    upload = await client.post(
+        "/api/v1/documenti/", files=[pdf_file("anteprima_200.pdf")]
+    )
+    doc_id = upload.json()["id"]
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"archivio:read"}
+    )
+    r = await client.get(f"/api/v1/documenti/{doc_id}/preview")
+    assert r.status_code == 200

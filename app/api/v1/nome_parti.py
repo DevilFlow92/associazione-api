@@ -4,7 +4,7 @@ from associazione_toolkit.pagination import PagedResponse, PageParams
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
 from app.exceptions.spartito import NomeParteNotFoundError
 from app.models.utente import Utente
@@ -33,7 +33,11 @@ def get_documento_service(db: AsyncSession = Depends(get_db)) -> DocumentoServic
     )
 
 
-@router.get("/", response_model=PagedResponse[NomeParteResponse])
+@router.get(
+    "/",
+    response_model=PagedResponse[NomeParteResponse],
+    dependencies=[Depends(require_permission("archivio:read"))],
+)
 async def list_nome_parti(
     banda_codice: int,
     tipo_spartito_codice: int | None = Query(None),
@@ -44,7 +48,11 @@ async def list_nome_parti(
     return await service.get_all(banda_codice, tipo_spartito_codice, params, nome)
 
 
-@router.get("/{id}", response_model=NomeParteResponse)
+@router.get(
+    "/{id}",
+    response_model=NomeParteResponse,
+    dependencies=[Depends(require_permission("archivio:read"))],
+)
 async def get_nome_parte(
     id: int,
     service: NomeParteService = Depends(get_service),
@@ -55,7 +63,12 @@ async def get_nome_parte(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.post("/", response_model=NomeParteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=NomeParteResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("archivio:write"))],
+)
 async def create_nome_parte(
     data: NomeParteCreate,
     service: NomeParteService = Depends(get_service),
@@ -63,7 +76,11 @@ async def create_nome_parte(
     return await service.create(data)
 
 
-@router.patch("/{id}", response_model=NomeParteResponse)
+@router.patch(
+    "/{id}",
+    response_model=NomeParteResponse,
+    dependencies=[Depends(require_permission("archivio:write"))],
+)
 async def update_nome_parte(
     id: int,
     data: NomeParteUpdate,
@@ -76,7 +93,10 @@ async def update_nome_parte(
 
 
 @router.post(
-    "/{id}/audio", response_model=NomeParteResponse, status_code=status.HTTP_200_OK
+    "/{id}/audio",
+    response_model=NomeParteResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("archivio:write"))],
 )
 async def upload_audio(
     id: int,
@@ -101,7 +121,11 @@ async def upload_audio(
     )
 
 
-@router.delete("/{id}/audio", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{id}/audio",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("archivio:write"))],
+)
 async def delete_audio(
     id: int,
     service: NomeParteService = Depends(get_service),
@@ -113,7 +137,11 @@ async def delete_audio(
     await service.update(id, NomeParteUpdate(documento_audio_id=None))
 
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("archivio:write"))],
+)
 async def delete_nome_parte(
     id: int,
     service: NomeParteService = Depends(get_service),
