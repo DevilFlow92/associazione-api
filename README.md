@@ -344,6 +344,59 @@ necessarily a member. No uniqueness constraint on
 in the same year (e.g. different levels, different teachers) are a legitimate
 case, not an anomaly to block.
 
+### Schede alunno (row-level authorization)
+
+The personal record of a student enrolled in a course (`SchedaAlunno`, one per
+`IscrizioneCorso` — `iscrizione_corso_id` is UNIQUE, 409 on duplicate). It holds
+the `programma` written by the teacher/coordinator.
+
+This is the first endpoint in the project whose authorization is **not** purely
+resource:action. A student holds no `corsi:*` permission at all and must still
+read their own record — and only their own. That check cannot be expressed as a
+permission row, so it lives in `app/services/rbac_row_level.py` as pure
+functions (user + row data → decision), unit-testable without HTTP:
+
+Read and write have different scopes:
+
+| Caller | Read | Write |
+|---|---|---|
+| superuser | any record | any record |
+| `corsi:write` **and** teacher/coordinator of *this* course (`corso.insegnante_persona_id`/`coordinatore_persona_id`) | any record | this course's records |
+| `corsi:write` but not teacher/coordinator of *this* course | any record | 403 |
+| the student the record refers to (`utenti.persona_id` == `iscrizioni_corso.persona_id`) | own record only | 403 |
+| anyone else — including an authenticated user with no linked `Persona` | 403 | 403 |
+
+Read stays permission-only (any `corsi:read` holder reads any record) — the
+card that introduced this restriction only asked to scope *writing* to "one's
+own courses", and `GET /schede-alunno/{id}`/list never call into
+`rbac_row_level` in the first place, so narrowing read would be a separate,
+unrequested change. Write is not: `corsi:write` alone is no longer sufficient,
+`assert_puo_scrivere_scheda` additionally requires the caller's linked
+`Persona` to be the teacher or coordinator of the specific course the record
+belongs to (resolved via `scheda → iscrizione_corso → corso`). The superuser
+bypass mirrors the existing pattern in `permessi_archivio.require_write`.
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/schede-alunno/me/{iscrizione_corso_id}` | Read the record for that enrolment, if entitled | row-level only |
+| `GET` | `/schede-alunno/?iscrizione_corso_id={id}` | List records (paginated) | `corsi:read` |
+| `GET` | `/schede-alunno/{id}` | Get a record by ID | `corsi:read` |
+| `POST` | `/schede-alunno/` | Create a record | `corsi:write` |
+| `PATCH` | `/schede-alunno/{id}` | Update a record | `corsi:write` |
+| `DELETE` | `/schede-alunno/{id}` | Delete a record (204) | `corsi:write` |
+
+The student's route is deliberately **separate** from `GET /schede-alunno/{id}`
+rather than one endpoint hosting both rules: a single route would have to admit
+any authenticated caller and deny from inside its body, so the router's
+declarative guard could no longer state the requirement. It is also keyed by
+`iscrizione_corso_id` — a student knows their own enrolment, not the ID of a
+record they have never seen.
+
+On `/me/...` authorization is evaluated *before* the record is looked up, so an
+unauthorized caller gets 403 whether or not a record exists and cannot use the
+status code to probe. `aggiornato_da_persona_id` (audit) is always taken from
+the authenticated principal, never from the payload.
+
 ### NomeParti · Spartiti (score archive)
 
 Two-level archive: `NomeParte` is the composition, `Spartito` is one of its
