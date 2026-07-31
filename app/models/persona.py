@@ -10,6 +10,7 @@ from app.core.database import Base
 from app.models.relations import persone_indirizzi
 
 if TYPE_CHECKING:
+    from app.models.allievo import Allievo
     from app.models.contatto import Contatto
     from app.models.esterno import Esterno
     from app.models.indirizzo import Indirizzo
@@ -42,6 +43,7 @@ class Persona(Base):
     )
     soci: Mapped[list[Socio]] = relationship(back_populates="persona")
     esterni: Mapped[list[Esterno]] = relationship(back_populates="persona")
+    allievo: Mapped[Allievo | None] = relationship(back_populates="persona")
     indirizzi: Mapped[list[Indirizzo]] = relationship(
         secondary=persone_indirizzi, back_populates="persone"
     )

@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 import app.models  # noqa: F401
 from app.api.deps import get_current_user
+from app.api.v1.allievi import router as allievi_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bande import public_router as bande_public_router
 from app.api.v1.bande import router as bande_router
@@ -242,6 +243,7 @@ app.include_router(repertorio_items_router, prefix="/api/v1", dependencies=_auth
 
 # ── Corsi musicali ───────────────────────────────────────────────────────────
 app.include_router(corsi_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(allievi_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(lezioni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(iscrizioni_corso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(pagamenti_corso_router, prefix="/api/v1", dependencies=_auth)
