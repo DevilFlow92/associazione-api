@@ -11,5 +11,5 @@ class PersonaHasDependentsError(Exception):
         self.persona_id = persona_id
         super().__init__(
             f"Persona con id {persona_id} non eliminabile: "
-            "esistono soci o esterni collegati"
+            "esistono soci, esterni o allievi collegati"
         )

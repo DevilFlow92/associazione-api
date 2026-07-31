@@ -1,3 +1,4 @@
+from app.models.allievo import Allievo  # noqa: F401
 from app.models.committente import Committente  # noqa: F401
 from app.models.configurazione_banda_anno import ConfigurazioneBandaAnno  # noqa: F401
 from app.models.contatto import Contatto  # noqa: F401

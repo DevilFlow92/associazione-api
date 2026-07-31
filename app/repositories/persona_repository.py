@@ -59,7 +59,8 @@ class PersonaRepository:
         return persona
 
     async def has_dependents(self, persona_id: int) -> bool:
-        """True se la persona è collegata a un socio o a un esterno."""
+        """True se la persona è collegata a un socio, un esterno o un allievo."""
+        from app.models.allievo import Allievo
         from app.models.esterno import Esterno
         from app.models.socio import Socio
 
@@ -75,7 +76,13 @@ class PersonaRepository:
             .where(Esterno.persona_id == persona_id)
         )
         esterni = (await self.db.execute(stmt)).scalar_one()
-        return bool(soci or esterni)
+        stmt = (
+            select(func.count())
+            .select_from(Allievo)
+            .where(Allievo.persona_id == persona_id)
+        )
+        allievi = (await self.db.execute(stmt)).scalar_one()
+        return bool(soci or esterni or allievi)
 
     async def delete(self, persona_id: int) -> None:
         """Elimina la persona e i figli posseduti (contatti, indirizzi collegati).
