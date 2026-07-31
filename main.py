@@ -41,6 +41,7 @@ from app.api.v1.ricevute import router as ricevute_router
 from app.api.v1.ruoli import router as ruoli_router
 from app.api.v1.ruoli_banda import router as ruoli_banda_router
 from app.api.v1.ruoli_contatto import router as ruoli_contatto_router
+from app.api.v1.schede_alunno import router as schede_alunno_router
 from app.api.v1.servizi import router as servizi_router
 from app.api.v1.sezioni_rendiconto import router as sezioni_rendiconto_router
 from app.api.v1.soci import router as soci_router
@@ -243,6 +244,7 @@ app.include_router(corsi_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(lezioni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(iscrizioni_corso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(pagamenti_corso_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(schede_alunno_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)
