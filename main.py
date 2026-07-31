@@ -31,6 +31,7 @@ from app.api.v1.oauth import router as oauth_router
 from app.api.v1.pagamenti_corso import router as pagamenti_corso_router
 from app.api.v1.permessi import router as permessi_router
 from app.api.v1.persone import router as persone_router
+from app.api.v1.portale_alunno import router as portale_alunno_router
 from app.api.v1.presenze import router as presenze_router
 from app.api.v1.prove import router as prove_router
 from app.api.v1.province import router as province_router
@@ -245,6 +246,7 @@ app.include_router(lezioni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(iscrizioni_corso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(pagamenti_corso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(schede_alunno_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(portale_alunno_router, prefix="/api/v1", dependencies=_auth)
 
 # ── Contabilità ──────────────────────────────────────────────────────────────
 app.include_router(voci_contabilita_router, prefix="/api/v1", dependencies=_auth)

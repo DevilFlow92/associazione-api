@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import enum
 
+from app.exceptions.portale_alunno import AccessoPortaleAlunnoNegatoError
 from app.exceptions.scheda_alunno import AccessoSchedaAlunnoNegatoError
 from app.models.corso import Corso
 from app.models.utente import Utente
@@ -130,3 +131,44 @@ def assert_puo_scrivere_scheda(utente: Utente, corso: Corso) -> None:
         f"Modifica della scheda alunno riservata a chi ha "
         f"{PERMESSO_SCRITTURA_CORSI} ed è insegnante o coordinatore di questo corso"
     )
+
+
+# ── Portale alunno (card #176): self-service, niente bypass di gestione ─────
+#
+# A differenza della scheda, qui non esiste un ramo "chi ha corsi:write legge
+# comunque": il portale è la vista privata dell'alunno sulla propria
+# iscrizione, non un'ulteriore superficie di lettura per il personale corsi
+# (che ha già /iscrizioni-corso, /lezioni, /presenze, /pagamenti-corso). Il
+# controllo di proprietà riusa comunque ``e_alunno_della_scheda``: la
+# verifica è la stessa identica (Utente.persona_id contro la Persona
+# proprietaria della riga), cambia solo la riga a cui si applica.
+
+
+def assert_ha_persona_collegata(utente: Utente) -> None:
+    """Impone che il principal abbia una Persona collegata.
+
+    Precondizione di ogni endpoint del portale alunno: un Utente senza
+    Persona (tipico di un account di gestione) non è mai alunno di nessun
+    corso, a prescindere da quale iscrizione stia chiedendo. Serve come
+    guardia esplicita per l'endpoint di ingresso (elenco iscrizioni), che
+    non ha un ``persona_id`` di riga con cui confrontarsi finché non ha già
+    filtrato per questo stesso ``utente.persona_id``.
+    """
+    if utente.persona_id is None:
+        raise AccessoPortaleAlunnoNegatoError(
+            "Il portale alunno richiede una Persona collegata all'utente"
+        )
+
+
+def assert_e_titolare_iscrizione(utente: Utente, persona_id_iscrizione: int) -> None:
+    """Impone che il principal sia la Persona titolare dell'iscrizione.
+
+    Riusa ``e_alunno_della_scheda`` per il confronto di proprietà — stessa
+    logica, applicata a ``IscrizioneCorso.persona_id`` invece che alla
+    scheda. Nessun bypass ``corsi:write``.
+    """
+    if not e_alunno_della_scheda(utente, persona_id_iscrizione):
+        raise AccessoPortaleAlunnoNegatoError(
+            "Il portale alunno è accessibile solo alla Persona a cui "
+            "si riferisce l'iscrizione"
+        )

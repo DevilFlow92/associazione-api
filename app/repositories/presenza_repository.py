@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.lezione import Lezione
 from app.models.persona import Persona
 from app.models.presenza import Presenza
 from app.schemas.presenza import PresenzaCreate, PresenzaUpdate
@@ -110,6 +111,38 @@ class PresenzaRepository:
             select(func.count())
             .select_from(Presenza)
             .where(Presenza.lezione_id == lezione_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
+    async def get_by_corso_e_persona(
+        self, corso_id: int, persona_id: int, offset: int = 0, limit: int = 20
+    ) -> list[Presenza]:
+        """Presenze di una Persona alle lezioni di un Corso specifico.
+
+        Presenza è legata direttamente a ``persona_id``, non a
+        ``iscrizione_corso_id``: per restringere "le presenze di QUESTA
+        iscrizione" si passa da Lezione (join su ``lezione_id``) fino al
+        Corso, così una persona iscritta a più corsi non vede mescolate le
+        presenze degli altri (portale alunno, card #176).
+        """
+        stmt = (
+            select(Presenza)
+            .join(Lezione, Presenza.lezione_id == Lezione.id)
+            .where(Lezione.corso_id == corso_id, Presenza.persona_id == persona_id)
+            .options(*_LOAD_OPTS)
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_corso_e_persona(self, corso_id: int, persona_id: int) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Presenza)
+            .join(Lezione, Presenza.lezione_id == Lezione.id)
+            .where(Lezione.corso_id == corso_id, Presenza.persona_id == persona_id)
         )
         result = await self.db.execute(stmt)
         return result.scalar_one()
