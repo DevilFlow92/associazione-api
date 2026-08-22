@@ -41,9 +41,17 @@ app/
 │       ├── iscrizioni.py                  # Annual subscriptions router
 │       ├── committenti.py                 # Event clients (committenti) router
 │       ├── servizi.py                     # Events router (filterable by year) + libretto PDF generation
+│       ├── prove.py                       # Rehearsals router (standalone or event-oriented) + libretto PDF generation
 │       ├── ricevute.py                    # Receipts router
-│       ├── presenze.py                    # Attendance / event roster router
-│       ├── repertorio_items.py            # Event programme (repertorio) router
+│       ├── presenze.py                    # Attendance / event-rehearsal-lesson roster router
+│       ├── repertorio_items.py            # Event/rehearsal programme (repertorio) router
+│       ├── corsi.py                       # Music courses router
+│       ├── allievi.py                     # Students (anagrafica, non-socio/esterno) router
+│       ├── lezioni.py                     # Course lesson calendar router
+│       ├── iscrizioni_corso.py            # Course enrolments router
+│       ├── pagamenti_corso.py             # Course fee payments router (auto-posts to FlussoCassa)
+│       ├── schede_alunno.py               # Student record router (row-level authorization)
+│       ├── portale_alunno.py              # Student self-service portal (/me/...)
 │       ├── voci_contabilita.py            # Accounting items router
 │       ├── flussi_cassa.py                # Cash-flow movements router
 │       ├── configurazione_banda_anno.py   # Annual band configuration router (year closure)
@@ -54,7 +62,8 @@ app/
 │       ├── province.py                    #   bands, contact/band roles, rendiconto
 │       ├── comuni.py                      #   sections/items/sub-items, cash-flow natures,
 │       ├── strumenti.py                   #   document types, score types, subscription
-│       ├── tipi_indirizzo.py              #   states, band roles, contact roles
+│       ├── tipi_indirizzo.py              #   states, band roles, contact roles,
+│       │                                  #   course types, course enrolment states
 │       ├── bande.py                       # Bands router (with address M2M)
 │       ├── ruoli_contatto.py              # Contact roles lookup
 │       ├── ruoli_banda.py                 # Band roles lookup
@@ -65,6 +74,8 @@ app/
 │       ├── tipi_documento.py              # Document types lookup
 │       ├── tipi_spartito.py               # Score types lookup
 │       ├── stati_iscrizione.py            # Subscription states lookup
+│       ├── tipi_corso.py                  # Course types lookup
+│       ├── stati_iscrizione_corso.py      # Course enrolment states lookup
 │       ├── documenti.py                   # Documents router (file repository)
 │       ├── macro_sezioni.py               # Archive macro-sections lookup (read-only, seeded)
 │       ├── sotto_cartelle.py              # User-managed sub-folders inside a macro-section
@@ -133,16 +144,33 @@ pro-loco, …) that commissioned it; the specific on-site contact for that one
 event lives on `Servizio.referente` instead, since it can change even for
 repeat clients.
 
+**Prova** models a rehearsal: `banda_codice`, a single `data_prova`
+datetime, an optional `indirizzo_id` (unlike `Servizio.indirizzo_id`, it's
+nullable — a rehearsal can be called quickly before a venue is settled),
+and an optional `servizio_id` — set when the rehearsal is in preparation
+for a specific event, null for a standalone rehearsal (e.g. rehearsing a
+freshly renewed march repertoire).
+
+**Lezione** models a single dated session of a **Corso**: `corso_id` is
+required (unlike `Prova`, a lesson always belongs to a course, never
+standalone), plus `data_lezione` and an optional `indirizzo_id`.
+
 **Presenza** tracks who is called to (and, later, actually attends) a
-service: it links a `Persona` to a `Servizio` (unique per pair), with a
-nullable `stato` (`PRESENTE` / `ASSENTE` / `GIUSTIFICATO`) — null while the
-person is only "in organico" and attendance hasn't been tracked yet.
-`servizio_id` is nullable with a `CHECK` requiring it for now, in
-anticipation of future arcs (`prova_id`, `lezione_id`) once rehearsals and
-lessons are modelled. **RepertorioItem** follows the same exclusive-arc
-pattern to build a service's programme: it links a `NomeParte` to a
-`Servizio` (unique per pair) with an explicit `ordine` (playing position)
-and optional `note`.
+service, rehearsal, or lesson: it links a `Persona` to exactly one of
+`Servizio`, `Prova`, or `Lezione` — a three-branch exclusive arc enforced
+by both a DB `CHECK` (enumerating the three valid combinations of
+nullable/non-null columns) and a Pydantic validator — with a nullable
+`stato` (`PRESENTE` / `ASSENTE` / `GIUSTIFICATO`), null while the person is
+only "in organico" and attendance hasn't been tracked yet, and unique per
+`(persona_id, servizio_id | prova_id | lezione_id)`. **RepertorioItem**
+follows the same two-branch exclusive-arc pattern (`Servizio`/`Prova` only
+— a lesson has no repertoire) to build a programme: it links a `NomeParte`
+to a `Servizio`/`Prova` (unique per pair) with an explicit `ordine`
+(playing position) and optional `note`.
+
+`GET /prove/{id}/libretto` mirrors `GET /servizi/{id}/libretto` exactly
+(same merge/fallback/missing-piece-report logic, reusing `LibrettoService`
+with `prova_id` instead of `servizio_id`).
 
 The score archive is a two-level model: **NomeParte** is the musical
 composition (e.g. "Nessun dorma"), and **Spartito** is one physical/digital
@@ -168,15 +196,15 @@ membership model, classified by `TipoDocumento` and optionally filed under a
 **SottoCartella** (a user-created sub-folder inside one of a fixed set of
 seeded **MacroSezione** — e.g. "Certificazioni Uniche", "Verbali" — each
 carrying its own RBAC permission prefix instead of the generic
-`archivio:*`). Other aggregates (Spartito, Iscrizione, Ricevuta, Template)
-reference documents by FK.
+`archivio:*`). Other aggregates (Spartito, Iscrizione, IscrizioneCorso,
+Ricevuta, Template) reference documents by FK.
 
 **Template** is the dynamic-document system: a JSON-defined document body
 (`contenuto_json`) plus a list of required entity types (`entita_richieste`,
 e.g. `socio`, `servizio`, `ricevuta`), rendered by substituting **merge
 fields** resolved at request time from real records (`app/mergefields/` —
 one provider per entity: banda, socio, esterno, contatto, servizio,
-ricevuta, iscrizione). A template can be previewed as HTML, or generated as
+ricevuta, iscrizione, allievo, iscrizione_corso). A template can be previewed as HTML, or generated as
 a DOCX (direct XML manipulation) or a PDF (HTML → paged.js pagination →
 headless-Chromium capture via Playwright); a PDF/DOCX generation persists
 its output as a new `Documento`.
@@ -186,16 +214,19 @@ a band's chart-of-accounts line, classified by rendiconto section/item/sub-item)
 and **FlussoCassa** (T_FlussoCassa — cash movements against an accounting item,
 with a sign and a cash/bank nature). Every movement carries a `tipo`
 (`MOVIMENTO`, `SALDO_INIZIALE`, `TRASFERIMENTO_USCITA`, `TRASFERIMENTO_ENTRATA`,
-`AUTO_ISCRIZIONE`), an optional `iscrizione_id` FK (for auto-generated movements
-from a paid subscription), and an optional `trasferimento_id` UUID (a shared
-group key linking the two legs of a cassa↔banca transfer).
+`AUTO_ISCRIZIONE`, `AUTO_PAGAMENTO_CORSO`), an optional `iscrizione_id` FK
+(for auto-generated movements from a paid subscription), and an optional
+`trasferimento_id` UUID (a shared group key linking the two legs of a
+cassa↔banca transfer).
 
 **ConfigurazioneBandaAnno** holds the annual configuration for a band:
-opening balances, the expected membership quota, and a reference to the
-"quote associative" accounting item. Once the year is **closed**
-(`chiuso = True`), all mutations on `FlussoCassa` rows belonging to that
-(banda, anno) pair are blocked with `409`. The year is re-openable by a
-superuser via `POST /{id}/riapri`.
+opening balances, the expected membership quota, a reference to the
+"quote associative" accounting item (`voce_contabilita_quote_id`), and a
+separate reference to the "corsi musicali" accounting item
+(`voce_contabilita_corsi_id`, used by `PagamentoCorso` auto-posting — see
+below). Once the year is **closed** (`chiuso = True`), all mutations on
+`FlussoCassa` rows belonging to that (banda, anno) pair are blocked with
+`409`. The year is re-openable by a superuser via `POST /{id}/riapri`.
 
 **Corso** models a band's music course for a given year (e.g. brass,
 percussion, woodwind, piano — classified by the **TipoCorso** lookup), with
@@ -206,6 +237,32 @@ teacher can be an external hire rather than a member. No uniqueness
 constraint is enforced on `(tipo_corso_codice, anno, banda_codice)`: running
 several parallel courses of the same type in the same year (different
 levels, different teachers) is a legitimate case in this domain.
+
+**Allievo** is a dedicated anagrafica entity for course students who are
+neither a `Socio` nor an `Esterno`: it links a `Persona` (`persona_id`,
+unique — a person holds at most one `Allievo` record) with a
+`codice_allievo` and an optional `indirizzo_id`, following the same
+`Persona`-first pattern as `Socio`/`Esterno`; `banda_codice` is not a
+column on `Allievo` itself, it's inherited from `Persona` and used to
+filter (`GET /allievi/?banda_codice=`), same as soci/esterni.
+
+**IscrizioneCorso** models a `Persona`'s enrolment to a `Corso` — distinct
+from `Iscrizione` (a `Socio`'s annual membership subscription): the
+enrollee here is any `Persona`, not necessarily a member, since a newcomer
+can enrol in a course before ever becoming a socio. It carries a
+`stato_iscrizione_corso_codice` (**StatoIscrizioneCorso** lookup), an
+optional `documento_id`, and `data_iscrizione`. No uniqueness constraint on
+`(persona_id, corso_id)`: a person can be re-enrolled after a cancelled
+enrolment.
+
+**PagamentoCorso** records a course-fee payment against an
+`IscrizioneCorso`. Creating one **auto-posts**, on the same pattern as
+`Iscrizione`/`AUTO_ISCRIZIONE`: a `Ricevuta` (`RISCOSSIONE`) and a
+`FlussoCassa` (`AUTO_PAGAMENTO_CORSO`, natura Banca) are generated
+automatically against `ConfigurazioneBandaAnno.voce_contabilita_corsi_id`
+for the enrolment's (banda, anno) — `422` if that configuration is missing.
+`ricevuta_id` is nullable for symmetry with `Iscrizione.ricevuta_id` but is
+always set by the service in practice.
 
 ## API endpoints
 
@@ -293,35 +350,68 @@ whole programme (`RepertorioItem`, in `ordine`) into one PDF:
   everyone else, they just get no PDF entry and an explicit `errore` in the
   report instead.
 
-### Presenze (event roster & attendance)
+### Prove (rehearsals)
+
+Standard CRUD under `/prove` (`servizi:read`/`servizi:write` — same
+permission group as `Servizio`, not `corsi:*`). In addition:
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/presenze/servizio/{servizio_id}` | Roster/attendance for an event (paginated) |
-| `GET` | `/presenze/{id}` | Get a roster entry by ID |
-| `POST` | `/presenze/` | Add a person to an event's roster (`persona_id` + `servizio_id`) |
-| `PATCH` | `/presenze/{id}` | Update `stato` (`PRESENTE`/`ASSENTE`/`GIUSTIFICATO`) and/or `note` |
-| `DELETE` | `/presenze/{id}` | Remove a roster entry (204) |
+| `GET` | `/prove/?banda_codice={b}&servizio_id={s}` | List rehearsals, filterable by band and/or the event they prepare (paginated) |
+| `GET` | `/prove/{prova_id}/libretto?persona_id={id}` | Generate the rehearsal booklet PDF — identical logic to `/servizi/{id}/libretto`, reusing the same roster (`Presenza`) and programme (`RepertorioItem`) with `prova_id` |
 
-Requires existing `persona_id` and `servizio_id` (404 otherwise); rejects a
-person appearing twice on the same event's roster (409).
+`Prova` requires an existing `servizio_id` if provided (404); `indirizzo_id`
+is optional and, unlike `Servizio`, may be left unset while the venue is
+still being decided.
 
-### Repertorio (event programme)
+### Presenze (event/rehearsal/lesson roster & attendance)
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/presenze/servizio/{servizio_id}` | Roster/attendance for an event (paginated) | `servizi:read` |
+| `GET` | `/presenze/prova/{prova_id}` | Roster/attendance for a rehearsal (paginated) | `servizi:read` |
+| `GET` | `/presenze/lezione/{lezione_id}` | Roster/attendance for a lesson (paginated) | `corsi:read` |
+| `GET` | `/presenze/{id}` | Get a roster entry by ID | `servizi:read` |
+| `POST` | `/presenze/` | Add a person to a roster (`persona_id` + exactly one of `servizio_id`/`prova_id`/`lezione_id`) | `servizi:write` or `corsi:write`, chosen from the container in the payload |
+| `PATCH`/`DELETE` | `/presenze/{id}` | Update `stato`/`note`, or remove (204) | `servizi:write` or `corsi:write`, chosen from the existing row's container |
+| `PATCH` | `/presenze/bulk` | Bulk-update `stato`/`note` for several entries at once | `servizi:write` |
+
+Requires an existing `persona_id` and exactly one of `servizio_id` /
+`prova_id` / `lezione_id` (404/422 otherwise, enforced by both a DB `CHECK`
+and a Pydantic validator); rejects a person appearing twice on the same
+roster (409). The `servizio`/`prova` endpoints are gated by `servizi:*`
+uniformly; the `lezione` endpoint and the write path when the payload/row
+targets a lesson are gated by `corsi:*` instead, so a future
+teacher-only role (`corsi:*` without `servizi:*`) isn't locked out of their
+own lesson rosters. On `PATCH`/`DELETE`, the permission check happens
+*after* loading the existing row (to know its container) but *before* the
+mutation — an unauthorized caller on an existing row gets `403`, not `404`
+(a minor, accepted information leak: the permission isn't otherwise
+derivable without loading the row). `PATCH /presenze/bulk` and
+`GET /presenze/{id}` are not yet split this way and remain under
+`servizi:*` regardless of container — a known residual gap, not yet hit in
+practice because lesson rosters are managed through
+`GET /presenze/lezione/{id}` + per-row `PATCH`.
+
+### Repertorio (event/rehearsal programme)
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/repertorio/servizio/{servizio_id}` | Programme for an event, ordered by `ordine` (paginated) |
+| `GET` | `/repertorio/prova/{prova_id}` | Programme for a rehearsal, ordered by `ordine` (paginated) |
 | `GET` | `/repertorio/{id}` | Get a programme entry by ID |
-| `POST` | `/repertorio/` | Add a piece to an event's programme (`nome_parte_id` + `servizio_id` + `ordine`) |
+| `POST` | `/repertorio/` | Add a piece to a programme (`nome_parte_id` + exactly one of `servizio_id`/`prova_id` + `ordine`) |
 | `PATCH` | `/repertorio/{id}` | Update `ordine` and/or `note` |
 | `DELETE` | `/repertorio/{id}` | Remove a programme entry (204) |
 
-Requires existing `nome_parte_id` and `servizio_id` (404 otherwise); rejects the
-same piece appearing twice in the same event's programme (409). `ordine` is not
-DB-unique per event — reordering the programme is expected to be a common
-operation, and enforcing uniqueness would force multi-step shuffles to avoid
-transient conflicts, for a constraint the application layer can keep sane
-either way.
+Gated uniformly by `servizi:read`/`servizi:write`, for both the `servizio`
+and `prova` branches. Requires an existing `nome_parte_id` and exactly one
+of `servizio_id`/`prova_id` (404/422 otherwise); rejects the same piece
+appearing twice in the same programme (409). `ordine` is not DB-unique per
+event/rehearsal — reordering the programme is expected to be a common
+operation, and enforcing uniqueness would force multi-step shuffles to
+avoid transient conflicts, for a constraint the application layer can keep
+sane either way. Lessons have no repertoire (only a calendar/roster).
 
 ### Corsi (music courses)
 
@@ -343,6 +433,78 @@ necessarily a member. No uniqueness constraint on
 `(tipo_corso_codice, anno, banda_codice)`: parallel courses of the same type
 in the same year (e.g. different levels, different teachers) are a legitimate
 case, not an anomaly to block.
+
+### Allievi
+
+Standard CRUD under `/allievi` (`corsi:read`/`corsi:write`).
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/allievi/?banda_codice={b}` | List students, filterable by band (joins through `Persona`, paginated) | `corsi:read` |
+| `GET` | `/allievi/{id}` | Get a student by ID | `corsi:read` |
+| `POST` | `/allievi/` | Create a student record | `corsi:write` |
+| `PATCH` | `/allievi/{id}` | Update a student record | `corsi:write` |
+| `DELETE` | `/allievi/{id}` | Delete a student record (204) | `corsi:write` |
+
+`Allievo` requires an existing `persona_id` (404); rejects a `Persona`
+already linked to another `Allievo` record (409) and a duplicate
+`codice_allievo` (409).
+
+### Lezioni
+
+Standard CRUD under `/lezioni` (`corsi:read`/`corsi:write`).
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/lezioni/?corso_id={id}` | List lessons for a course (paginated) | `corsi:read` |
+| `GET` | `/lezioni/{id}` | Get a lesson by ID | `corsi:read` |
+| `POST` | `/lezioni/` | Create a lesson | `corsi:write` |
+| `PATCH` | `/lezioni/{id}` | Update a lesson | `corsi:write` |
+| `DELETE` | `/lezioni/{id}` | Delete a lesson (204) | `corsi:write` |
+
+`Lezione` requires an existing `corso_id` (404, always required — a lesson
+never stands alone); `indirizzo_id` is optional and validated if provided
+(404). A lesson's roster/attendance is at `GET /presenze/lezione/{id}` (see
+Presenze above), gated by `corsi:read`/`corsi:write` like the rest of this
+section, not `servizi:*`.
+
+### Iscrizioni corso
+
+Standard CRUD under `/iscrizioni-corso` (`corsi:read`/`corsi:write`).
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/iscrizioni-corso/?corso_id={c}&persona_id={p}` | List enrolments, filterable by course and/or person (paginated) | `corsi:read` |
+| `GET` | `/iscrizioni-corso/{id}` | Get an enrolment by ID | `corsi:read` |
+| `POST` | `/iscrizioni-corso/` | Create an enrolment | `corsi:write` |
+| `PATCH` | `/iscrizioni-corso/{id}` | Update an enrolment | `corsi:write` |
+| `DELETE` | `/iscrizioni-corso/{id}` | Delete an enrolment (204) | `corsi:write` |
+
+`IscrizioneCorso` requires an existing `corso_id`, `persona_id`,
+`stato_iscrizione_corso_codice`, and — if provided — `documento_id` (404
+otherwise). No uniqueness constraint on `(persona_id, corso_id)`: a person
+can be re-enrolled after a cancelled enrolment.
+
+### Pagamenti corso
+
+Standard CRUD under `/pagamenti-corso` (`corsi:read`/`corsi:write`).
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/pagamenti-corso/?iscrizione_corso_id={id}` | List payments for an enrolment (paginated) | `corsi:read` |
+| `GET` | `/pagamenti-corso/{id}` | Get a payment by ID | `corsi:read` |
+| `POST` | `/pagamenti-corso/` | Record a payment — auto-posts a `Ricevuta` + `FlussoCassa` (see below) | `corsi:write` |
+| `PATCH` | `/pagamenti-corso/{id}` | Update a payment | `corsi:write` |
+| `DELETE` | `/pagamenti-corso/{id}` | Delete a payment (204) | `corsi:write` |
+
+`PagamentoCorso` requires an existing `iscrizione_corso_id` (404). On
+`POST`, the service resolves the enrolment's (banda, anno) from its
+`Corso`, looks up `ConfigurazioneBandaAnno.voce_contabilita_corsi_id` for
+that pair (`422` — `ConfigurazioneContabileCorsiMancanteError` — if unset),
+and creates a `RISCOSSIONE` `Ricevuta` plus a `FlussoCassa` of `tipo`
+`AUTO_PAGAMENTO_CORSO` (natura Banca) referencing it — same auto-posting
+pattern already used by `Iscrizione`/`AUTO_ISCRIZIONE` for membership
+quotes, applied here to course fees.
 
 ### Schede alunno (row-level authorization)
 
@@ -396,6 +558,36 @@ On `/me/...` authorization is evaluated *before* the record is looked up, so an
 unauthorized caller gets 403 whether or not a record exists and cannot use the
 status code to probe. `aggiornato_da_persona_id` (audit) is always taken from
 the authenticated principal, never from the payload.
+
+### Portale alunno (student self-service)
+
+A second row-level surface, entirely separate from the staff-facing
+`/corsi`, `/allievi`, `/lezioni`, `/presenze`, `/iscrizioni-corso`,
+`/pagamenti-corso` routers (same rationale as `/schede-alunno/me/...`): no
+`corsi:*` permission is ever required or granted here — the only
+authorization is being the `Persona` the enrolment belongs to
+(`rbac_row_level.assert_e_titolare_iscrizione`, reusing the same
+comparison as `e_alunno_della_scheda`). Everything lives under `/me`
+because it's a cross-cutting entry point, not an extension of one CRUD
+resource: a student discovers their own enrolments and navigates from
+there to that enrolment's calendar, attendance, and payments.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/me/iscrizioni-corso` | The caller's own course enrolments (paginated) |
+| `GET` | `/me/iscrizioni-corso/{id}/lezioni` | Lesson calendar for one of the caller's enrolments (paginated) |
+| `GET` | `/me/iscrizioni-corso/{id}/presenze` | The caller's own attendance for that enrolment (paginated) |
+| `GET` | `/me/iscrizioni-corso/{id}/pagamenti` | The caller's own payments for that enrolment (paginated) |
+
+Every `{id}`-scoped endpoint loads the enrolment (404 if absent), checks
+ownership (403 if it belongs to someone else), then queries the child
+resource — `403` before `404` is not the ordering here (unlike
+`/schede-alunno/me/...`) because the enrolment itself is the thing being
+looked up, not a separate row gated behind it. `GET /me/iscrizioni-corso`
+additionally requires the caller to have a `Persona` linked at all
+(`assert_ha_persona_collegata`) — a management-only `Utente` with no
+`persona_id` is never a student, regardless of which enrolment it asks
+about.
 
 ### NomeParti · Spartiti (score archive)
 
@@ -462,15 +654,16 @@ Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 `/regioni`, `/province`, `/comuni`, `/strumenti`, `/tipi-indirizzo`, `/bande`,
 `/ruoli-contatto`, `/ruoli-banda`, `/sezioni-rendiconto`, `/voci-rendiconto`,
 `/sottovoci-rendiconto`, `/nature-flusso`, `/tipi-documento`, `/tipi-spartito`,
-`/stati-iscrizione`, `/tipi-corso`.
+`/stati-iscrizione`, `/tipi-corso`, `/stati-iscrizione-corso`. All gated by
+the shared `lookup:read`/`lookup:write` permission.
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/{lookup}/` | List entries (paginated) |
-| `GET` | `/{lookup}/{codice}` | Get an entry by code |
-| `POST` | `/{lookup}/` | Create an entry (409 on duplicate code) |
-| `PATCH` | `/{lookup}/{codice}` | Update an entry |
-| `DELETE` | `/{lookup}/{codice}` | Delete an entry (204) |
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/{lookup}/` | List entries (paginated) | `lookup:read` |
+| `GET` | `/{lookup}/{codice}` | Get an entry by code | `lookup:read` |
+| `POST` | `/{lookup}/` | Create an entry (409 on duplicate code) | `lookup:write` |
+| `PATCH` | `/{lookup}/{codice}` | Update an entry | `lookup:write` |
+| `DELETE` | `/{lookup}/{codice}` | Delete an entry (204) | `lookup:write` |
 
 The geographic lookups accept a hierarchy filter on their list endpoint:
 `GET /regioni/?stato_codice=`, `GET /province/?regione_codice=`, and
@@ -620,25 +813,40 @@ Il sistema RBAC include i seguenti permessi atomici nella forma `risorsa:azione`
 | `templates:write` | Gestire template (creazione, modifica, eliminazione) |
 | `corsi:read` | Visualizzare i corsi musicali |
 | `corsi:write` | Gestire i corsi musicali |
+| `lookup:read` | Visualizzare le tabelle dimensione |
+| `lookup:write` | Gestire le tabelle dimensione |
 
 Ogni **macro-sezione** dell'archivio (`/macro-sezioni`) porta inoltre un
-proprio prefisso di permesso dedicato (es. `certificazioni:read/write`),
-seedato via migrazione insieme alla macro-sezione stessa, in alternativa al
-generico `archivio:*`.
+proprio prefisso di permesso dedicato, seedato via migrazione insieme alla
+macro-sezione stessa, in alternativa al generico `archivio:*` (usato invece
+per gli aggregati che non appartengono a nessuna macro-sezione: spartiti,
+nome_parti, documenti senza sotto-cartella):
+
+| Macro-sezione | Prefisso permesso |
+|---|---|
+| Certificazioni Uniche | `certificazioni:read/write` |
+| Verbali e Libro Soci | `verbali:read/write` |
+| Concorsi e Bandi | `concorsi:read/write` |
+| Documenti Amministrativi | `documenti_admin:read/write` |
 
 **Permission enforcement status:**
 
-Currently enforced with `@require_permission()` guards:
-- `utenti:*` on all utenti endpoints
-- `ruoli:*` on all ruoli endpoints
-- `contabilita:*` on contabilità endpoints (`/voci-contabilita`, `/flussi-cassa/trasferimenti`, `/contabilita/rendiconto*`, `/contabilita/check-quote`, `/configurazioni-banda-anno`)
-- `templates:*` on `/templates` (all actions) and `/mergefields`
-- `ruoli:read` on permessi catalogue
+Every domain endpoint now carries a `require_permission()` guard (or, for
+the archivio, the dynamic `permessi_archivio.require_read`/`require_write`
+described above) — the audit/uniform-enforcement pass (card #194) closed
+the gaps that used to leave `anagrafica:*`, `iscrizioni:*`, `servizi:*`, and
+`archivio:*` defined but unchecked. All domain endpoints also **require
+authentication** (`Depends(get_current_user)`): without a valid session or
+JWT, responses are `401`. The `Ospite` role seeded for self-registration
+(`POST /auth/register`) is granted read-only permissions across the board
+(including `lookup:read`), excluding `contabilita:*` and admin
+(`utenti:*`/`ruoli:*`).
 
-Defined but not yet enforced per-endpoint: `anagrafica:*`, `iscrizioni:*`, `servizi:*`, `archivio:*`.
-All domain endpoints still **require authentication** (`Depends(get_current_user)`): without a valid session or JWT, responses are `401`. The `Ospite` role seeded for self-registration (`POST /auth/register`) is granted read-only permissions across the board, excluding `contabilita:*` and admin (`utenti:*`/`ruoli:*`).
+Two endpoints sit outside the resource:action model entirely and use
+**row-level** authorization instead — see [Schede alunno](#schede-alunno-row-level-authorization)
+and [Portale alunno](#portale-alunno-student-self-service) above.
 
-*Superuser* accounts bypass all permission checks.
+*Superuser* accounts bypass all permission checks, including row-level ones.
 
 ### Health
 
@@ -857,16 +1065,19 @@ For an existing database, run the script's SQL manually as the schema owner.
 ### Other planned features
 
 - New document types beyond the existing merge-field providers (banda, socio,
-  esterno, contatto, servizio, ricevuta, iscrizione) — e.g. annual financial
-  reports populated from contabilità data, assembly minutes. Mostly need a new
-  provider plus a template body, not new backend plumbing.
+  esterno, contatto, servizio, ricevuta, iscrizione, allievo, iscrizione_corso)
+  — e.g. annual financial reports populated from contabilità data, assembly
+  minutes. Mostly need a new provider plus a template body, not new backend
+  plumbing.
 - Bulk import of members and externals from Excel files (via async worker)
 - Auto-posting of service-related receipts (compensi/riscossioni) to
-  `FlussoCassa`, on the pattern already used for `AUTO_ISCRIZIONE` — needs a
-  new accounting-item configuration primitive (the existing
-  `ConfigurazioneBandaAnno.voce_contabilita_quote_id` only covers membership
-  quotes) plus a rule for which `natura_flusso`/sign to use; deliberately left
-  out of the `Ricevuta.persona_id` generalization pending that design.
+  `FlussoCassa`, on the pattern already used for `AUTO_ISCRIZIONE` and, since
+  `PagamentoCorso`, for `AUTO_PAGAMENTO_CORSO` too — the latter is a working
+  precedent for the missing piece (a dedicated
+  `ConfigurazioneBandaAnno.voce_contabilita_*_id` per use case plus a fixed
+  `natura_flusso`/sign), but no such column exists yet for
+  compensi/riscossioni; deliberately left out of the `Ricevuta.persona_id`
+  generalization pending that design.
 - OAuth `id_token` signature verification (currently decoded without
   signature check — acceptable short-term since the token arrives directly
   from the provider over HTTPS in the same request, but should be hardened
