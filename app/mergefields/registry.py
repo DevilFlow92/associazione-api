@@ -3,9 +3,13 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mergefields.base import MergeFieldDefinition, MergeFieldProvider
+from app.mergefields.providers.allievo_provider import AllievoProvider
 from app.mergefields.providers.banda_provider import BandaProvider
 from app.mergefields.providers.contatto_provider import ContattoProvider
 from app.mergefields.providers.esterno_provider import EsternoProvider
+from app.mergefields.providers.iscrizione_corso_provider import (
+    IscrizioneCorsoProvider,
+)
 from app.mergefields.providers.iscrizione_provider import IscrizioneProvider
 from app.mergefields.providers.ricevuta_provider import RicevutaProvider
 from app.mergefields.providers.servizio_provider import ServizioProvider
@@ -21,6 +25,8 @@ REGISTRY: dict[str, MergeFieldProvider] = {
         IscrizioneProvider(),
         ServizioProvider(),
         RicevutaProvider(),
+        AllievoProvider(),
+        IscrizioneCorsoProvider(),
     ]
 }
 

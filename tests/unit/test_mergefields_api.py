@@ -19,6 +19,8 @@ async def test_list_mergefields(client: AsyncClient):
         "iscrizione",
         "servizio",
         "ricevuta",
+        "allievo",
+        "iscrizione_corso",
     }
 
     socio_fields = {f["chiave"]: f["tipo"] for f in data["entita"]["socio"]}

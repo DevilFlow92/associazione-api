@@ -4,9 +4,13 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.mergefields.providers.allievo_provider import AllievoProvider
 from app.mergefields.providers.banda_provider import BandaProvider
 from app.mergefields.providers.contatto_provider import ContattoProvider
 from app.mergefields.providers.esterno_provider import EsternoProvider
+from app.mergefields.providers.iscrizione_corso_provider import (
+    IscrizioneCorsoProvider,
+)
 from app.mergefields.providers.iscrizione_provider import IscrizioneProvider
 from app.mergefields.providers.ricevuta_provider import RicevutaProvider
 from app.mergefields.providers.servizio_provider import ServizioProvider
@@ -149,6 +153,8 @@ def test_registry_contains_expected_providers():
         "iscrizione",
         "servizio",
         "ricevuta",
+        "allievo",
+        "iscrizione_corso",
     }
     assert isinstance(REGISTRY["socio"], SocioProvider)
     assert isinstance(REGISTRY["esterno"], EsternoProvider)
@@ -157,6 +163,8 @@ def test_registry_contains_expected_providers():
     assert isinstance(REGISTRY["iscrizione"], IscrizioneProvider)
     assert isinstance(REGISTRY["servizio"], ServizioProvider)
     assert isinstance(REGISTRY["ricevuta"], RicevutaProvider)
+    assert isinstance(REGISTRY["allievo"], AllievoProvider)
+    assert isinstance(REGISTRY["iscrizione_corso"], IscrizioneCorsoProvider)
 
 
 def test_list_all_fields_grouped_by_entity():
@@ -169,6 +177,8 @@ def test_list_all_fields_grouped_by_entity():
         "iscrizione",
         "servizio",
         "ricevuta",
+        "allievo",
+        "iscrizione_corso",
     }
     socio_keys = {f.chiave for f in fields["socio"]}
     assert {"codice_socio", "nome", "cognome", "codice_fiscale", "data_nascita"} <= (
@@ -426,3 +436,115 @@ async def test_ricevuta_provider_resolve(client: AsyncClient, db_session: AsyncS
     assert result["importo"] == "€ 150,50"
     assert result["note_in_stampa"] == "Compenso servizio"
     assert result["note_fuori_stampa"] == "Pagamento in contanti"
+
+
+async def _create_tipo_corso(
+    ac: AsyncClient, *, codice: int = 1, descrizione: str = "Ottoni"
+) -> dict:
+    resp = await ac.post(
+        "/api/v1/tipi-corso/", json={"codice": codice, "descrizione": descrizione}
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_stato_iscrizione_corso(
+    ac: AsyncClient, *, codice: int = 1, descrizione: str = "Confermata"
+) -> dict:
+    resp = await ac.post(
+        "/api/v1/stati-iscrizione-corso/",
+        json={"codice": codice, "descrizione": descrizione},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_corso(
+    ac: AsyncClient,
+    *,
+    tipo_corso_codice: int = 1,
+    anno: int = 2026,
+) -> dict:
+    resp = await ac.post(
+        "/api/v1/corsi/",
+        json={
+            "banda_codice": 1,
+            "tipo_corso_codice": tipo_corso_codice,
+            "anno": anno,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_allievo(
+    ac: AsyncClient,
+    persona_id: int,
+    *,
+    codice_allievo: str = "A001",
+    indirizzo_id: int | None = None,
+) -> dict:
+    resp = await ac.post(
+        "/api/v1/allievi/",
+        json={
+            "persona_id": persona_id,
+            "codice_allievo": codice_allievo,
+            "indirizzo_id": indirizzo_id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+@pytest.mark.asyncio
+async def test_allievo_provider_resolve(client: AsyncClient, db_session: AsyncSession):
+    persona = await _create_persona(client)
+    indirizzo = await _create_indirizzo(client)
+    allievo = await _create_allievo(client, persona["id"], indirizzo_id=indirizzo["id"])
+
+    result = await AllievoProvider().resolve(allievo["id"], db_session)
+    assert result["codice_allievo"] == "A001"
+    assert result["nome"] == "Mario"
+    assert result["cognome"] == "Rossi"
+    assert result["codice_fiscale"] == "RSSMRA80A01H501U"
+
+
+@pytest.mark.asyncio
+async def test_allievo_provider_resolve_senza_indirizzo(
+    client: AsyncClient, db_session: AsyncSession
+):
+    persona = await _create_persona(client, nome="Luigi", cognome="Verdi")
+    allievo = await _create_allievo(client, persona["id"], codice_allievo="A002")
+
+    result = await AllievoProvider().resolve(allievo["id"], db_session)
+    assert result["indirizzo_completo"] is None
+
+
+@pytest.mark.asyncio
+async def test_iscrizione_corso_provider_resolve(
+    client: AsyncClient, db_session: AsyncSession
+):
+    await _create_tipo_corso(client, codice=1, descrizione="Ottoni")
+    await _create_stato_iscrizione_corso(client, codice=1, descrizione="Confermata")
+    persona = await _create_persona(client)
+    corso = await _create_corso(client, tipo_corso_codice=1, anno=2026)
+
+    iscrizione_corso_resp = await client.post(
+        "/api/v1/iscrizioni-corso/",
+        json={
+            "corso_id": corso["id"],
+            "persona_id": persona["id"],
+            "stato_iscrizione_corso_codice": 1,
+            "data_iscrizione": "2026-02-01",
+            "note": "Prima iscrizione",
+        },
+    )
+    assert iscrizione_corso_resp.status_code == 201, iscrizione_corso_resp.text
+    iscrizione_corso_id = iscrizione_corso_resp.json()["id"]
+
+    result = await IscrizioneCorsoProvider().resolve(iscrizione_corso_id, db_session)
+    assert str(result["data_iscrizione"]) == "2026-02-01"
+    assert result["note"] == "Prima iscrizione"
+    assert result["stato_iscrizione_corso"] == "Confermata"
+    assert result["tipo_corso"] == "Ottoni"
+    assert result["anno_corso"] == 2026
