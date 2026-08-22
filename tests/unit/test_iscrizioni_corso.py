@@ -178,6 +178,7 @@ async def test_create_iscrizione_corso_minima(client: AsyncClient):
     data = response.json()
     assert data["corso_id"] == corso["id"]
     assert data["corso"]["id"] == corso["id"]
+    assert data["corso"]["tipo_corso"]["descrizione"] == "Ottoni"
     assert data["persona_id"] == persona["id"]
     assert data["persona"]["cognome"] == "Rossi"
     assert data["stato_iscrizione_corso"]["descrizione"] == "Richiesta"
