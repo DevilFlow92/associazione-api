@@ -204,6 +204,7 @@ async def test_alunno_vede_le_proprie_iscrizioni(client: AsyncClient):
     data = response.json()
     assert data["meta"]["total_items"] == 1
     assert data["items"][0]["id"] == iscrizione["id"]
+    assert data["items"][0]["corso"]["tipo_corso"]["descrizione"] == "Ottoni"
     assert altro_alunno["id"] != alunno["id"]
 
 

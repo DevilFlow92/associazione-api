@@ -4,10 +4,13 @@ from datetime import date
 
 from pydantic import BaseModel
 
+from app.schemas.corso import TipoCorsoInCorso
+
 
 class CorsoInIscrizioneCorso(BaseModel):
     id: int
     anno: int
+    tipo_corso: TipoCorsoInCorso
 
     model_config = {"from_attributes": True}
 

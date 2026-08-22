@@ -4,11 +4,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.corso import Corso
 from app.models.iscrizione_corso import IscrizioneCorso
 from app.schemas.iscrizione_corso import IscrizioneCorsoCreate, IscrizioneCorsoUpdate
 
 _LOAD_OPTS = [
-    selectinload(IscrizioneCorso.corso),
+    selectinload(IscrizioneCorso.corso).selectinload(Corso.tipo_corso),
     selectinload(IscrizioneCorso.persona),
     selectinload(IscrizioneCorso.stato_iscrizione_corso),
     selectinload(IscrizioneCorso.documento),
