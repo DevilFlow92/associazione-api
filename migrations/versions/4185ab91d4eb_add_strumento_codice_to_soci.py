@@ -1,7 +1,7 @@
 """add strumento_codice to soci
 
 Revision ID: 4185ab91d4eb
-Revises: e1f2a3b4c5d6
+Revises: e3b39b83930c
 Create Date: 2026-06-18 23:33:42.906137
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "4185ab91d4eb"
-down_revision: str | Sequence[str] | None = "e1f2a3b4c5d6"
+down_revision: str | Sequence[str] | None = "e3b39b83930c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
