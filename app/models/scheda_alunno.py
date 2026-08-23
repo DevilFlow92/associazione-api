@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -10,10 +10,13 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.iscrizione_corso import IscrizioneCorso
     from app.models.persona import Persona
+    from app.models.scheda_alunno_voce import SchedaAlunnoVoce
 
 
 class SchedaAlunno(Base):
-    """Scheda personale dell'alunno iscritto a un corso: il programma da seguire.
+    """Scheda personale dell'alunno iscritto a un corso: raccoglie le voci di
+    programma (``SchedaAlunnoVoce``) assegnate dall'insegnante, ciascuna con
+    il proprio stato di avanzamento — vedi ``app.models.scheda_alunno_voce``.
 
     Scritta da insegnante/coordinatore (``corsi:write``), leggibile dall'alunno
     a cui si riferisce. È la prima entità del progetto con un controllo di
@@ -40,7 +43,6 @@ class SchedaAlunno(Base):
     iscrizione_corso_id: Mapped[int] = mapped_column(
         ForeignKey("iscrizioni_corso.id"), nullable=False, unique=True
     )
-    programma: Mapped[str | None] = mapped_column(Text, nullable=True)
     aggiornato_da_persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persone.id"), nullable=True
     )
@@ -51,4 +53,9 @@ class SchedaAlunno(Base):
     )
     aggiornato_da: Mapped[Persona | None] = relationship(
         "Persona", foreign_keys=[aggiornato_da_persona_id]
+    )
+    voci: Mapped[list[SchedaAlunnoVoce]] = relationship(
+        "SchedaAlunnoVoce",
+        back_populates="scheda_alunno",
+        order_by="SchedaAlunnoVoce.ordine",
     )

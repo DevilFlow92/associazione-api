@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.schemas.scheda_alunno_voce import SchedaAlunnoVoceResponse
+
 
 class PersonaInSchedaAlunno(BaseModel):
     id: int
@@ -20,7 +22,6 @@ class IscrizioneCorsoInSchedaAlunno(BaseModel):
 
 
 class SchedaAlunnoBase(BaseModel):
-    programma: str | None = None
     note: str | None = None
 
 
@@ -29,7 +30,6 @@ class SchedaAlunnoCreate(SchedaAlunnoBase):
 
 
 class SchedaAlunnoUpdate(BaseModel):
-    programma: str | None = None
     note: str | None = None
 
 
@@ -41,5 +41,8 @@ class SchedaAlunnoResponse(SchedaAlunnoBase):
     aggiornato_da_persona_id: int | None = None
     iscrizione_corso: IscrizioneCorsoInSchedaAlunno
     aggiornato_da: PersonaInSchedaAlunno | None = None
+    # Ordinata per ``ordine`` grazie a ``SchedaAlunno.voci`` (relationship
+    # con order_by), non qui: nessun sort applicato lato schema.
+    voci: list[SchedaAlunnoVoceResponse] = []
 
     model_config = {"from_attributes": True}

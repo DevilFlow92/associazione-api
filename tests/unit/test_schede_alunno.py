@@ -13,12 +13,15 @@ from collections.abc import Collection
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.exceptions.scheda_alunno import AccessoSchedaAlunnoNegatoError
 from app.models.corso import Corso
 from app.models.permesso import Permesso
 from app.models.ruolo import Ruolo
+from app.models.scheda_alunno_voce_storico import SchedaAlunnoVoceStorico
 from app.models.utente import TipoUtente, Utente
 from app.services.rbac_row_level import (
     LivelloAccessoScheda,
@@ -139,11 +142,54 @@ async def setup_iscrizione(
 
 
 async def create_scheda(
-    client: AsyncClient, iscrizione_corso_id: int, programma: str = "Scale maggiori"
+    client: AsyncClient, iscrizione_corso_id: int, **overrides
+) -> dict:
+    payload = {"iscrizione_corso_id": iscrizione_corso_id}
+    payload.update(overrides)
+    response = await client.post("/api/v1/schede-alunno/", json=payload)
+    assert response.status_code == 201
+    return response.json()
+
+
+async def create_categoria_voce(
+    client: AsyncClient, codice: int = 1, descrizione: str = "Scale"
 ) -> dict:
     response = await client.post(
-        "/api/v1/schede-alunno/",
-        json={"iscrizione_corso_id": iscrizione_corso_id, "programma": programma},
+        "/api/v1/categorie-voce-programma/",
+        json={"codice": codice, "descrizione": descrizione},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+async def create_voce_catalogo(
+    client: AsyncClient,
+    tipo_corso_codice: int,
+    categoria_codice: int = 1,
+    **overrides,
+) -> dict:
+    payload = {
+        "tipo_corso_codice": tipo_corso_codice,
+        "categoria_codice": categoria_codice,
+        "testo": "Scala di Do maggiore",
+    }
+    payload.update(overrides)
+    response = await client.post("/api/v1/catalogo-programmi/", json=payload)
+    assert response.status_code == 201
+    return response.json()
+
+
+async def create_voce_scheda(
+    client: AsyncClient,
+    scheda_id: int,
+    voce_catalogo_id: int,
+    stato: str = "da_iniziare",
+    **overrides,
+) -> dict:
+    payload = {"voce_catalogo_id": voce_catalogo_id, "stato": stato, "ordine": 1}
+    payload.update(overrides)
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda_id}/voci", json=payload
     )
     assert response.status_code == 201
     return response.json()
@@ -160,14 +206,14 @@ async def test_create_scheda_alunno(client: AsyncClient):
         "/api/v1/schede-alunno/",
         json={
             "iscrizione_corso_id": iscrizione["id"],
-            "programma": "Scale maggiori, studio n.3",
             "note": "Rivedere l'imboccatura",
         },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["iscrizione_corso_id"] == iscrizione["id"]
-    assert data["programma"] == "Scale maggiori, studio n.3"
+    assert data["note"] == "Rivedere l'imboccatura"
+    assert data["voci"] == []
     assert data["iscrizione_corso"]["persona_id"] == _persona["id"]
 
 
@@ -175,7 +221,7 @@ async def test_create_scheda_alunno(client: AsyncClient):
 async def test_create_scheda_alunno_iscrizione_not_found(client: AsyncClient):
     response = await client.post(
         "/api/v1/schede-alunno/",
-        json={"iscrizione_corso_id": 999, "programma": "x"},
+        json={"iscrizione_corso_id": 999},
     )
     assert response.status_code == 404
 
@@ -188,7 +234,7 @@ async def test_create_scheda_alunno_duplicata(client: AsyncClient):
 
     response = await client.post(
         "/api/v1/schede-alunno/",
-        json={"iscrizione_corso_id": iscrizione["id"], "programma": "altro"},
+        json={"iscrizione_corso_id": iscrizione["id"]},
     )
     assert response.status_code == 409
 
@@ -206,17 +252,16 @@ async def test_update_scheda_alunno(client: AsyncClient):
 
     response = await client.patch(
         f"/api/v1/schede-alunno/{scheda['id']}",
-        json={"programma": "Studio n.5", "note": "Aggiornato dopo la lezione"},
+        json={"note": "Aggiornato dopo la lezione"},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["programma"] == "Studio n.5"
     assert data["note"] == "Aggiornato dopo la lezione"
 
 
 @pytest.mark.asyncio
 async def test_update_scheda_alunno_not_found(client: AsyncClient):
-    response = await client.patch("/api/v1/schede-alunno/999", json={"programma": "x"})
+    response = await client.patch("/api/v1/schede-alunno/999", json={"note": "x"})
     assert response.status_code == 404
 
 
@@ -279,7 +324,6 @@ async def test_audit_aggiornato_da_deriva_dall_utente_autenticato(client: AsyncC
         "/api/v1/schede-alunno/",
         json={
             "iscrizione_corso_id": iscrizione["id"],
-            "programma": "Scale",
             # Tentativo di falsificare l'audit: il campo non è nello schema
             # di input, quindi viene semplicemente ignorato.
             "aggiornato_da_persona_id": 999,
@@ -423,10 +467,10 @@ async def test_insegnante_del_corso_legge_e_scrive_la_scheda(client: AsyncClient
     assert lettura.status_code == 200
 
     scrittura = await client.patch(
-        f"/api/v1/schede-alunno/{scheda['id']}", json={"programma": "Studio n.7"}
+        f"/api/v1/schede-alunno/{scheda['id']}", json={"note": "Studio n.7"}
     )
     assert scrittura.status_code == 200
-    assert scrittura.json()["programma"] == "Studio n.7"
+    assert scrittura.json()["note"] == "Studio n.7"
 
     propria = await client.get(f"/api/v1/schede-alunno/me/{iscrizione['id']}")
     assert propria.status_code == 200
@@ -445,10 +489,10 @@ async def test_coordinatore_del_corso_scrive_la_scheda(client: AsyncClient):
         permessi={"corsi:write"}, persona_id=coordinatore["id"]
     )
     response = await client.patch(
-        f"/api/v1/schede-alunno/{scheda['id']}", json={"programma": "Scale minori"}
+        f"/api/v1/schede-alunno/{scheda['id']}", json={"note": "Scale minori"}
     )
     assert response.status_code == 200
-    assert response.json()["programma"] == "Scale minori"
+    assert response.json()["note"] == "Scale minori"
 
 
 @pytest.mark.asyncio
@@ -463,14 +507,14 @@ async def test_insegnante_di_altro_corso_non_scrive_scheda(client: AsyncClient):
         insegnante_persona_id=insegnante_altro_corso["id"],
     )
     _alunno, iscrizione = await setup_iscrizione(client)  # corso senza docenti
-    scheda = await create_scheda(client, iscrizione["id"], programma="Originale")
+    scheda = await create_scheda(client, iscrizione["id"], note="Originale")
 
     app.dependency_overrides[get_current_user] = lambda: _user(
         permessi={"corsi:read", "corsi:write"}, persona_id=insegnante_altro_corso["id"]
     )
 
     patch = await client.patch(
-        f"/api/v1/schede-alunno/{scheda['id']}", json={"programma": "Alterato"}
+        f"/api/v1/schede-alunno/{scheda['id']}", json={"note": "Alterato"}
     )
     assert patch.status_code == 403
 
@@ -478,7 +522,7 @@ async def test_insegnante_di_altro_corso_non_scrive_scheda(client: AsyncClient):
     # ordine "authz prima di tutto" già in uso per la lettura): 403, non 409.
     post = await client.post(
         "/api/v1/schede-alunno/",
-        json={"iscrizione_corso_id": iscrizione["id"], "programma": "x"},
+        json={"iscrizione_corso_id": iscrizione["id"]},
     )
     assert post.status_code == 403
 
@@ -528,10 +572,10 @@ async def test_superuser_scrive_scheda_senza_essere_docente_del_corso(
         superuser=True, persona_id=estraneo_al_corso["id"]
     )
     response = await client.patch(
-        f"/api/v1/schede-alunno/{scheda['id']}", json={"programma": "Studio n.9"}
+        f"/api/v1/schede-alunno/{scheda['id']}", json={"note": "Studio n.9"}
     )
     assert response.status_code == 200
-    assert response.json()["programma"] == "Studio n.9"
+    assert response.json()["note"] == "Studio n.9"
 
 
 # ── Autorizzazione row-level: i 6 rami end-to-end (card #175 originale) ─────
@@ -542,14 +586,14 @@ async def test_alunno_proprietario_legge_la_propria_scheda(client: AsyncClient):
     """Ramo 2 — l'alunno non ha alcun permesso ``corsi:*`` e legge comunque
     la propria scheda: è esattamente ciò che il row-level esiste per fare."""
     alunno, iscrizione = await setup_iscrizione(client)
-    await create_scheda(client, iscrizione["id"], programma="Scale maggiori")
+    await create_scheda(client, iscrizione["id"], note="Scale maggiori")
 
     app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
     response = await client.get(f"/api/v1/schede-alunno/me/{iscrizione['id']}")
 
     assert response.status_code == 200
     data = response.json()
-    assert data["programma"] == "Scale maggiori"
+    assert data["note"] == "Scale maggiori"
     assert data["iscrizione_corso"]["persona_id"] == alunno["id"]
 
 
@@ -563,13 +607,13 @@ async def test_alunno_proprietario_non_scrive_la_propria_scheda(client: AsyncCli
 
     patch = await client.patch(
         f"/api/v1/schede-alunno/{scheda['id']}",
-        json={"programma": "mi assegno io il programma"},
+        json={"note": "mi assegno io il programma"},
     )
     assert patch.status_code == 403
 
     post = await client.post(
         "/api/v1/schede-alunno/",
-        json={"iscrizione_corso_id": iscrizione["id"], "programma": "x"},
+        json={"iscrizione_corso_id": iscrizione["id"]},
     )
     assert post.status_code == 403
 
@@ -587,7 +631,7 @@ async def test_alunno_terzo_non_legge_scheda_altrui(client: AsyncClient):
     iscrizione = await create_iscrizione_corso(
         client, corso["id"], alunno["id"], stato["codice"]
     )
-    await create_scheda(client, iscrizione["id"], programma="Riservato a Mario")
+    await create_scheda(client, iscrizione["id"], note="Riservato a Mario")
 
     app.dependency_overrides[get_current_user] = lambda: _user(
         persona_id=altro_alunno["id"]
@@ -619,9 +663,7 @@ async def test_scheda_alunno_richiede_autenticazione(client: AsyncClient):
     assert (await client.get("/api/v1/schede-alunno/me/1")).status_code == 401
     assert (await client.get("/api/v1/schede-alunno/")).status_code == 401
     assert (
-        await client.post(
-            "/api/v1/schede-alunno/", json={"iscrizione_corso_id": 1, "programma": "x"}
-        )
+        await client.post("/api/v1/schede-alunno/", json={"iscrizione_corso_id": 1})
     ).status_code == 401
 
 
@@ -679,3 +721,423 @@ async def test_get_scheda_alunno_ok_con_corsi_read(client: AsyncClient):
     app.dependency_overrides[get_current_user] = lambda: _user(permessi={"corsi:read"})
     response = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
     assert response.status_code == 200
+
+
+# ── Voci di programma: CRUD ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_voce_scheda_alunno(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci",
+        json={
+            "voce_catalogo_id": voce_catalogo["id"],
+            "stato": "da_iniziare",
+            "dettaglio": "battute 1-16",
+            "ordine": 1,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["scheda_alunno_id"] == scheda["id"]
+    assert data["stato"] == "da_iniziare"
+    assert data["dettaglio"] == "battute 1-16"
+    assert data["ordine"] == 1
+    assert data["voce_catalogo"]["id"] == voce_catalogo["id"]
+    assert data["voce_catalogo"]["testo"] == voce_catalogo["testo"]
+
+
+@pytest.mark.asyncio
+async def test_create_voce_scheda_alunno_scheda_not_found(client: AsyncClient):
+    corso = await create_corso(client)
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(
+        client, corso["tipo_corso_codice"], categoria["codice"]
+    )
+
+    response = await client.post(
+        "/api/v1/schede-alunno/999/voci",
+        json={
+            "voce_catalogo_id": voce_catalogo["id"],
+            "stato": "da_iniziare",
+            "ordine": 1,
+        },
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_voce_scheda_alunno_catalogo_inesistente(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci",
+        json={"voce_catalogo_id": 999, "stato": "da_iniziare", "ordine": 1},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_voce_scheda_alunno(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(client, scheda["id"], voce_catalogo["id"])
+
+    response = await client.patch(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}",
+        json={"stato": "in_corso", "dettaglio": "quasi pronto", "ordine": 2},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["stato"] == "in_corso"
+    assert data["dettaglio"] == "quasi pronto"
+    assert data["ordine"] == 2
+
+
+@pytest.mark.asyncio
+async def test_delete_voce_scheda_alunno(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(client, scheda["id"], voce_catalogo["id"])
+
+    response = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}"
+    )
+    assert response.status_code == 204
+
+    riletta = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
+    assert riletta.json()["voci"] == []
+
+
+@pytest.mark.asyncio
+async def test_update_delete_voce_scheda_alunno_not_found(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    patch = await client.patch(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/999", json={"stato": "in_corso"}
+    )
+    assert patch.status_code == 404
+
+    delete = await client.delete(f"/api/v1/schede-alunno/{scheda['id']}/voci/999")
+    assert delete.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_voce_di_altra_scheda_non_raggiungibile(client: AsyncClient):
+    """L'endpoint è annidato sotto la scheda: una voce esistente ma di
+    un'ALTRA scheda non è raggiungibile da qui (404, non un 200 su dati
+    altrui)."""
+    corso = await create_corso(client)
+    stato = await create_stato(client)
+    persona1 = await create_persona(client, "Mario", "Rossi")
+    persona2 = await create_persona(client, "Anna", "Bianchi")
+    iscr1 = await create_iscrizione_corso(
+        client, corso["id"], persona1["id"], stato["codice"]
+    )
+    iscr2 = await create_iscrizione_corso(
+        client, corso["id"], persona2["id"], stato["codice"]
+    )
+    scheda1 = await create_scheda(client, iscr1["id"])
+    scheda2 = await create_scheda(client, iscr2["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(
+        client, corso["tipo_corso_codice"], categoria["codice"]
+    )
+    voce = await create_voce_scheda(client, scheda1["id"], voce_catalogo["id"])
+
+    response = await client.patch(
+        f"/api/v1/schede-alunno/{scheda2['id']}/voci/{voce['id']}",
+        json={"stato": "in_corso"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_voci_scheda_alunno_ordinate_per_ordine(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    codice = categoria["codice"]
+    v1 = await create_voce_catalogo(client, 1, codice, testo="Scala di Do")
+    v2 = await create_voce_catalogo(client, 1, codice, testo="Scala di Sol")
+    v3 = await create_voce_catalogo(client, 1, codice, testo="Scala di Re")
+
+    await create_voce_scheda(client, scheda["id"], v1["id"], ordine=3)
+    await create_voce_scheda(client, scheda["id"], v2["id"], ordine=1)
+    await create_voce_scheda(client, scheda["id"], v3["id"], ordine=2)
+
+    response = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
+    assert response.status_code == 200
+    voci = response.json()["voci"]
+    assert [v["ordine"] for v in voci] == [1, 2, 3]
+    assert [v["voce_catalogo"]["testo"] for v in voci] == [
+        "Scala di Sol",
+        "Scala di Re",
+        "Scala di Do",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stessa_voce_catalogo_due_volte_dettaglio_diverso_ammesso(
+    client: AsyncClient,
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(
+        client, 1, categoria["codice"], testo="Studio n.9"
+    )
+
+    v1 = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], dettaglio="battute 1-16", ordine=1
+    )
+    v2 = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], dettaglio="battute 17-32", ordine=2
+    )
+    assert v1["id"] != v2["id"]
+
+    response = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
+    voci = response.json()["voci"]
+    assert len(voci) == 2
+    assert {v["dettaglio"] for v in voci} == {"battute 1-16", "battute 17-32"}
+
+
+@pytest.mark.asyncio
+async def test_voce_catalogo_disattivata_rifiutata(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+
+    disattiva = await client.patch(
+        f"/api/v1/catalogo-programmi/{voce_catalogo['id']}", json={"attiva": False}
+    )
+    assert disattiva.status_code == 200
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci",
+        json={
+            "voce_catalogo_id": voce_catalogo["id"],
+            "stato": "da_iniziare",
+            "ordine": 1,
+        },
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_voce_catalogo_tipo_corso_diverso_rifiutata(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)  # corso tipo_corso_codice=1
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    altro_tipo = await client.post(
+        "/api/v1/tipi-corso/", json={"codice": 2, "descrizione": "Legni"}
+    )
+    assert altro_tipo.status_code == 201
+    voce_catalogo = await create_voce_catalogo(client, 2, categoria["codice"])
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci",
+        json={
+            "voce_catalogo_id": voce_catalogo["id"],
+            "stato": "da_iniziare",
+            "ordine": 1,
+        },
+    )
+    assert response.status_code == 422
+
+
+# ── Voci di programma: autorizzazione row-level ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_insegnante_di_altro_corso_non_scrive_voci(client: AsyncClient):
+    insegnante_altro_corso = await create_persona(client, "Marco", "Neri")
+    await create_corso(
+        client,
+        tipo_corso_codice=2,
+        insegnante_persona_id=insegnante_altro_corso["id"],
+    )
+    _alunno, iscrizione = await setup_iscrizione(client)  # corso senza docenti
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(client, scheda["id"], voce_catalogo["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:read", "corsi:write"}, persona_id=insegnante_altro_corso["id"]
+    )
+
+    post = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci",
+        json={
+            "voce_catalogo_id": voce_catalogo["id"],
+            "stato": "da_iniziare",
+            "ordine": 2,
+        },
+    )
+    assert post.status_code == 403
+
+    patch = await client.patch(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}",
+        json={"stato": "in_corso"},
+    )
+    assert patch.status_code == 403
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}"
+    )
+    assert delete.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_alunno_proprietario_legge_voci_non_le_scrive(client: AsyncClient):
+    alunno, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(client, scheda["id"], voce_catalogo["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+
+    lettura = await client.get(f"/api/v1/schede-alunno/me/{iscrizione['id']}")
+    assert lettura.status_code == 200
+    assert len(lettura.json()["voci"]) == 1
+
+    post = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci",
+        json={
+            "voce_catalogo_id": voce_catalogo["id"],
+            "stato": "da_iniziare",
+            "ordine": 2,
+        },
+    )
+    assert post.status_code == 403
+
+    patch = await client.patch(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}",
+        json={"stato": "in_corso"},
+    )
+    assert patch.status_code == 403
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}"
+    )
+    assert delete.status_code == 403
+
+
+# ── Storico dei cambi di stato ───────────────────────────────────────────────
+
+
+async def get_storico(
+    db_session: AsyncSession, scheda_alunno_id: int
+) -> list[SchedaAlunnoVoceStorico]:
+    stmt = (
+        select(SchedaAlunnoVoceStorico)
+        .where(SchedaAlunnoVoceStorico.scheda_alunno_id == scheda_alunno_id)
+        .order_by(SchedaAlunnoVoceStorico.id)
+    )
+    result = await db_session.execute(stmt)
+    return list(result.scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_storico_riga_creata_alla_creazione_della_voce(
+    client: AsyncClient, db_session: AsyncSession
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="in_corso"
+    )
+
+    righe = await get_storico(db_session, scheda["id"])
+    assert len(righe) == 1
+    assert righe[0].scheda_alunno_voce_id == voce["id"]
+    assert righe[0].voce_catalogo_id == voce_catalogo["id"]
+    assert righe[0].stato_precedente is None
+    assert righe[0].stato_nuovo == "in_corso"
+
+
+@pytest.mark.asyncio
+async def test_storico_riga_creata_al_cambio_di_stato(
+    client: AsyncClient, db_session: AsyncSession
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="da_iniziare"
+    )
+
+    response = await client.patch(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}",
+        json={"stato": "in_corso"},
+    )
+    assert response.status_code == 200
+
+    righe = await get_storico(db_session, scheda["id"])
+    assert len(righe) == 2
+    assert righe[-1].stato_precedente == "da_iniziare"
+    assert righe[-1].stato_nuovo == "in_corso"
+
+
+@pytest.mark.asyncio
+async def test_storico_nessuna_riga_se_il_patch_non_cambia_lo_stato(
+    client: AsyncClient, db_session: AsyncSession
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="da_iniziare"
+    )
+
+    response = await client.patch(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}",
+        json={"dettaglio": "nuovo dettaglio", "ordine": 5},
+    )
+    assert response.status_code == 200
+
+    righe = await get_storico(db_session, scheda["id"])
+    assert len(righe) == 1  # solo la riga di creazione, nessuna transizione
+
+
+@pytest.mark.asyncio
+async def test_storico_sopravvive_alla_cancellazione_della_voce(
+    client: AsyncClient, db_session: AsyncSession
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="acquisita"
+    )
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}"
+    )
+    assert delete.status_code == 204
+
+    righe = await get_storico(db_session, scheda["id"])
+    assert len(righe) == 1
+    assert righe[0].scheda_alunno_voce_id is None
+    assert righe[0].scheda_alunno_id == scheda["id"]
+    assert righe[0].voce_catalogo_id == voce_catalogo["id"]
+    assert righe[0].stato_nuovo == "acquisita"
