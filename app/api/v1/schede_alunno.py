@@ -32,15 +32,33 @@ from app.exceptions.scheda_alunno import (
     SchedaAlunnoIscrizioneNotFoundError,
     SchedaAlunnoNotFoundError,
 )
+from app.exceptions.scheda_alunno_voce import (
+    SchedaAlunnoVoceNotFoundError,
+    VoceCatalogoNonCompatibileError,
+)
+from app.exceptions.voce_programma_catalogo import VoceProgrammaCatalogoNotFoundError
 from app.models.utente import Utente
 from app.repositories.iscrizione_corso_repository import IscrizioneCorsoRepository
 from app.repositories.scheda_alunno_repository import SchedaAlunnoRepository
+from app.repositories.scheda_alunno_voce_repository import SchedaAlunnoVoceRepository
+from app.repositories.scheda_alunno_voce_storico_repository import (
+    SchedaAlunnoVoceStoricoRepository,
+)
+from app.repositories.voce_programma_catalogo_repository import (
+    VoceProgrammaCatalogoRepository,
+)
 from app.schemas.scheda_alunno import (
     SchedaAlunnoCreate,
     SchedaAlunnoResponse,
     SchedaAlunnoUpdate,
 )
+from app.schemas.scheda_alunno_voce import (
+    SchedaAlunnoVoceCreate,
+    SchedaAlunnoVoceResponse,
+    SchedaAlunnoVoceUpdate,
+)
 from app.services.scheda_alunno_service import SchedaAlunnoService
+from app.services.scheda_alunno_voce_service import SchedaAlunnoVoceService
 
 router = APIRouter(prefix="/schede-alunno", tags=["schede-alunno"])
 
@@ -48,6 +66,16 @@ router = APIRouter(prefix="/schede-alunno", tags=["schede-alunno"])
 def get_service(db: AsyncSession = Depends(get_db)) -> SchedaAlunnoService:
     return SchedaAlunnoService(
         SchedaAlunnoRepository(db), IscrizioneCorsoRepository(db)
+    )
+
+
+def get_voci_service(db: AsyncSession = Depends(get_db)) -> SchedaAlunnoVoceService:
+    return SchedaAlunnoVoceService(
+        SchedaAlunnoVoceRepository(db),
+        SchedaAlunnoRepository(db),
+        IscrizioneCorsoRepository(db),
+        VoceProgrammaCatalogoRepository(db),
+        SchedaAlunnoVoceStoricoRepository(db),
     )
 
 
@@ -155,4 +183,94 @@ async def delete_scheda_alunno(
     except AccessoSchedaAlunnoNegatoError as e:
         raise _forbidden(e) from e
     except (SchedaAlunnoNotFoundError, IscrizioneCorsoNotFoundError) as e:
+        raise _not_found(e) from e
+
+
+# ── Voci di programma della scheda ────────────────────────────────────────────
+#
+# Nessuna nuova regola di autorizzazione: le voci appartengono alla scheda,
+# quindi la guardia dichiarativa è la stessa ``corsi:write``/``corsi:read``
+# del resto di questo router, con lo stesso controllo row-level per-corso
+# applicato dentro ``SchedaAlunnoVoceService`` (``assert_puo_scrivere_scheda``).
+# La lettura delle voci non ha un endpoint proprio: arriva incorporata nella
+# ``SchedaAlunnoResponse`` (campo ``voci``, già ordinato per ``ordine``).
+#
+# NOTA per revisione: il progetto ha già un pattern di PATCH bulk per liste
+# (``PATCH /presenze/bulk`` in ``app/api/v1/presenze.py``). Non l'ho aggiunto
+# qui: la card lo chiedeva solo come proposta da segnalare, non da
+# implementare in sostituzione degli endpoint singoli. Se in pratica
+# l'insegnante compone il programma di più voci in un'unica sessione, un
+# ``PATCH /schede-alunno/{scheda_alunno_id}/voci/bulk`` per riordino/stato di
+# più voci alla volta eviterebbe N round-trip — da valutare in una card a
+# parte.
+
+
+@router.post(
+    "/{scheda_alunno_id}/voci",
+    response_model=SchedaAlunnoVoceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_voce_scheda_alunno(
+    scheda_alunno_id: int,
+    data: SchedaAlunnoVoceCreate,
+    utente: Utente = Depends(require_permission("corsi:write")),
+    service: SchedaAlunnoVoceService = Depends(get_voci_service),
+) -> SchedaAlunnoVoceResponse:
+    try:
+        return await service.create(scheda_alunno_id, data, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (
+        SchedaAlunnoNotFoundError,
+        IscrizioneCorsoNotFoundError,
+        VoceProgrammaCatalogoNotFoundError,
+    ) as e:
+        raise _not_found(e) from e
+    except VoceCatalogoNonCompatibileError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
+
+
+@router.patch(
+    "/{scheda_alunno_id}/voci/{voce_id}",
+    response_model=SchedaAlunnoVoceResponse,
+)
+async def update_voce_scheda_alunno(
+    scheda_alunno_id: int,
+    voce_id: int,
+    data: SchedaAlunnoVoceUpdate,
+    utente: Utente = Depends(require_permission("corsi:write")),
+    service: SchedaAlunnoVoceService = Depends(get_voci_service),
+) -> SchedaAlunnoVoceResponse:
+    try:
+        return await service.update(scheda_alunno_id, voce_id, data, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (
+        SchedaAlunnoNotFoundError,
+        IscrizioneCorsoNotFoundError,
+        SchedaAlunnoVoceNotFoundError,
+    ) as e:
+        raise _not_found(e) from e
+
+
+@router.delete(
+    "/{scheda_alunno_id}/voci/{voce_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_voce_scheda_alunno(
+    scheda_alunno_id: int,
+    voce_id: int,
+    utente: Utente = Depends(require_permission("corsi:write")),
+    service: SchedaAlunnoVoceService = Depends(get_voci_service),
+) -> None:
+    try:
+        await service.delete(scheda_alunno_id, voce_id, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (
+        SchedaAlunnoNotFoundError,
+        IscrizioneCorsoNotFoundError,
+        SchedaAlunnoVoceNotFoundError,
+    ) as e:
         raise _not_found(e) from e

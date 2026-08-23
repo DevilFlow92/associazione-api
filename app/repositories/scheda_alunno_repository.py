@@ -5,11 +5,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.scheda_alunno import SchedaAlunno
+from app.models.scheda_alunno_voce import SchedaAlunnoVoce
+from app.models.voce_programma_catalogo import VoceProgrammaCatalogo
 from app.schemas.scheda_alunno import SchedaAlunnoCreate, SchedaAlunnoUpdate
 
 _LOAD_OPTS = [
     selectinload(SchedaAlunno.iscrizione_corso),
     selectinload(SchedaAlunno.aggiornato_da),
+    selectinload(SchedaAlunno.voci)
+    .selectinload(SchedaAlunnoVoce.voce_catalogo)
+    .selectinload(VoceProgrammaCatalogo.tipo_corso),
+    selectinload(SchedaAlunno.voci)
+    .selectinload(SchedaAlunnoVoce.voce_catalogo)
+    .selectinload(VoceProgrammaCatalogo.categoria),
 ]
 
 
@@ -90,3 +98,12 @@ class SchedaAlunnoRepository:
     async def delete(self, scheda: SchedaAlunno) -> None:
         await self.db.delete(scheda)
         await self.db.commit()
+
+    def expire(self, scheda: SchedaAlunno) -> None:
+        """Invalida la collezione ``voci`` (già eager-loaded) sull'oggetto
+        in identity map: senza questo, un create/update/delete di una voce
+        fatto da ``SchedaAlunnoVoceRepository`` — quindi non passando da
+        questo repository — lascerebbe la ``scheda`` già caricata in questa
+        stessa sessione con una ``voci`` non più coerente (``expire_on_commit``
+        è ``False`` a livello di app, vedi ``app/core/database.py``)."""
+        self.db.expire(scheda)
