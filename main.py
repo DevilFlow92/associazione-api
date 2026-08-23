@@ -9,6 +9,7 @@ from app.api.v1.allievi import router as allievi_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bande import public_router as bande_public_router
 from app.api.v1.bande import router as bande_router
+from app.api.v1.catalogo_programmi import router as catalogo_programmi_router
 from app.api.v1.check_quote import router as check_quote_router
 from app.api.v1.committenti import router as committenti_router
 from app.api.v1.comuni import router as comuni_router
@@ -243,6 +244,7 @@ app.include_router(repertorio_items_router, prefix="/api/v1", dependencies=_auth
 
 # ── Corsi musicali ───────────────────────────────────────────────────────────
 app.include_router(corsi_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(catalogo_programmi_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(allievi_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(lezioni_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(iscrizioni_corso_router, prefix="/api/v1", dependencies=_auth)

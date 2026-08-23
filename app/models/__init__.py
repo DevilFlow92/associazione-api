@@ -57,3 +57,4 @@ from app.models.spartito import Spartito  # noqa: F401
 from app.models.template import Template  # noqa: F401
 from app.models.utente import TipoUtente, Utente  # noqa: F401
 from app.models.voce_contabilita import VoceContabilita  # noqa: F401
+from app.models.voce_programma_catalogo import VoceProgrammaCatalogo  # noqa: F401
