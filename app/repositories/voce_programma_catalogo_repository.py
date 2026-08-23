@@ -10,7 +10,10 @@ from app.schemas.voce_programma_catalogo import (
     VoceProgrammaCatalogoUpdate,
 )
 
-_LOAD_OPTS = [selectinload(VoceProgrammaCatalogo.tipo_corso)]
+_LOAD_OPTS = [
+    selectinload(VoceProgrammaCatalogo.tipo_corso),
+    selectinload(VoceProgrammaCatalogo.categoria),
+]
 
 
 class VoceProgrammaCatalogoRepository:
@@ -20,6 +23,8 @@ class VoceProgrammaCatalogoRepository:
     async def get_all(
         self,
         tipo_corso_codice: int | None = None,
+        categoria_codice: int | None = None,
+        livello: int | None = None,
         attiva: bool | None = None,
         offset: int = 0,
         limit: int = 20,
@@ -29,6 +34,12 @@ class VoceProgrammaCatalogoRepository:
             stmt = stmt.where(
                 VoceProgrammaCatalogo.tipo_corso_codice == tipo_corso_codice
             )
+        if categoria_codice is not None:
+            stmt = stmt.where(
+                VoceProgrammaCatalogo.categoria_codice == categoria_codice
+            )
+        if livello is not None:
+            stmt = stmt.where(VoceProgrammaCatalogo.livello == livello)
         if attiva is not None:
             stmt = stmt.where(VoceProgrammaCatalogo.attiva == attiva)
         stmt = stmt.offset(offset).limit(limit)
@@ -38,6 +49,8 @@ class VoceProgrammaCatalogoRepository:
     async def count_all(
         self,
         tipo_corso_codice: int | None = None,
+        categoria_codice: int | None = None,
+        livello: int | None = None,
         attiva: bool | None = None,
     ) -> int:
         stmt = select(func.count()).select_from(VoceProgrammaCatalogo)
@@ -45,6 +58,12 @@ class VoceProgrammaCatalogoRepository:
             stmt = stmt.where(
                 VoceProgrammaCatalogo.tipo_corso_codice == tipo_corso_codice
             )
+        if categoria_codice is not None:
+            stmt = stmt.where(
+                VoceProgrammaCatalogo.categoria_codice == categoria_codice
+            )
+        if livello is not None:
+            stmt = stmt.where(VoceProgrammaCatalogo.livello == livello)
         if attiva is not None:
             stmt = stmt.where(VoceProgrammaCatalogo.attiva == attiva)
         result = await self.db.execute(stmt)

@@ -10,6 +10,9 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.bande import public_router as bande_public_router
 from app.api.v1.bande import router as bande_router
 from app.api.v1.catalogo_programmi import router as catalogo_programmi_router
+from app.api.v1.categorie_voce_programma import (
+    router as categorie_voce_programma_router,
+)
 from app.api.v1.check_quote import router as check_quote_router
 from app.api.v1.committenti import router as committenti_router
 from app.api.v1.comuni import router as comuni_router
@@ -281,6 +284,9 @@ app.include_router(tipi_spartito_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(stati_iscrizione_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(stati_iscrizione_corso_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(tipi_corso_router, prefix="/api/v1", dependencies=_auth)
+app.include_router(
+    categorie_voce_programma_router, prefix="/api/v1", dependencies=_auth
+)
 
 # ── Archivio documentale (file) ──────────────────────────────────────────────
 app.include_router(documenti_router, prefix="/api/v1", dependencies=_auth)

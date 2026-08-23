@@ -147,6 +147,10 @@ class TipoCorso(LookupBase):
     __tablename__ = "tipi_corso"
 
 
+class CategoriaVoceProgramma(LookupBase):
+    __tablename__ = "categorie_voce_programma"
+
+
 class StatoIscrizioneCorso(LookupBase):
     """Stato dell'iscrizione di una persona a un Corso.
 
