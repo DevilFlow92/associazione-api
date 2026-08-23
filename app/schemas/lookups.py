@@ -246,6 +246,19 @@ class TipoCorsoResponse(LookupResponse):
     pass
 
 
+# ── CategoriaVoceProgramma ───────────────────────────────────────────────────
+class CategoriaVoceProgrammaCreate(LookupCreate):
+    pass
+
+
+class CategoriaVoceProgrammaUpdate(LookupUpdate):
+    pass
+
+
+class CategoriaVoceProgrammaResponse(LookupResponse):
+    pass
+
+
 # ── StatoIscrizioneCorso ─────────────────────────────────────────────────────
 class StatoIscrizioneCorsoCreate(LookupCreate):
     pass

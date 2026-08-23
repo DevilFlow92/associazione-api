@@ -11,7 +11,7 @@ from app.exceptions.voce_programma_catalogo import (
     VoceProgrammaCatalogoDuplicataError,
     VoceProgrammaCatalogoNotFoundError,
 )
-from app.models.lookups import TipoCorso
+from app.models.lookups import CategoriaVoceProgramma, TipoCorso
 from app.repositories.lookup import LookupRepository
 from app.repositories.voce_programma_catalogo_repository import (
     VoceProgrammaCatalogoRepository,
@@ -28,7 +28,9 @@ router = APIRouter(prefix="/catalogo-programmi", tags=["catalogo-programmi"])
 
 def get_service(db: AsyncSession = Depends(get_db)) -> VoceProgrammaCatalogoService:
     return VoceProgrammaCatalogoService(
-        VoceProgrammaCatalogoRepository(db), LookupRepository(db, TipoCorso)
+        VoceProgrammaCatalogoRepository(db),
+        LookupRepository(db, TipoCorso),
+        LookupRepository(db, CategoriaVoceProgramma),
     )
 
 
@@ -39,12 +41,18 @@ def get_service(db: AsyncSession = Depends(get_db)) -> VoceProgrammaCatalogoServ
 )
 async def list_catalogo_programmi(
     tipo_corso_codice: int | None = Query(None),
+    categoria_codice: int | None = Query(None),
+    livello: int | None = Query(None),
     attiva: bool | None = Query(None),
     params: PageParams = Depends(),
     service: VoceProgrammaCatalogoService = Depends(get_service),
 ) -> PagedResponse[VoceProgrammaCatalogoResponse]:
     return await service.get_all(
-        params, tipo_corso_codice=tipo_corso_codice, attiva=attiva
+        params,
+        tipo_corso_codice=tipo_corso_codice,
+        categoria_codice=categoria_codice,
+        livello=livello,
+        attiva=attiva,
     )
 
 
