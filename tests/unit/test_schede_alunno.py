@@ -29,6 +29,7 @@ from app.models.utente import TipoUtente, Utente
 from app.services.rbac_row_level import (
     LivelloAccessoScheda,
     assert_puo_leggere_scheda,
+    assert_puo_scrivere_autovalutazione,
     assert_puo_scrivere_scheda,
     e_docente_del_corso,
     livello_accesso_scheda,
@@ -1628,3 +1629,322 @@ async def test_superuser_scrive_materiali_senza_essere_docente_del_corso(
     )
     materiale = await create_materiale_link(client, scheda["id"])
     assert materiale["titolo"] == "Registrazione su YouTube"
+
+
+# ── Autovalutazioni: autorizzazione row-level, funzioni pure (card #218) ────
+#
+# Perimetro deliberatamente diverso da ``assert_puo_scrivere_scheda``: qui
+# ``corsi:write`` non basta mai, conta solo l'identità dell'alunno
+# proprietario. Vedi il docstring della funzione in ``rbac_row_level``.
+
+
+def test_assert_puo_scrivere_autovalutazione_consente_alunno_proprietario():
+    assert_puo_scrivere_autovalutazione(_user(persona_id=42), 42)
+
+
+def test_assert_puo_scrivere_autovalutazione_nega_alunno_terzo():
+    with pytest.raises(AccessoSchedaAlunnoNegatoError):
+        assert_puo_scrivere_autovalutazione(_user(persona_id=7), 42)
+
+
+def test_assert_puo_scrivere_autovalutazione_nega_corsi_write_da_solo():
+    """Il cuore della card: a differenza di ``assert_puo_scrivere_scheda``,
+    qui ``corsi:write`` non basta MAI, nemmeno per l'insegnante o il
+    coordinatore del corso specifico — conta solo l'identità dell'alunno."""
+    utente = _user(permessi={"corsi:write"}, persona_id=99)
+    with pytest.raises(AccessoSchedaAlunnoNegatoError):
+        assert_puo_scrivere_autovalutazione(utente, 42)
+
+
+def test_assert_puo_scrivere_autovalutazione_consente_superuser():
+    assert_puo_scrivere_autovalutazione(_user(superuser=True, persona_id=99), 42)
+
+
+def test_assert_puo_scrivere_autovalutazione_nega_utente_senza_persona_collegata():
+    with pytest.raises(AccessoSchedaAlunnoNegatoError):
+        assert_puo_scrivere_autovalutazione(_user(persona_id=None), 42)
+
+
+# ── Autovalutazioni: CRUD self-service dell'alunno ───────────────────────────
+
+
+async def create_autovalutazione(
+    client: AsyncClient,
+    iscrizione_corso_id: int,
+    testo: str = "Oggi le scale sono andate meglio",
+) -> dict:
+    response = await client.post(
+        f"/api/v1/schede-alunno/me/{iscrizione_corso_id}/autovalutazioni",
+        json={"testo": testo},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+@pytest.mark.asyncio
+async def test_alunno_proprietario_crea_autovalutazione(client: AsyncClient):
+    alunno, iscrizione = await setup_iscrizione(client)
+    await create_scheda(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+    data = await create_autovalutazione(
+        client, iscrizione["id"], testo="Oggi ho suonato meglio le scale"
+    )
+
+    assert data["testo"] == "Oggi ho suonato meglio le scale"
+    assert data["persona_id"] == alunno["id"]
+    assert data["data_creazione"] is not None
+    assert data["data_modifica"] is None
+
+
+@pytest.mark.asyncio
+async def test_alunno_proprietario_modifica_autovalutazione_valorizza_data_modifica(
+    client: AsyncClient,
+):
+    alunno, iscrizione = await setup_iscrizione(client)
+    await create_scheda(client, iscrizione["id"])
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+    autovalutazione = await create_autovalutazione(client, iscrizione["id"])
+    assert autovalutazione["data_modifica"] is None
+
+    response = await client.patch(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni/"
+        f"{autovalutazione['id']}",
+        json={"testo": "Ripensandoci, devo lavorare ancora sull'intonazione"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["testo"] == "Ripensandoci, devo lavorare ancora sull'intonazione"
+    assert data["data_modifica"] is not None
+    assert data["data_creazione"] == autovalutazione["data_creazione"]
+
+
+@pytest.mark.asyncio
+async def test_alunno_proprietario_cancella_autovalutazione(client: AsyncClient):
+    alunno, iscrizione = await setup_iscrizione(client)
+    await create_scheda(client, iscrizione["id"])
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+    autovalutazione = await create_autovalutazione(client, iscrizione["id"])
+
+    response = await client.delete(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni/"
+        f"{autovalutazione['id']}"
+    )
+    assert response.status_code == 204
+
+    propria = await client.get(f"/api/v1/schede-alunno/me/{iscrizione['id']}")
+    assert propria.json()["autovalutazioni"] == []
+
+
+@pytest.mark.asyncio
+async def test_creazione_autovalutazione_su_scheda_non_ancora_creata(
+    client: AsyncClient,
+):
+    """L'alunno non può autovalutarsi su una scheda che l'insegnante non ha
+    ancora creato: 404 chiaro, non un 403 confuso con l'autorizzazione."""
+    alunno, iscrizione = await setup_iscrizione(client)
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni",
+        json={"testo": "x"},
+    )
+    assert response.status_code == 404
+
+
+# ── Autovalutazioni: autorizzazione row-level end-to-end ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_insegnante_con_corsi_write_del_corso_non_scrive_autovalutazione(
+    client: AsyncClient,
+):
+    """Il cuore della card: il bypass di ``assert_puo_scrivere_scheda`` per
+    chi ha ``corsi:write`` ed è insegnante/coordinatore del corso specifico
+    NON si applica qui — l'autovalutazione è scrivibile solo dall'alunno."""
+    insegnante = await create_persona(client, "Giulia", "Verdi")
+    alunno, iscrizione = await setup_iscrizione(
+        client, insegnante_persona_id=insegnante["id"]
+    )
+    await create_scheda(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+    autovalutazione = await create_autovalutazione(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:read", "corsi:write"}, persona_id=insegnante["id"]
+    )
+
+    post = await client.post(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni",
+        json={"testo": "voto io per lui"},
+    )
+    assert post.status_code == 403
+
+    patch = await client.patch(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni/"
+        f"{autovalutazione['id']}",
+        json={"testo": "alterato"},
+    )
+    assert patch.status_code == 403
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni/"
+        f"{autovalutazione['id']}"
+    )
+    assert delete.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_insegnante_di_altro_corso_non_scrive_autovalutazione(
+    client: AsyncClient,
+):
+    insegnante_altro_corso = await create_persona(client, "Marco", "Neri")
+    await create_corso(
+        client,
+        tipo_corso_codice=2,
+        insegnante_persona_id=insegnante_altro_corso["id"],
+    )
+    _alunno, iscrizione = await setup_iscrizione(client)  # corso senza docenti
+    await create_scheda(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:read", "corsi:write"}, persona_id=insegnante_altro_corso["id"]
+    )
+    response = await client.post(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni",
+        json={"testo": "x"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_alunno_terzo_non_scrive_autovalutazione_altrui(client: AsyncClient):
+    _alunno, iscrizione = await setup_iscrizione(client)
+    await create_scheda(client, iscrizione["id"])
+    estraneo = await create_persona(client, "Luca", "Neri")
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        persona_id=estraneo["id"]
+    )
+    response = await client.post(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni",
+        json={"testo": "x"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_superuser_scrive_autovalutazione_senza_essere_alunno(
+    client: AsyncClient,
+):
+    """Il superuser bypassa la restrizione, stesso pattern del resto del
+    modulo — anche se non è l'alunno proprietario della scheda."""
+    _alunno, iscrizione = await setup_iscrizione(client)
+    await create_scheda(client, iscrizione["id"])
+    estraneo = await create_persona(client, "Anna", "Bianchi")
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        superuser=True, persona_id=estraneo["id"]
+    )
+    data = await create_autovalutazione(
+        client, iscrizione["id"], testo="nota inserita dal superuser"
+    )
+    assert data["persona_id"] == estraneo["id"]
+
+
+@pytest.mark.asyncio
+async def test_utente_senza_persona_collegata_non_scrive_autovalutazione(
+    client: AsyncClient,
+):
+    _alunno, iscrizione = await setup_iscrizione(client)
+    await create_scheda(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=None)
+    response = await client.post(
+        f"/api/v1/schede-alunno/me/{iscrizione['id']}/autovalutazioni",
+        json={"testo": "x"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_lettura_autovalutazioni_insegnante_alunno_proprietario_e_terzo(
+    client: AsyncClient,
+):
+    """La LETTURA riusa il perimetro già esistente di
+    ``assert_puo_leggere_scheda`` (invariato da questa card): l'insegnante
+    con ``corsi:read`` e l'alunno proprietario vedono le autovalutazioni,
+    l'alunno terzo no."""
+    insegnante = await create_persona(client, "Giulia", "Verdi")
+    alunno, iscrizione = await setup_iscrizione(
+        client, insegnante_persona_id=insegnante["id"]
+    )
+    scheda = await create_scheda(client, iscrizione["id"])
+    estraneo = await create_persona(client, "Luca", "Neri")
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+    await create_autovalutazione(client, iscrizione["id"], testo="nota personale")
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:read"}, persona_id=insegnante["id"]
+    )
+    lettura_insegnante = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
+    assert lettura_insegnante.status_code == 200
+    assert len(lettura_insegnante.json()["autovalutazioni"]) == 1
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+    lettura_alunno = await client.get(f"/api/v1/schede-alunno/me/{iscrizione['id']}")
+    assert lettura_alunno.status_code == 200
+    assert lettura_alunno.json()["autovalutazioni"][0]["testo"] == "nota personale"
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        persona_id=estraneo["id"]
+    )
+    lettura_terzo = await client.get(f"/api/v1/schede-alunno/me/{iscrizione['id']}")
+    assert lettura_terzo.status_code == 403
+
+
+# ── Autovalutazioni: contorni del row-level ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_autovalutazione_di_altra_scheda_non_raggiungibile(client: AsyncClient):
+    """L'id deve appartenere ESATTAMENTE alla scheda dell'iscrizione indicata
+    nell'URL, anche se il chiamante è proprietario di una scheda diversa —
+    stesso principio già applicato per le voci di programma."""
+    corso = await create_corso(client)
+    stato = await create_stato(client)
+    persona1 = await create_persona(client, "Mario", "Rossi")
+    persona2 = await create_persona(client, "Anna", "Bianchi")
+    iscr1 = await create_iscrizione_corso(
+        client, corso["id"], persona1["id"], stato["codice"]
+    )
+    iscr2 = await create_iscrizione_corso(
+        client, corso["id"], persona2["id"], stato["codice"]
+    )
+    await create_scheda(client, iscr1["id"])
+    await create_scheda(client, iscr2["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        persona_id=persona1["id"]
+    )
+    autovalutazione = await create_autovalutazione(client, iscr1["id"])
+
+    # persona2 è proprietaria di una scheda DIVERSA: autorizzata sulla
+    # propria iscrizione, ma l'id richiesto appartiene alla scheda di iscr1.
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        persona_id=persona2["id"]
+    )
+    patch = await client.patch(
+        f"/api/v1/schede-alunno/me/{iscr2['id']}/autovalutazioni/"
+        f"{autovalutazione['id']}",
+        json={"testo": "alterato"},
+    )
+    assert patch.status_code == 404
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/me/{iscr2['id']}/autovalutazioni/"
+        f"{autovalutazione['id']}"
+    )
+    assert delete.status_code == 404

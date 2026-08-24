@@ -19,6 +19,7 @@ _LOAD_OPTS = [
     .selectinload(SchedaAlunnoVoce.voce_catalogo)
     .selectinload(VoceProgrammaCatalogo.categoria),
     selectinload(SchedaAlunno.materiali),
+    selectinload(SchedaAlunno.autovalutazioni),
 ]
 
 
