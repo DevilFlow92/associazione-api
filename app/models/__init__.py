@@ -49,6 +49,7 @@ from app.models.repertorio_item import RepertorioItem  # noqa: F401
 from app.models.ricevuta import Ricevuta  # noqa: F401
 from app.models.ruolo import Ruolo  # noqa: F401
 from app.models.scheda_alunno import SchedaAlunno  # noqa: F401
+from app.models.scheda_alunno_materiale import SchedaAlunnoMateriale  # noqa: F401
 from app.models.scheda_alunno_voce import SchedaAlunnoVoce  # noqa: F401
 from app.models.scheda_alunno_voce_storico import SchedaAlunnoVoceStorico  # noqa: F401
 from app.models.servizio import Servizio  # noqa: F401

@@ -10,6 +10,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.iscrizione_corso import IscrizioneCorso
     from app.models.persona import Persona
+    from app.models.scheda_alunno_materiale import SchedaAlunnoMateriale
     from app.models.scheda_alunno_voce import SchedaAlunnoVoce
 
 
@@ -58,4 +59,10 @@ class SchedaAlunno(Base):
         "SchedaAlunnoVoce",
         back_populates="scheda_alunno",
         order_by="SchedaAlunnoVoce.ordine",
+    )
+    # Nessun order_by esplicito: a differenza di ``voci`` non c'è un campo
+    # "ordine" per i materiali (non richiesto dalla card), l'ordine è quello
+    # di inserimento.
+    materiali: Mapped[list[SchedaAlunnoMateriale]] = relationship(
+        "SchedaAlunnoMateriale", back_populates="scheda_alunno"
     )

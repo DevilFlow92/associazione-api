@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.schemas.scheda_alunno_materiale import SchedaAlunnoMaterialeResponse
 from app.schemas.scheda_alunno_voce import SchedaAlunnoVoceResponse
 
 
@@ -44,5 +45,9 @@ class SchedaAlunnoResponse(SchedaAlunnoBase):
     # Ordinata per ``ordine`` grazie a ``SchedaAlunno.voci`` (relationship
     # con order_by), non qui: nessun sort applicato lato schema.
     voci: list[SchedaAlunnoVoceResponse] = []
+    # Annidati per coerenza con ``voci`` (vedi card #217). A differenza delle
+    # voci non contengono il contenuto del file, solo i metadati — il peso
+    # resta contenuto anche con molti materiali allegati.
+    materiali: list[SchedaAlunnoMaterialeResponse] = []
 
     model_config = {"from_attributes": True}
