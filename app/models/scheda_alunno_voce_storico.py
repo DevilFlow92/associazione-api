@@ -39,10 +39,20 @@ class SchedaAlunnoVoceStorico(Base):
     scheda_alunno_id: Mapped[int] = mapped_column(Integer, nullable=False)
     voce_catalogo_id: Mapped[int] = mapped_column(Integer, nullable=False)
     stato_precedente: Mapped[StatoVoceProgramma | None] = mapped_column(
-        Enum(StatoVoceProgramma, name="stato_voce_programma"), nullable=True
+        Enum(
+            StatoVoceProgramma,
+            name="stato_voce_programma",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=True,
     )
     stato_nuovo: Mapped[StatoVoceProgramma] = mapped_column(
-        Enum(StatoVoceProgramma, name="stato_voce_programma"), nullable=False
+        Enum(
+            StatoVoceProgramma,
+            name="stato_voce_programma",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=False,
     )
     modificato_da_persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persone.id"), nullable=True

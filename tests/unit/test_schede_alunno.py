@@ -13,7 +13,7 @@ from collections.abc import Collection
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -750,6 +750,47 @@ async def test_create_voce_scheda_alunno(client: AsyncClient):
     assert data["ordine"] == 1
     assert data["voce_catalogo"]["id"] == voce_catalogo["id"]
     assert data["voce_catalogo"]["testo"] == voce_catalogo["testo"]
+
+
+@pytest.mark.asyncio
+async def test_create_voce_scheda_alunno_scrive_il_valore_enum_non_il_nome(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """Regression per il bug #226: senza ``values_callable``, SQLAlchemy
+    scrive sulla colonna il NOME del membro enum Python (``DA_INIZIARE``)
+    invece del suo VALORE (``da_iniziare``). Su Postgres questo fallisce con
+    ``InvalidTextRepresentationError`` perché il tipo ``stato_voce_programma``
+    accetta solo i valori minuscoli — ma il bind e il result processor di
+    SQLAlchemy usano la stessa mappatura (rotta) in scrittura e in lettura,
+    quindi leggere lo ``stato`` tramite l'ORM (o tramite la response API,
+    validata da Pydantic) fa tornare comunque ``StatoVoceProgramma.DA_INIZIARE``
+    e nasconde il bug. Per questo qui leggiamo la stringa grezza con SQL
+    testuale, bypassando il result processor dell'ORM. Anche SQLite non
+    avrebbe intercettato la regressione da solo (nessun CHECK constraint reale
+    sui valori enum in questo progetto), quindi questo test resta l'unico
+    modo per accorgersene su qualunque backend.
+    """
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci",
+        json={
+            "voce_catalogo_id": voce_catalogo["id"],
+            "stato": "da_iniziare",
+            "ordine": 1,
+        },
+    )
+    assert response.status_code == 201
+    voce_id = response.json()["id"]
+
+    raw = await db_session.execute(
+        text("SELECT stato FROM scheda_alunno_voci WHERE id = :id"),
+        {"id": voce_id},
+    )
+    assert raw.scalar_one() == "da_iniziare"
 
 
 @pytest.mark.asyncio
