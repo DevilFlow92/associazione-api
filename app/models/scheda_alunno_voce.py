@@ -49,7 +49,12 @@ class SchedaAlunnoVoce(Base):
         ForeignKey("voci_programma_catalogo.id"), nullable=False
     )
     stato: Mapped[StatoVoceProgramma] = mapped_column(
-        Enum(StatoVoceProgramma, name="stato_voce_programma"), nullable=False
+        Enum(
+            StatoVoceProgramma,
+            name="stato_voce_programma",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=False,
     )
     dettaglio: Mapped[str | None] = mapped_column(String(200), nullable=True)
     ordine: Mapped[int] = mapped_column(SmallInteger, nullable=False)
