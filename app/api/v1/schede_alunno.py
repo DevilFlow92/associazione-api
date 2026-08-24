@@ -94,6 +94,7 @@ from app.schemas.scheda_alunno_voce import (
     SchedaAlunnoVoceResponse,
     SchedaAlunnoVoceUpdate,
 )
+from app.schemas.scheda_alunno_voce_storico import SchedaAlunnoVoceStoricoResponse
 from app.services.scheda_alunno_autovalutazione_service import (
     SchedaAlunnoAutovalutazioneService,
 )
@@ -411,6 +412,55 @@ async def delete_voce_scheda_alunno(
         IscrizioneCorsoNotFoundError,
         SchedaAlunnoVoceNotFoundError,
     ) as e:
+        raise _not_found(e) from e
+
+
+# ── Storico dei cambi di stato delle voci (sola lettura, card #219) ─────────
+#
+# La raccolta dati è append-only da #214 (mai stata esposta prima). Nessuna
+# scrittura qui: entrambi gli endpoint sono GET paginati, stesso
+# ``PagedResponse``/``PageParams`` del resto del progetto.
+#
+# Superficie personale corsi: guardia ``corsi:read``, nessun controllo
+# row-level aggiuntivo nel service — vedi il commento in
+# ``SchedaAlunnoVoceService.get_storico`` per la deviazione dal testo della
+# card #219 su questo punto.
+# Superficie alunno: indicizzata per ``iscrizione_corso_id`` come
+# ``GET /me/{iscrizione_corso_id}``, autorizzazione interamente row-level
+# (``assert_puo_leggere_scheda``, riusata senza modifiche).
+
+
+@router.get(
+    "/{scheda_alunno_id}/storico-voci",
+    response_model=PagedResponse[SchedaAlunnoVoceStoricoResponse],
+    dependencies=[Depends(require_permission("corsi:read"))],
+)
+async def get_storico_voci_scheda_alunno(
+    scheda_alunno_id: int,
+    params: PageParams = Depends(),
+    service: SchedaAlunnoVoceService = Depends(get_voci_service),
+) -> PagedResponse[SchedaAlunnoVoceStoricoResponse]:
+    try:
+        return await service.get_storico(scheda_alunno_id, params)
+    except SchedaAlunnoNotFoundError as e:
+        raise _not_found(e) from e
+
+
+@router.get(
+    "/me/{iscrizione_corso_id}/storico-voci",
+    response_model=PagedResponse[SchedaAlunnoVoceStoricoResponse],
+)
+async def get_proprio_storico_voci_scheda_alunno(
+    iscrizione_corso_id: int,
+    params: PageParams = Depends(),
+    utente: Utente = Depends(get_current_user),
+    service: SchedaAlunnoVoceService = Depends(get_voci_service),
+) -> PagedResponse[SchedaAlunnoVoceStoricoResponse]:
+    try:
+        return await service.get_proprio_storico(iscrizione_corso_id, params, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (IscrizioneCorsoNotFoundError, SchedaAlunnoIscrizioneNotFoundError) as e:
         raise _not_found(e) from e
 
 
