@@ -14,13 +14,16 @@ from collections.abc import Collection
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.storage import storage
 from app.exceptions.scheda_alunno import AccessoSchedaAlunnoNegatoError
 from app.models.corso import Corso
 from app.models.permesso import Permesso
 from app.models.ruolo import Ruolo
+from app.models.scheda_alunno_materiale import SchedaAlunnoMateriale
 from app.models.scheda_alunno_voce_storico import SchedaAlunnoVoceStorico
 from app.models.utente import TipoUtente, Utente
 from app.services.rbac_row_level import (
@@ -190,6 +193,41 @@ async def create_voce_scheda(
     payload.update(overrides)
     response = await client.post(
         f"/api/v1/schede-alunno/{scheda_id}/voci", json=payload
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+async def upload_materiale_file(
+    client: AsyncClient,
+    scheda_id: int,
+    titolo: str = "Spartito di studio",
+    filename: str = "spartito.pdf",
+    content: bytes = b"contenuto del materiale di prova",
+    content_type: str = "application/pdf",
+):
+    return await client.post(
+        f"/api/v1/schede-alunno/{scheda_id}/materiali/file",
+        data={"titolo": titolo},
+        files={"file": (filename, content, content_type)},
+    )
+
+
+async def create_materiale_file(client: AsyncClient, scheda_id: int, **kwargs) -> dict:
+    response = await upload_materiale_file(client, scheda_id, **kwargs)
+    assert response.status_code == 201
+    return response.json()
+
+
+async def create_materiale_link(
+    client: AsyncClient,
+    scheda_id: int,
+    titolo: str = "Registrazione su YouTube",
+    url: str = "https://youtube.com/watch?v=abc123",
+) -> dict:
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda_id}/materiali/link",
+        json={"titolo": titolo, "url": url},
     )
     assert response.status_code == 201
     return response.json()
@@ -1182,3 +1220,411 @@ async def test_storico_sopravvive_alla_cancellazione_della_voce(
     assert righe[0].scheda_alunno_id == scheda["id"]
     assert righe[0].voce_catalogo_id == voce_catalogo["id"]
     assert righe[0].stato_nuovo == "acquisita"
+
+
+# ── Materiale didattico: struttura e CHECK constraint ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_materiale_check_constraint_arc_vuoto_rifiutato(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """Bypassando pydantic, il CHECK del DB deve impedire l'arc vuoto
+    (né storage_key né url valorizzati) — stesso pattern già in uso per
+    l'arc a 3 rami di ``Presenza``."""
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    db_session.add(SchedaAlunnoMateriale(scheda_alunno_id=scheda["id"], titolo="x"))
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_materiale_check_constraint_arc_entrambi_valorizzati_rifiutato(
+    client: AsyncClient, db_session: AsyncSession
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    db_session.add(
+        SchedaAlunnoMateriale(
+            scheda_alunno_id=scheda["id"],
+            titolo="x",
+            storage_key="schede-alunno/1/abc_file.pdf",
+            url="https://example.com",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await db_session.rollback()
+
+
+# ── Materiale didattico: upload file ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_upload_materiale_file(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    materiale = await create_materiale_file(client, scheda["id"])
+    assert materiale["scheda_alunno_id"] == scheda["id"]
+    assert materiale["titolo"] == "Spartito di studio"
+    assert materiale["tipo"] == "file"
+    assert materiale["nome_file_originale"] == "spartito.pdf"
+    assert materiale["mime_type"] == "application/pdf"
+    assert materiale["dimensione_bytes"] == len(b"contenuto del materiale di prova")
+    assert materiale["url"] is None
+    assert materiale["storage_key"] is not None
+
+
+@pytest.mark.asyncio
+async def test_upload_materiale_estensione_non_ammessa(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    response = await upload_materiale_file(
+        client,
+        scheda["id"],
+        filename="virus.exe",
+        content_type="application/x-msdownload",
+    )
+    assert response.status_code == 422
+    assert "pdf" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_materiale_troppo_grande(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    import app.services.scheda_alunno_materiale_service as materiale_service_module
+
+    monkeypatch.setattr(materiale_service_module, "DIMENSIONE_MASSIMA_BYTES", 10)
+
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    response = await upload_materiale_file(client, scheda["id"], content=b"x" * 100)
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_upload_materiale_titolo_mancante(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/file",
+        files={"file": ("spartito.pdf", b"contenuto", "application/pdf")},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_upload_materiale_scheda_not_found(client: AsyncClient):
+    response = await upload_materiale_file(client, 999)
+    assert response.status_code == 404
+
+
+# ── Materiale didattico: link esterno ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_crea_materiale_link(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    materiale = await create_materiale_link(client, scheda["id"])
+    assert materiale["tipo"] == "link"
+    assert materiale["url"] == "https://youtube.com/watch?v=abc123"
+    assert materiale["storage_key"] is None
+    assert materiale["nome_file_originale"] is None
+
+
+@pytest.mark.asyncio
+async def test_crea_materiale_link_url_mancante(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    response = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/link",
+        json={"titolo": "Senza url"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_scheda_alunno_espone_materiali_annidati(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    await create_materiale_file(client, scheda["id"], titolo="File")
+    await create_materiale_link(client, scheda["id"], titolo="Link")
+
+    response = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
+    assert response.status_code == 200
+    materiali = response.json()["materiali"]
+    assert len(materiali) == 2
+    assert {m["tipo"] for m in materiali} == {"file", "link"}
+
+
+# ── Materiale didattico: download ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_download_materiale_file(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_file(
+        client, scheda["id"], content=b"contenuto scaricabile"
+    )
+
+    response = await client.get(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}/download"
+    )
+    assert response.status_code == 200
+    assert response.content == b"contenuto scaricabile"
+    assert "spartito.pdf" in response.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_download_materiale_link_rifiutato(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_link(client, scheda["id"])
+
+    response = await client.get(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}/download"
+    )
+    assert response.status_code == 422
+    assert "url direttamente" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_download_materiale_not_found(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    response = await client.get(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/999/download"
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_alunno_proprietario_scarica_il_proprio_materiale(client: AsyncClient):
+    """Riusa gli scenari row-level già validati per la scheda: l'alunno
+    proprietario, che non ha mai ``corsi:read``, scarica comunque il proprio
+    materiale tramite lo stesso endpoint del personale corsi."""
+    alunno, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_file(client, scheda["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+    response = await client.get(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}/download"
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_alunno_terzo_non_scarica_materiale_altrui(client: AsyncClient):
+    _alunno, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_file(client, scheda["id"])
+    estraneo = await create_persona(client, "Luca", "Neri")
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        persona_id=estraneo["id"]
+    )
+    response = await client.get(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}/download"
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_insegnante_di_altro_corso_scarica_comunque_il_materiale(
+    client: AsyncClient,
+):
+    """La LETTURA non è ristretta per-corso (stesso perimetro già validato per
+    la scheda in ``test_insegnante_di_altro_corso_legge_comunque_qualsiasi_scheda``):
+    chi ha ``corsi:write``/``corsi:read`` scarica il materiale anche di un
+    corso che non è il suo — solo la scrittura è vincolata al corso specifico."""
+    insegnante_altro_corso = await create_persona(client, "Marco", "Neri")
+    await create_corso(
+        client,
+        tipo_corso_codice=2,
+        insegnante_persona_id=insegnante_altro_corso["id"],
+    )
+    _alunno, iscrizione = await setup_iscrizione(client)  # corso senza docenti
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_file(client, scheda["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:read", "corsi:write"}, persona_id=insegnante_altro_corso["id"]
+    )
+    response = await client.get(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}/download"
+    )
+    assert response.status_code == 200
+
+
+# ── Materiale didattico: cancellazione ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_materiale_file_rimuove_anche_da_storage(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_file(client, scheda["id"])
+    storage_key = materiale["storage_key"]
+    assert await storage.exists(storage_key)
+
+    response = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}"
+    )
+    assert response.status_code == 204
+    assert not await storage.exists(storage_key)
+
+    riletta = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
+    assert riletta.json()["materiali"] == []
+
+
+@pytest.mark.asyncio
+async def test_delete_materiale_link(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_link(client, scheda["id"])
+
+    response = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}"
+    )
+    assert response.status_code == 204
+
+    riletta = await client.get(f"/api/v1/schede-alunno/{scheda['id']}")
+    assert riletta.json()["materiali"] == []
+
+
+@pytest.mark.asyncio
+async def test_delete_materiale_not_found(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    response = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/999"
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_materiale_di_altra_scheda_non_raggiungibile(client: AsyncClient):
+    corso = await create_corso(client)
+    stato = await create_stato(client)
+    persona1 = await create_persona(client, "Mario", "Rossi")
+    persona2 = await create_persona(client, "Anna", "Bianchi")
+    iscr1 = await create_iscrizione_corso(
+        client, corso["id"], persona1["id"], stato["codice"]
+    )
+    iscr2 = await create_iscrizione_corso(
+        client, corso["id"], persona2["id"], stato["codice"]
+    )
+    scheda1 = await create_scheda(client, iscr1["id"])
+    scheda2 = await create_scheda(client, iscr2["id"])
+    materiale = await create_materiale_link(client, scheda1["id"])
+
+    response = await client.delete(
+        f"/api/v1/schede-alunno/{scheda2['id']}/materiali/{materiale['id']}"
+    )
+    assert response.status_code == 404
+
+
+# ── Materiale didattico: autorizzazione row-level (scrittura) ───────────────
+
+
+@pytest.mark.asyncio
+async def test_insegnante_di_altro_corso_non_scrive_materiali(client: AsyncClient):
+    insegnante_altro_corso = await create_persona(client, "Marco", "Neri")
+    await create_corso(
+        client,
+        tipo_corso_codice=2,
+        insegnante_persona_id=insegnante_altro_corso["id"],
+    )
+    _alunno, iscrizione = await setup_iscrizione(client)  # corso senza docenti
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_link(client, scheda["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:read", "corsi:write"}, persona_id=insegnante_altro_corso["id"]
+    )
+
+    upload = await upload_materiale_file(client, scheda["id"])
+    assert upload.status_code == 403
+
+    link = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/link",
+        json={"titolo": "x", "url": "https://example.com"},
+    )
+    assert link.status_code == 403
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}"
+    )
+    assert delete.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_alunno_proprietario_non_scrive_materiali(client: AsyncClient):
+    alunno, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    materiale = await create_materiale_link(client, scheda["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=alunno["id"])
+
+    upload = await upload_materiale_file(client, scheda["id"])
+    assert upload.status_code == 403
+
+    link = await client.post(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/link",
+        json={"titolo": "x", "url": "https://example.com"},
+    )
+    assert link.status_code == 403
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/materiali/{materiale['id']}"
+    )
+    assert delete.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_coordinatore_del_corso_scrive_materiali(client: AsyncClient):
+    coordinatore = await create_persona(client, "Luigi", "Bruni")
+    _alunno, iscrizione = await setup_iscrizione(
+        client, coordinatore_persona_id=coordinatore["id"]
+    )
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:write"}, persona_id=coordinatore["id"]
+    )
+    materiale = await create_materiale_link(client, scheda["id"])
+    assert materiale["titolo"] == "Registrazione su YouTube"
+
+
+@pytest.mark.asyncio
+async def test_superuser_scrive_materiali_senza_essere_docente_del_corso(
+    client: AsyncClient,
+):
+    insegnante = await create_persona(client, "Giulia", "Verdi")
+    _alunno, iscrizione = await setup_iscrizione(
+        client, insegnante_persona_id=insegnante["id"]
+    )
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    estraneo_al_corso = await create_persona(client, "Anna", "Bianchi")
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        superuser=True, persona_id=estraneo_al_corso["id"]
+    )
+    materiale = await create_materiale_link(client, scheda["id"])
+    assert materiale["titolo"] == "Registrazione su YouTube"

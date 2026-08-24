@@ -20,17 +20,34 @@ conosce la propria iscrizione, non l'id della scheda che non ha mai visto.
 from __future__ import annotations
 
 from associazione_toolkit.pagination import PagedResponse, PageParams
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
+from app.core.storage import StorageFileNotFoundError, storage
 from app.exceptions.iscrizione_corso import IscrizioneCorsoNotFoundError
 from app.exceptions.scheda_alunno import (
     AccessoSchedaAlunnoNegatoError,
     SchedaAlunnoDuplicataError,
     SchedaAlunnoIscrizioneNotFoundError,
     SchedaAlunnoNotFoundError,
+)
+from app.exceptions.scheda_alunno_materiale import (
+    EstensioneMaterialeNonAmmessaError,
+    MaterialeNonFileError,
+    MaterialeTroppoGrandeError,
+    SchedaAlunnoMaterialeNotFoundError,
 )
 from app.exceptions.scheda_alunno_voce import (
     SchedaAlunnoVoceNotFoundError,
@@ -39,6 +56,9 @@ from app.exceptions.scheda_alunno_voce import (
 from app.exceptions.voce_programma_catalogo import VoceProgrammaCatalogoNotFoundError
 from app.models.utente import Utente
 from app.repositories.iscrizione_corso_repository import IscrizioneCorsoRepository
+from app.repositories.scheda_alunno_materiale_repository import (
+    SchedaAlunnoMaterialeRepository,
+)
 from app.repositories.scheda_alunno_repository import SchedaAlunnoRepository
 from app.repositories.scheda_alunno_voce_repository import SchedaAlunnoVoceRepository
 from app.repositories.scheda_alunno_voce_storico_repository import (
@@ -52,11 +72,16 @@ from app.schemas.scheda_alunno import (
     SchedaAlunnoResponse,
     SchedaAlunnoUpdate,
 )
+from app.schemas.scheda_alunno_materiale import (
+    SchedaAlunnoMaterialeLinkCreate,
+    SchedaAlunnoMaterialeResponse,
+)
 from app.schemas.scheda_alunno_voce import (
     SchedaAlunnoVoceCreate,
     SchedaAlunnoVoceResponse,
     SchedaAlunnoVoceUpdate,
 )
+from app.services.scheda_alunno_materiale_service import SchedaAlunnoMaterialeService
 from app.services.scheda_alunno_service import SchedaAlunnoService
 from app.services.scheda_alunno_voce_service import SchedaAlunnoVoceService
 
@@ -76,6 +101,16 @@ def get_voci_service(db: AsyncSession = Depends(get_db)) -> SchedaAlunnoVoceServ
         IscrizioneCorsoRepository(db),
         VoceProgrammaCatalogoRepository(db),
         SchedaAlunnoVoceStoricoRepository(db),
+    )
+
+
+def get_materiali_service(
+    db: AsyncSession = Depends(get_db),
+) -> SchedaAlunnoMaterialeService:
+    return SchedaAlunnoMaterialeService(
+        SchedaAlunnoMaterialeRepository(db),
+        SchedaAlunnoRepository(db),
+        IscrizioneCorsoRepository(db),
     )
 
 
@@ -272,5 +307,122 @@ async def delete_voce_scheda_alunno(
         SchedaAlunnoNotFoundError,
         IscrizioneCorsoNotFoundError,
         SchedaAlunnoVoceNotFoundError,
+    ) as e:
+        raise _not_found(e) from e
+
+
+# ── Materiale didattico della scheda ─────────────────────────────────────────
+#
+# Nessuna nuova regola di autorizzazione: la scrittura riusa esattamente
+# ``corsi:write`` + ``assert_puo_scrivere_scheda``, stesso controllo delle
+# voci. Il download è invece l'unico endpoint di QUESTO router che applica il
+# row-level in lettura (``assert_puo_leggere_scheda``, non la guardia
+# dichiarativa ``corsi:read``): a differenza delle voci un materiale-file va
+# scaricato anche dall'alunno proprietario, che non ha mai ``corsi:read``.
+
+
+@router.post(
+    "/{scheda_alunno_id}/materiali/file",
+    response_model=SchedaAlunnoMaterialeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_materiale_scheda_alunno(
+    scheda_alunno_id: int,
+    titolo: str = Form(...),
+    file: UploadFile = File(...),
+    utente: Utente = Depends(require_permission("corsi:write")),
+    service: SchedaAlunnoMaterialeService = Depends(get_materiali_service),
+) -> SchedaAlunnoMaterialeResponse:
+    try:
+        return await service.upload_file(scheda_alunno_id, titolo, file, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (SchedaAlunnoNotFoundError, IscrizioneCorsoNotFoundError) as e:
+        raise _not_found(e) from e
+    except (EstensioneMaterialeNonAmmessaError, MaterialeTroppoGrandeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
+
+
+@router.post(
+    "/{scheda_alunno_id}/materiali/link",
+    response_model=SchedaAlunnoMaterialeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def crea_materiale_link_scheda_alunno(
+    scheda_alunno_id: int,
+    data: SchedaAlunnoMaterialeLinkCreate,
+    utente: Utente = Depends(require_permission("corsi:write")),
+    service: SchedaAlunnoMaterialeService = Depends(get_materiali_service),
+) -> SchedaAlunnoMaterialeResponse:
+    try:
+        return await service.create_link(scheda_alunno_id, data, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (SchedaAlunnoNotFoundError, IscrizioneCorsoNotFoundError) as e:
+        raise _not_found(e) from e
+
+
+@router.get("/{scheda_alunno_id}/materiali/{materiale_id}/download")
+async def download_materiale_scheda_alunno(
+    scheda_alunno_id: int,
+    materiale_id: int,
+    utente: Utente = Depends(get_current_user),
+    service: SchedaAlunnoMaterialeService = Depends(get_materiali_service),
+) -> Response:
+    try:
+        materiale = await service.get_for_download(
+            scheda_alunno_id, materiale_id, utente
+        )
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (
+        SchedaAlunnoNotFoundError,
+        IscrizioneCorsoNotFoundError,
+        SchedaAlunnoMaterialeNotFoundError,
+    ) as e:
+        raise _not_found(e) from e
+    except MaterialeNonFileError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
+
+    assert materiale.storage_key is not None  # garantito da get_for_download
+    try:
+        content = await storage.get_bytes(materiale.storage_key)
+    except StorageFileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File non trovato sul server"
+        )
+    return Response(
+        content=content,
+        media_type=materiale.mime_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{materiale.nome_file_originale}"'
+            )
+        },
+    )
+
+
+@router.delete(
+    "/{scheda_alunno_id}/materiali/{materiale_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_materiale_scheda_alunno(
+    scheda_alunno_id: int,
+    materiale_id: int,
+    utente: Utente = Depends(require_permission("corsi:write")),
+    service: SchedaAlunnoMaterialeService = Depends(get_materiali_service),
+) -> None:
+    try:
+        await service.delete(scheda_alunno_id, materiale_id, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (
+        SchedaAlunnoNotFoundError,
+        IscrizioneCorsoNotFoundError,
+        SchedaAlunnoMaterialeNotFoundError,
     ) as e:
         raise _not_found(e) from e
