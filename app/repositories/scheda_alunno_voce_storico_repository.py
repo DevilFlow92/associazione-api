@@ -60,7 +60,7 @@ class SchedaAlunnoVoceStoricoRepository:
                 VoceProgrammaCatalogo.id, VoceProgrammaCatalogo.testo
             ).where(VoceProgrammaCatalogo.id.in_(voce_catalogo_ids))
             result_testi = await self.db.execute(stmt_testi)
-            testi_by_id = dict(result_testi.all())
+            testi_by_id = {id_: testo for id_, testo in result_testi.all()}
 
         return [(riga, testi_by_id.get(riga.voce_catalogo_id)) for riga in righe]
 
