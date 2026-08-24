@@ -26,6 +26,10 @@ from app.models.ruolo import Ruolo
 from app.models.scheda_alunno_materiale import SchedaAlunnoMateriale
 from app.models.scheda_alunno_voce_storico import SchedaAlunnoVoceStorico
 from app.models.utente import TipoUtente, Utente
+from app.models.voce_programma_catalogo import VoceProgrammaCatalogo
+from app.repositories.scheda_alunno_voce_storico_repository import (
+    SchedaAlunnoVoceStoricoRepository,
+)
 from app.services.rbac_row_level import (
     LivelloAccessoScheda,
     assert_puo_leggere_scheda,
@@ -1221,6 +1225,249 @@ async def test_storico_sopravvive_alla_cancellazione_della_voce(
     assert righe[0].scheda_alunno_id == scheda["id"]
     assert righe[0].voce_catalogo_id == voce_catalogo["id"]
     assert righe[0].stato_nuovo == "acquisita"
+
+
+# ── Storico dei cambi di stato: lettura (card #219) ──────────────────────────
+#
+# La raccolta è append-only da #214 (test sopra); qui si consulta. Nessuna
+# scrittura in questi test oltre a quella necessaria a generare le righe.
+
+
+@pytest.mark.asyncio
+async def test_repository_get_by_scheda_alunno_id_ordina_e_arricchisce(
+    client: AsyncClient, db_session: AsyncSession
+):
+    insegnante = await create_persona(client, "Giulia", "Verdi")
+    _alunno, iscrizione = await setup_iscrizione(
+        client, insegnante_persona_id=insegnante["id"]
+    )
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(
+        permessi={"corsi:write"}, persona_id=insegnante["id"]
+    )
+    try:
+        voce = await create_voce_scheda(
+            client, scheda["id"], voce_catalogo["id"], stato="da_iniziare"
+        )
+        response = await client.patch(
+            f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}",
+            json={"stato": "in_corso"},
+        )
+        assert response.status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    repo = SchedaAlunnoVoceStoricoRepository(db_session)
+    righe = await repo.get_by_scheda_alunno_id(scheda["id"], offset=0, limit=20)
+    total = await repo.count_by_scheda_alunno_id(scheda["id"])
+
+    assert total == 2
+    # Più recente prima: l'ultima riga scritta è il cambio di stato.
+    assert [r.stato_nuovo for r, _ in righe] == ["in_corso", "da_iniziare"]
+    for riga, voce_testo in righe:
+        assert voce_testo == voce_catalogo["testo"]
+        assert riga.modificato_da is not None
+        assert riga.modificato_da.cognome == "Verdi"
+
+
+@pytest.mark.asyncio
+async def test_repository_get_by_scheda_alunno_id_voce_cancellata_fallback_none(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """Punto chiave della card: la voce di catalogo può essere cancellata
+    (il model la denormalizza apposta per questo), e lo storico deve restare
+    leggibile con un fallback esplicito invece di fallire o sparire.
+
+    Il progetto non espone un hard-delete per ``VoceProgrammaCatalogo`` (solo
+    soft-delete via ``attiva=False``, vedi il model): per esercitare lo
+    scenario si cancella la voce di programma della scheda tramite l'API
+    esistente (azzera ``scheda_alunno_voce_id`` nello storico, comportamento
+    già coperto sopra) e poi si cancella la riga di catalogo direttamente sul
+    DB, come farebbe una pulizia amministrativa fuori dall'API odierna.
+    """
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="acquisita"
+    )
+
+    delete = await client.delete(
+        f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}"
+    )
+    assert delete.status_code == 204
+
+    catalogo = await db_session.get(VoceProgrammaCatalogo, voce_catalogo["id"])
+    assert catalogo is not None
+    await db_session.delete(catalogo)
+    await db_session.commit()
+
+    repo = SchedaAlunnoVoceStoricoRepository(db_session)
+    righe = await repo.get_by_scheda_alunno_id(scheda["id"], offset=0, limit=20)
+
+    assert len(righe) == 1
+    riga, voce_testo = righe[0]
+    assert riga.voce_catalogo_id == voce_catalogo["id"]
+    assert voce_testo is None
+
+
+@pytest.mark.asyncio
+async def test_endpoint_storico_voci_insegnante_ok_con_corsi_read(
+    client: AsyncClient,
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="da_iniziare"
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi={"corsi:read"})
+    try:
+        response = await client.get(
+            f"/api/v1/schede-alunno/{scheda['id']}/storico-voci"
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["meta"]["total_items"] == 1
+    assert data["items"][0]["stato_nuovo"] == "da_iniziare"
+    assert data["items"][0]["stato_precedente"] is None
+    assert data["items"][0]["voce_testo"] == voce_catalogo["testo"]
+
+
+@pytest.mark.asyncio
+async def test_endpoint_storico_voci_insegnante_forbidden_senza_corsi_read(
+    client: AsyncClient,
+):
+    _persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    try:
+        response = await client.get(
+            f"/api/v1/schede-alunno/{scheda['id']}/storico-voci"
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_endpoint_storico_voci_insegnante_scheda_not_found(
+    client: AsyncClient,
+):
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi={"corsi:read"})
+    try:
+        response = await client.get("/api/v1/schede-alunno/999/storico-voci")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_endpoint_storico_voci_alunno_proprietario_legge(client: AsyncClient):
+    persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="da_iniziare"
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=persona["id"])
+    try:
+        response = await client.get(
+            f"/api/v1/schede-alunno/me/{iscrizione['id']}/storico-voci"
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["meta"]["total_items"] == 1
+    assert data["items"][0]["voce_testo"] == voce_catalogo["testo"]
+
+
+@pytest.mark.asyncio
+async def test_endpoint_storico_voci_alunno_terzo_forbidden(client: AsyncClient):
+    _persona, iscrizione = await setup_iscrizione(client)
+    await create_scheda(client, iscrizione["id"])
+
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=999999)
+    try:
+        response = await client.get(
+            f"/api/v1/schede-alunno/me/{iscrizione['id']}/storico-voci"
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_endpoint_storico_voci_alunno_iscrizione_inesistente(
+    client: AsyncClient,
+):
+    app.dependency_overrides[get_current_user] = lambda: _user(persona_id=1)
+    try:
+        response = await client.get("/api/v1/schede-alunno/me/999/storico-voci")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_endpoint_storico_voci_paginazione(client: AsyncClient):
+    persona, iscrizione = await setup_iscrizione(client)
+    scheda = await create_scheda(client, iscrizione["id"])
+    categoria = await create_categoria_voce(client)
+    voce_catalogo = await create_voce_catalogo(client, 1, categoria["codice"])
+    voce = await create_voce_scheda(
+        client, scheda["id"], voce_catalogo["id"], stato="da_iniziare"
+    )
+    for stato in ("in_corso", "acquisita"):
+        response = await client.patch(
+            f"/api/v1/schede-alunno/{scheda['id']}/voci/{voce['id']}",
+            json={"stato": stato},
+        )
+        assert response.status_code == 200
+    # 3 righe di storico totali: creazione + 2 transizioni.
+
+    app.dependency_overrides[get_current_user] = lambda: _user(permessi={"corsi:read"})
+    try:
+        response = await client.get(
+            f"/api/v1/schede-alunno/{scheda['id']}/storico-voci",
+            params={"page": 1, "page_size": 2},
+        )
+        assert response.status_code == 200
+        pagina1 = response.json()
+        assert pagina1["meta"]["total_items"] == 3
+        assert len(pagina1["items"]) == 2
+        assert pagina1["items"][0]["stato_nuovo"] == "acquisita"
+        assert pagina1["items"][1]["stato_nuovo"] == "in_corso"
+
+        response = await client.get(
+            f"/api/v1/schede-alunno/{scheda['id']}/storico-voci",
+            params={"page": 2, "page_size": 2},
+        )
+        assert response.status_code == 200
+        pagina2 = response.json()
+        assert len(pagina2["items"]) == 1
+        assert pagina2["items"][0]["stato_nuovo"] == "da_iniziare"
+        assert pagina2["items"][0]["stato_precedente"] is None
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 # ── Materiale didattico: struttura e CHECK constraint ────────────────────────

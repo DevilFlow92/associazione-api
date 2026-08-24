@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from associazione_toolkit.pagination import PagedResponse, PageParams, paginate
+
 from app.exceptions.iscrizione_corso import IscrizioneCorsoNotFoundError
-from app.exceptions.scheda_alunno import SchedaAlunnoNotFoundError
+from app.exceptions.scheda_alunno import (
+    SchedaAlunnoIscrizioneNotFoundError,
+    SchedaAlunnoNotFoundError,
+)
 from app.exceptions.scheda_alunno_voce import (
     SchedaAlunnoVoceNotFoundError,
     VoceCatalogoNonCompatibileError,
@@ -21,12 +26,17 @@ from app.repositories.scheda_alunno_voce_storico_repository import (
 from app.repositories.voce_programma_catalogo_repository import (
     VoceProgrammaCatalogoRepository,
 )
+from app.schemas.scheda_alunno import PersonaInSchedaAlunno
 from app.schemas.scheda_alunno_voce import (
     SchedaAlunnoVoceCreate,
     SchedaAlunnoVoceResponse,
     SchedaAlunnoVoceUpdate,
 )
-from app.services.rbac_row_level import assert_puo_scrivere_scheda
+from app.schemas.scheda_alunno_voce_storico import SchedaAlunnoVoceStoricoResponse
+from app.services.rbac_row_level import (
+    assert_puo_leggere_scheda,
+    assert_puo_scrivere_scheda,
+)
 
 
 class SchedaAlunnoVoceService:
@@ -162,3 +172,60 @@ class SchedaAlunnoVoceService:
         await self.repo.delete_no_commit(voce)
         await self.repo.commit()
         self.scheda_repo.expire(scheda)
+
+    # ── Storico dei cambi di stato (sola lettura, card #219) ─────────────────
+    #
+    # Superficie personale corsi: nessun controllo row-level qui, stessa
+    # guardia dichiarativa ``corsi:read`` del resto del CRUD di questo
+    # router (``get_by_id``/``get_all`` di ``SchedaAlunnoService`` non
+    # applicano ``assert_puo_leggere_scheda`` neppure loro — vedi il
+    # commento di modulo "CRUD del personale corsi"). ``assert_puo_leggere_scheda``
+    # richiederebbe ``corsi:write`` o la proprietà della scheda, negando
+    # l'accesso a un insegnante con il solo ``corsi:read`` — DEVIAZIONE dal
+    # testo della card #219 (che chiedeva di riusarla anche qui) per
+    # restare coerenti con il pattern del progetto e con il punto 10 della
+    # card stessa ("200 con corsi:read, 403 senza").
+
+    async def get_storico(
+        self, scheda_alunno_id: int, params: PageParams
+    ) -> PagedResponse[SchedaAlunnoVoceStoricoResponse]:
+        scheda = await self.scheda_repo.get_by_id(scheda_alunno_id)
+        if not scheda:
+            raise SchedaAlunnoNotFoundError(scheda_alunno_id)
+        return await self._storico_paginato(scheda_alunno_id, params)
+
+    async def get_proprio_storico(
+        self, iscrizione_corso_id: int, params: PageParams, utente: Utente
+    ) -> PagedResponse[SchedaAlunnoVoceStoricoResponse]:
+        iscrizione = await self.iscrizione_corso_repo.get_by_id(iscrizione_corso_id)
+        if not iscrizione:
+            raise IscrizioneCorsoNotFoundError(iscrizione_corso_id)
+        assert_puo_leggere_scheda(utente, iscrizione.persona_id)
+        scheda = await self.scheda_repo.get_by_iscrizione_corso_id(iscrizione_corso_id)
+        if not scheda:
+            raise SchedaAlunnoIscrizioneNotFoundError(iscrizione_corso_id)
+        return await self._storico_paginato(scheda.id, params)
+
+    async def _storico_paginato(
+        self, scheda_alunno_id: int, params: PageParams
+    ) -> PagedResponse[SchedaAlunnoVoceStoricoResponse]:
+        righe = await self.storico_repo.get_by_scheda_alunno_id(
+            scheda_alunno_id, offset=params.offset, limit=params.limit
+        )
+        total = await self.storico_repo.count_by_scheda_alunno_id(scheda_alunno_id)
+        items = [
+            SchedaAlunnoVoceStoricoResponse(
+                id=riga.id,
+                stato_precedente=riga.stato_precedente,
+                stato_nuovo=riga.stato_nuovo,
+                data_modifica=riga.data_modifica,
+                modificato_da=(
+                    PersonaInSchedaAlunno.model_validate(riga.modificato_da)
+                    if riga.modificato_da is not None
+                    else None
+                ),
+                voce_testo=voce_testo,
+            )
+            for riga, voce_testo in righe
+        ]
+        return paginate(items, total, params)
