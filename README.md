@@ -50,7 +50,11 @@ app/
 │       ├── lezioni.py                     # Course lesson calendar router
 │       ├── iscrizioni_corso.py            # Course enrolments router
 │       ├── pagamenti_corso.py             # Course fee payments router (auto-posts to FlussoCassa)
-│       ├── schede_alunno.py               # Student record router (row-level authorization)
+│       ├── categorie_voce_programma.py    # Programme item categories lookup
+│       ├── catalogo_programmi.py          # Reusable programme catalogue (scale, tecnica, repertorio, ...)
+│       ├── schede_alunno.py               # Student record router (row-level authorization) +
+│       │                                  #   voci di programma, materiale didattico, autovalutazioni,
+│       │                                  #   storico dei cambi di stato (sola lettura)
 │       ├── portale_alunno.py              # Student self-service portal (/me/...)
 │       ├── voci_contabilita.py            # Accounting items router
 │       ├── flussi_cassa.py                # Cash-flow movements router
@@ -263,6 +267,41 @@ automatically against `ConfigurazioneBandaAnno.voce_contabilita_corsi_id`
 for the enrolment's (banda, anno) — `422` if that configuration is missing.
 `ricevuta_id` is nullable for symmetry with `Iscrizione.ricevuta_id` but is
 always set by the service in practice.
+
+**VoceProgrammaCatalogo** is a reusable catalogue of programme items (scales,
+technique, repertoire, …), classified by `TipoCorso` and **CategoriaVoceProgramma**
+(a plain lookup) with a `livello` and free `testo`. "Deleting" one from the
+catalogue is a soft-delete (`attiva = False`, via `PATCH`) — never a hard
+`DELETE` — so historical references from already-compiled student records are
+never invalidated. **SchedaAlunnoVoce** picks one catalogue item into a specific
+student's programme, specialized with `stato` (`da_iniziare` / `in_corso` /
+`acquisita`), free `dettaglio`, and an explicit `ordine` (teaching sequence, not
+alphabetical or insertion order); the same catalogue item can appear more than
+once on the same record with a different `dettaglio`. Every creation and every
+`stato` change is appended to **SchedaAlunnoVoceStorico**, an append-only log —
+never updated, never deleted, except that `scheda_alunno_voce_id` is cleared
+(not the row itself) when the voce is removed. `scheda_alunno_id` and
+`voce_catalogo_id` on the storico row are deliberately denormalized plain
+integers, not FKs: the row must stay queryable and consultable even after its
+voce (or, in principle, its catalogue item) is gone, which a FK reference
+could not survive. The read surface (`GET .../storico-voci`) enriches each row
+with the catalogue text via a separate lookup, keyed by that denormalized id,
+falling back to `null` instead of failing when the catalogue item is no
+longer resolvable.
+
+**SchedaAlunnoMateriale** attaches teaching material to a student record:
+either an uploaded file (validated extension whitelist, 20 MB limit) or an
+external link, never both — a two-branch exclusive arc, same pattern as
+`Presenza`. Unlike the voci, there's no history to preserve here: deletion is
+a hard delete that also removes the underlying storage object for file
+materials, leaving no orphan.
+
+**SchedaAlunnoAutovalutazione** is a free-text self-assessment diary written
+by the student themselves about their own record — not a teacher's
+judgement. It is the first (and so far only) case in the project where the
+student *writes*, not just reads, a row of their own record: see
+[Schede alunno](#schede-alunno-row-level-authorization) below for how its
+authorization perimeter deliberately diverges from the rest of the record.
 
 ## API endpoints
 
@@ -506,11 +545,32 @@ and creates a `RISCOSSIONE` `Ricevuta` plus a `FlussoCassa` of `tipo`
 pattern already used by `Iscrizione`/`AUTO_ISCRIZIONE` for membership
 quotes, applied here to course fees.
 
+### Catalogo programmi
+
+Standard CRUD under `/catalogo-programmi` (`corsi:read`/`corsi:write` — not
+`lookup:*`, since it's compiled by teaching staff, not administrators).
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/catalogo-programmi/?tipo_corso_codice={t}&categoria_codice={c}&livello={l}&attiva={a}` | List catalogue items, filterable (paginated) | `corsi:read` |
+| `GET` | `/catalogo-programmi/{id}` | Get a catalogue item by ID | `corsi:read` |
+| `POST` | `/catalogo-programmi/` | Create a catalogue item (409 on duplicate `(tipo_corso_codice, testo)`) | `corsi:write` |
+| `PATCH` | `/catalogo-programmi/{id}` | Update a catalogue item, including soft-delete (`attiva=False`) | `corsi:write` |
+
+No `DELETE`: removing an item from the catalogue is a soft-delete
+(`attiva=False`) via `PATCH`, never a hard delete — historical references from
+already-compiled `SchedaAlunnoVoce` rows must never be invalidated. Its
+companion lookup, **categorie voce programma**, is plain reference data
+(`/categorie-voce-programma`, `lookup:*`) — see
+[Tabelle dimensione](#tabelle-dimensione-lookups).
+
 ### Schede alunno (row-level authorization)
 
 The personal record of a student enrolled in a course (`SchedaAlunno`, one per
 `IscrizioneCorso` — `iscrizione_corso_id` is UNIQUE, 409 on duplicate). It holds
-the `programma` written by the teacher/coordinator.
+the student's programme (`voci`), attached teaching material (`materiali`),
+and their own self-assessment diary (`autovalutazioni`) — see
+[Domain model](#domain-model) above for each sub-resource.
 
 This is the first endpoint in the project whose authorization is **not** purely
 resource:action. A student holds no `corsi:*` permission at all and must still
@@ -558,6 +618,81 @@ On `/me/...` authorization is evaluated *before* the record is looked up, so an
 unauthorized caller gets 403 whether or not a record exists and cannot use the
 status code to probe. `aggiornato_da_persona_id` (audit) is always taken from
 the authenticated principal, never from the payload.
+
+#### Voci di programma
+
+Nested under a record; no standalone list endpoint — reading a record's voci
+arrives embedded in `SchedaAlunnoResponse.voci` (ordered by `ordine`).
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `POST` | `/schede-alunno/{scheda_alunno_id}/voci` | Add a catalogue item to the record's programme | `corsi:write` |
+| `PATCH` | `/schede-alunno/{scheda_alunno_id}/voci/{voce_id}` | Update `stato`/`dettaglio`/`ordine` | `corsi:write` |
+| `DELETE` | `/schede-alunno/{scheda_alunno_id}/voci/{voce_id}` | Remove a voce (204) | `corsi:write` |
+
+Authorization reuses `assert_puo_scrivere_scheda` unchanged — no new rule.
+`voce_catalogo_id` must reference an existing, `attiva` catalogue item whose
+`tipo_corso_codice` matches the record's course (404/422 otherwise). Every
+creation and every `stato` change writes an append-only row to the storico
+(below); a `PATCH` that leaves `stato` untouched writes nothing.
+
+#### Materiale didattico
+
+Also nested; reading arrives embedded in `SchedaAlunnoResponse.materiali`.
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `POST` | `/schede-alunno/{scheda_alunno_id}/materiali/file` | Upload a file (`multipart/form-data`: `titolo`, `file`) | `corsi:write` |
+| `POST` | `/schede-alunno/{scheda_alunno_id}/materiali/link` | Attach an external link (`titolo`, `url`) | `corsi:write` |
+| `GET` | `/schede-alunno/{scheda_alunno_id}/materiali/{materiale_id}/download` | Download a file material as attachment | row-level (`assert_puo_leggere_scheda`) |
+| `DELETE` | `/schede-alunno/{scheda_alunno_id}/materiali/{materiale_id}` | Delete a material — hard delete, also removes the file from storage (204) | `corsi:write` |
+
+A file/link material is a two-branch exclusive arc — never both, enforced by
+a DB `CHECK`. Upload rejects an extension outside the whitelist (`422`,
+`pdf`/`docx`/`jpg`/`jpeg`/`png`/`mp3`/`m4a`/`wav`/`avi`/`mp4`/`mscz`/`sib`) or
+over 20 MB (`422`). Download is the *one* endpoint on this router gated by
+row-level authorization instead of the declarative `corsi:read` guard: the
+owning student (who never has `corsi:read`) can download their own material
+too, same as `GET /schede-alunno/me/{iscrizione_corso_id}`; `404` if the
+material is a link, not a file (`MaterialeNonFileError`).
+
+#### Autovalutazioni (student-authored, `/me` only)
+
+The **only** write the student performs on their own record — a perimeter
+deliberately *not* derived from `assert_puo_scrivere_scheda`: `corsi:write`
+grants **no** access here, not even to the course's own teacher/coordinator,
+because this is the student's private diary, not staff-authored content. See
+`assert_puo_scrivere_autovalutazione` in `app/services/rbac_row_level.py`.
+
+| Method | Path | Description | Authorization |
+|---|---|---|---|
+| `POST` | `/schede-alunno/me/{iscrizione_corso_id}/autovalutazioni` | Add an entry (`testo`) | owning student (or superuser) only |
+| `PATCH` | `/schede-alunno/me/{iscrizione_corso_id}/autovalutazioni/{id}` | Edit an entry — sets `data_modifica` | owning student (or superuser) only |
+| `DELETE` | `/schede-alunno/me/{iscrizione_corso_id}/autovalutazioni/{id}` | Remove an entry (204) | owning student (or superuser) only |
+
+Reading arrives embedded in `SchedaAlunnoResponse.autovalutazioni` (newest
+first), visible to whoever can read the record at all — staff with
+`corsi:read` and the owning student. `persona_id` (author) is always taken
+from the authenticated principal, never from the payload.
+
+#### Storico dei cambi di stato (read-only)
+
+An append-only log of every `stato` transition on the record's voci, written
+automatically by the voci endpoints above (never directly writable). Kept
+even after the voce itself is deleted (`scheda_alunno_voce_id` cleared, the
+row stays) or its catalogue item is later removed from the catalogue
+(`voce_testo` falls back to `null` instead of the row disappearing or the
+request failing).
+
+| Method | Path | Description | Permission |
+|---|---|---|---|
+| `GET` | `/schede-alunno/{scheda_alunno_id}/storico-voci` | Storico for a record, newest first (paginated) | `corsi:read` |
+| `GET` | `/schede-alunno/me/{iscrizione_corso_id}/storico-voci` | The caller's own record's storico, if entitled (paginated) | row-level (`assert_puo_leggere_scheda`) |
+
+Each row is enriched with who made the change (`modificato_da`, resolved from
+the real `Persona` FK) and the catalogue item's text at read time
+(`voce_testo`, resolved separately since `voce_catalogo_id` is a
+denormalized plain integer, not a FK — see [Domain model](#domain-model)).
 
 ### Portale alunno (student self-service)
 
@@ -654,8 +789,9 @@ Reference data with full CRUD, keyed by `codice`. Prefixes: `/stati`,
 `/regioni`, `/province`, `/comuni`, `/strumenti`, `/tipi-indirizzo`, `/bande`,
 `/ruoli-contatto`, `/ruoli-banda`, `/sezioni-rendiconto`, `/voci-rendiconto`,
 `/sottovoci-rendiconto`, `/nature-flusso`, `/tipi-documento`, `/tipi-spartito`,
-`/stati-iscrizione`, `/tipi-corso`, `/stati-iscrizione-corso`. All gated by
-the shared `lookup:read`/`lookup:write` permission.
+`/stati-iscrizione`, `/tipi-corso`, `/stati-iscrizione-corso`,
+`/categorie-voce-programma`. All gated by the shared `lookup:read`/`lookup:write`
+permission.
 
 | Method | Path | Description | Permission |
 |---|---|---|---|
