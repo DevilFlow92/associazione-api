@@ -6,7 +6,9 @@ Due superfici distinte, deliberatamente NON fuse in un unico GET:
   resource:action (``corsi:read`` in lettura, ``corsi:write`` in scrittura),
   esattamente come gli altri router del progetto;
 - ``/schede-alunno/me/{iscrizione_corso_id}`` — accesso dell'alunno alla
-  propria scheda, protetto dal controllo row-level.
+  propria scheda (lettura) e alle proprie autovalutazioni (scrittura, card
+  #218), entrambe protette dal controllo row-level ma con perimetri diversi
+  — vedi ``rbac_row_level``.
 
 Un unico ``GET /schede-alunno/{id}`` che ospiti entrambe le logiche dovrebbe
 concedere l'accesso a chiunque sia autenticato per poi negarlo dall'interno:
@@ -43,6 +45,9 @@ from app.exceptions.scheda_alunno import (
     SchedaAlunnoIscrizioneNotFoundError,
     SchedaAlunnoNotFoundError,
 )
+from app.exceptions.scheda_alunno_autovalutazione import (
+    SchedaAlunnoAutovalutazioneNotFoundError,
+)
 from app.exceptions.scheda_alunno_materiale import (
     EstensioneMaterialeNonAmmessaError,
     MaterialeNonFileError,
@@ -56,6 +61,9 @@ from app.exceptions.scheda_alunno_voce import (
 from app.exceptions.voce_programma_catalogo import VoceProgrammaCatalogoNotFoundError
 from app.models.utente import Utente
 from app.repositories.iscrizione_corso_repository import IscrizioneCorsoRepository
+from app.repositories.scheda_alunno_autovalutazione_repository import (
+    SchedaAlunnoAutovalutazioneRepository,
+)
 from app.repositories.scheda_alunno_materiale_repository import (
     SchedaAlunnoMaterialeRepository,
 )
@@ -72,6 +80,11 @@ from app.schemas.scheda_alunno import (
     SchedaAlunnoResponse,
     SchedaAlunnoUpdate,
 )
+from app.schemas.scheda_alunno_autovalutazione import (
+    SchedaAlunnoAutovalutazioneCreate,
+    SchedaAlunnoAutovalutazioneResponse,
+    SchedaAlunnoAutovalutazioneUpdate,
+)
 from app.schemas.scheda_alunno_materiale import (
     SchedaAlunnoMaterialeLinkCreate,
     SchedaAlunnoMaterialeResponse,
@@ -80,6 +93,9 @@ from app.schemas.scheda_alunno_voce import (
     SchedaAlunnoVoceCreate,
     SchedaAlunnoVoceResponse,
     SchedaAlunnoVoceUpdate,
+)
+from app.services.scheda_alunno_autovalutazione_service import (
+    SchedaAlunnoAutovalutazioneService,
 )
 from app.services.scheda_alunno_materiale_service import SchedaAlunnoMaterialeService
 from app.services.scheda_alunno_service import SchedaAlunnoService
@@ -114,6 +130,16 @@ def get_materiali_service(
     )
 
 
+def get_autovalutazioni_service(
+    db: AsyncSession = Depends(get_db),
+) -> SchedaAlunnoAutovalutazioneService:
+    return SchedaAlunnoAutovalutazioneService(
+        SchedaAlunnoAutovalutazioneRepository(db),
+        SchedaAlunnoRepository(db),
+        IscrizioneCorsoRepository(db),
+    )
+
+
 def _forbidden(e: AccessoSchedaAlunnoNegatoError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -141,6 +167,83 @@ async def get_propria_scheda_alunno(
     except AccessoSchedaAlunnoNegatoError as e:
         raise _forbidden(e) from e
     except (IscrizioneCorsoNotFoundError, SchedaAlunnoIscrizioneNotFoundError) as e:
+        raise _not_found(e) from e
+
+
+# ── Autovalutazioni dell'alunno (row-level, scrittura concessa all'alunno) ──
+#
+# PRIMO caso nel progetto in cui l'alunno scrive, non solo legge, una riga
+# della propria scheda — vedi ``assert_puo_scrivere_autovalutazione`` in
+# ``rbac_row_level`` per il perimetro (deliberatamente più stretto di
+# ``assert_puo_scrivere_scheda``: nessun bypass per chi ha ``corsi:write``,
+# nemmeno per l'insegnante/coordinatore del corso specifico). Indicizzati per
+# ``iscrizione_corso_id``, come ``GET /me/{iscrizione_corso_id}``, non per
+# ``scheda_alunno_id``: l'alunno non ha mai visto l'id della scheda.
+
+
+@router.post(
+    "/me/{iscrizione_corso_id}/autovalutazioni",
+    response_model=SchedaAlunnoAutovalutazioneResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_autovalutazione(
+    iscrizione_corso_id: int,
+    data: SchedaAlunnoAutovalutazioneCreate,
+    utente: Utente = Depends(get_current_user),
+    service: SchedaAlunnoAutovalutazioneService = Depends(get_autovalutazioni_service),
+) -> SchedaAlunnoAutovalutazioneResponse:
+    try:
+        return await service.create(iscrizione_corso_id, data, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (IscrizioneCorsoNotFoundError, SchedaAlunnoIscrizioneNotFoundError) as e:
+        raise _not_found(e) from e
+
+
+@router.patch(
+    "/me/{iscrizione_corso_id}/autovalutazioni/{autovalutazione_id}",
+    response_model=SchedaAlunnoAutovalutazioneResponse,
+)
+async def update_autovalutazione(
+    iscrizione_corso_id: int,
+    autovalutazione_id: int,
+    data: SchedaAlunnoAutovalutazioneUpdate,
+    utente: Utente = Depends(get_current_user),
+    service: SchedaAlunnoAutovalutazioneService = Depends(get_autovalutazioni_service),
+) -> SchedaAlunnoAutovalutazioneResponse:
+    try:
+        return await service.update(
+            iscrizione_corso_id, autovalutazione_id, data, utente
+        )
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (
+        IscrizioneCorsoNotFoundError,
+        SchedaAlunnoIscrizioneNotFoundError,
+        SchedaAlunnoAutovalutazioneNotFoundError,
+    ) as e:
+        raise _not_found(e) from e
+
+
+@router.delete(
+    "/me/{iscrizione_corso_id}/autovalutazioni/{autovalutazione_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_autovalutazione(
+    iscrizione_corso_id: int,
+    autovalutazione_id: int,
+    utente: Utente = Depends(get_current_user),
+    service: SchedaAlunnoAutovalutazioneService = Depends(get_autovalutazioni_service),
+) -> None:
+    try:
+        await service.delete(iscrizione_corso_id, autovalutazione_id, utente)
+    except AccessoSchedaAlunnoNegatoError as e:
+        raise _forbidden(e) from e
+    except (
+        IscrizioneCorsoNotFoundError,
+        SchedaAlunnoIscrizioneNotFoundError,
+        SchedaAlunnoAutovalutazioneNotFoundError,
+    ) as e:
         raise _not_found(e) from e
 
 

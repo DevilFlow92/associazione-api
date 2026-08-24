@@ -30,6 +30,13 @@ erano nella card #175 originale):
   ``app.services.permessi_archivio.require_write`` e
   ``app.api.deps.require_permission``. L'alunno proprietario resta escluso
   in ogni caso (non ha mai ``corsi:write``).
+- SCRITTURA DELL'AUTOVALUTAZIONE — ``assert_puo_scrivere_autovalutazione``
+  (card #218): perimetro ancora diverso, non derivato dagli altri due. Qui
+  ``corsi:write`` non interviene MAI, nemmeno per l'insegnante/coordinatore
+  del corso specifico: l'autovalutazione è il diario personale dell'alunno,
+  non un contenuto redatto dal personale corsi. Solo l'alunno proprietario
+  (o il superuser) scrive; è il primo caso nel progetto in cui l'alunno
+  scrive, non solo legge, una riga della propria scheda.
 """
 
 from __future__ import annotations
@@ -130,6 +137,29 @@ def assert_puo_scrivere_scheda(utente: Utente, corso: Corso) -> None:
     raise AccessoSchedaAlunnoNegatoError(
         f"Modifica della scheda alunno riservata a chi ha "
         f"{PERMESSO_SCRITTURA_CORSI} ed è insegnante o coordinatore di questo corso"
+    )
+
+
+def assert_puo_scrivere_autovalutazione(utente: Utente, persona_id_alunno: int) -> None:
+    """Impone il diritto di SCRITTURA sull'autovalutazione dell'alunno.
+
+    Perimetro DELIBERATAMENTE diverso da ``assert_puo_scrivere_scheda``: qui
+    ``corsi:write`` non dà MAI accesso, nemmeno all'insegnante o al
+    coordinatore del corso specifico a cui la scheda appartiene. Conta solo
+    l'identità — l'alunno è raggiunto con lo stesso confronto già usato da
+    ``e_alunno_della_scheda`` per la lettura, qui applicato anche alla
+    scrittura perché l'autovalutazione è un diario personale dell'alunno,
+    non un contenuto redatto dal personale corsi. Il superuser bypassa
+    comunque, stesso pattern consolidato del resto del modulo. L'utente
+    senza Persona collegata (``persona_id`` nullo) resta escluso dallo
+    stesso guardrail di ``e_alunno_della_scheda``.
+    """
+    if utente.superuser:
+        return
+    if e_alunno_della_scheda(utente, persona_id_alunno):
+        return
+    raise AccessoSchedaAlunnoNegatoError(
+        "L'autovalutazione è scrivibile solo dall'alunno a cui la scheda si riferisce"
     )
 
 

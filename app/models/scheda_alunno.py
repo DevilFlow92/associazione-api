@@ -10,6 +10,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.iscrizione_corso import IscrizioneCorso
     from app.models.persona import Persona
+    from app.models.scheda_alunno_autovalutazione import SchedaAlunnoAutovalutazione
     from app.models.scheda_alunno_materiale import SchedaAlunnoMateriale
     from app.models.scheda_alunno_voce import SchedaAlunnoVoce
 
@@ -65,4 +66,12 @@ class SchedaAlunno(Base):
     # di inserimento.
     materiali: Mapped[list[SchedaAlunnoMateriale]] = relationship(
         "SchedaAlunnoMateriale", back_populates="scheda_alunno"
+    )
+    # Ordinate per data di creazione decrescente (più recenti prima): è un
+    # diario personale dell'alunno, non una lista didattica ordinata
+    # manualmente come ``voci`` — non ha senso un campo "ordine" qui.
+    autovalutazioni: Mapped[list[SchedaAlunnoAutovalutazione]] = relationship(
+        "SchedaAlunnoAutovalutazione",
+        back_populates="scheda_alunno",
+        order_by="SchedaAlunnoAutovalutazione.data_creazione.desc()",
     )
