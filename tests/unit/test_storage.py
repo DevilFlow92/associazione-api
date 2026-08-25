@@ -75,10 +75,25 @@ async def test_get_bytes_roundtrip(local_storage: LocalStorage) -> None:
 
 
 @pytest.mark.asyncio
-async def test_save_deduplicates_by_checksum(local_storage: LocalStorage) -> None:
+async def test_save_produces_unique_key_per_call(local_storage: LocalStorage) -> None:
     path1, _, _ = await local_storage.save(PDF_CONTENT, TIPO, FILENAME)
     path2, _, _ = await local_storage.save(PDF_CONTENT, TIPO, FILENAME)
-    assert path1 == path2
+    assert path1 != path2
+
+
+@pytest.mark.asyncio
+async def test_delete_of_one_row_does_not_affect_other_row_with_same_content(
+    local_storage: LocalStorage,
+) -> None:
+    """Riproduce lo scenario #229: due righe DB con contenuto identico non
+    devono più condividere lo stesso oggetto fisico, quindi cancellarne una
+    non deve rendere inaccessibile l'altra."""
+    path1, _, _ = await local_storage.save(PDF_CONTENT, TIPO, FILENAME)
+    path2, _, _ = await local_storage.save(PDF_CONTENT, TIPO, FILENAME)
+
+    await local_storage.delete(path1)
+
+    assert await local_storage.get_bytes(path2) == PDF_CONTENT
 
 
 def test_legacy_shims_are_coroutines() -> None:
