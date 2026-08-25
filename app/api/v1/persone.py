@@ -7,9 +7,13 @@ from app.core.database import get_db
 from app.exceptions.indirizzo import IndirizzoNotFoundError
 from app.exceptions.persona import PersonaHasDependentsError, PersonaNotFoundError
 from app.repositories.indirizzo_repository import IndirizzoRepository
+from app.repositories.iscrizione_corso_repository import IscrizioneCorsoRepository
 from app.repositories.persona_repository import PersonaRepository
+from app.repositories.scheda_alunno_repository import SchedaAlunnoRepository
 from app.schemas.indirizzo import IndirizzoResponse
+from app.schemas.percorso_formativo import TappaPercorsoFormativo
 from app.schemas.persona import PersonaCreate, PersonaResponse, PersonaUpdate
+from app.services.percorso_formativo_service import PercorsoFormativoService
 from app.services.persona_service import PersonaService
 
 router = APIRouter(prefix="/persone", tags=["persone"])
@@ -17,6 +21,14 @@ router = APIRouter(prefix="/persone", tags=["persone"])
 
 def get_service(db: AsyncSession = Depends(get_db)) -> PersonaService:
     return PersonaService(PersonaRepository(db), IndirizzoRepository(db))
+
+
+def get_percorso_formativo_service(
+    db: AsyncSession = Depends(get_db),
+) -> PercorsoFormativoService:
+    return PercorsoFormativoService(
+        PersonaRepository(db), IscrizioneCorsoRepository(db), SchedaAlunnoRepository(db)
+    )
 
 
 @router.get(
@@ -134,4 +146,29 @@ async def remove_indirizzo_persona(
     try:
         await service.remove_indirizzo(persona_id, indirizzo_id)
     except (PersonaNotFoundError, IndirizzoNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+# ── Percorso formativo pluriennale (aggregazione su iscrizioni_corso +
+# schede_alunno, card #220) ───────────────────────────────────────────────────
+#
+# Guardia ``corsi:read``, non ``anagrafica:read`` come il resto di questo
+# router: la superficie espone dati di corso/programma (iscrizioni, stato
+# delle voci), non anagrafici — stessa scelta già fatta per lo storico voci
+# in ``schede_alunno.py`` (card #219). Nessun controllo row-level: è una
+# superficie di gestione (insegnante/staff), non self-service alunno.
+
+
+@router.get(
+    "/{persona_id}/percorso-formativo",
+    response_model=list[TappaPercorsoFormativo],
+    dependencies=[Depends(require_permission("corsi:read"))],
+)
+async def get_percorso_formativo_persona(
+    persona_id: int,
+    service: PercorsoFormativoService = Depends(get_percorso_formativo_service),
+) -> list[TappaPercorsoFormativo]:
+    try:
+        return await service.get_percorso_formativo(persona_id)
+    except PersonaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
