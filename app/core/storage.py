@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -35,7 +36,13 @@ class Storage(ABC):
     async def save(
         self, content: bytes, tipo: str, filename: str
     ) -> tuple[str, str, int]:
-        """Persist content and return (path_or_key, sha256_checksum, size_bytes)."""
+        """Persist content and return (path_or_key, sha256_checksum, size_bytes).
+
+        La key è sempre univoca per chiamata (include un uuid4), anche a
+        parità di contenuto e nome file: niente più dedup per checksum.
+        Vedi CHANGELOG.md ("Storage: rimosso dedup per checksum", #229) per
+        il motivo della scelta.
+        """
 
     @abstractmethod
     async def delete(self, path: str) -> None: ...
@@ -64,7 +71,7 @@ class LocalStorage(Storage):
         self, content: bytes, tipo: str, filename: str
     ) -> tuple[str, str, int]:
         checksum = hashlib.sha256(content).hexdigest()
-        dest = self._path(tipo, f"{checksum[:16]}_{filename}")
+        dest = self._path(tipo, f"{uuid.uuid4().hex}_{filename}")
         dest.write_bytes(content)
         return str(dest), checksum, len(content)
 
@@ -113,7 +120,7 @@ class R2Storage(Storage):
         self, content: bytes, tipo: str, filename: str
     ) -> tuple[str, str, int]:
         checksum = hashlib.sha256(content).hexdigest()
-        key = f"{tipo}/{checksum[:16]}_{filename}"
+        key = f"{tipo}/{uuid.uuid4().hex}_{filename}"
         client = self._client()
         await asyncio.to_thread(
             client.put_object, Bucket=self._bucket_name, Key=key, Body=content
