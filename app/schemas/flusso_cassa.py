@@ -39,7 +39,7 @@ class FlussoCassaBase(BaseModel):
     descrizione_operazione: str
     note: str | None = None
     importo: float | None = None
-    segno: str
+    segno: str = Field(max_length=5)
     natura_flusso_codice: int
     tipo: TipoFlussoCassa = TipoFlussoCassa.MOVIMENTO
     iscrizione_id: int | None = None
@@ -56,7 +56,7 @@ class FlussoCassaUpdate(BaseModel):
     descrizione_operazione: str | None = None
     note: str | None = None
     importo: float | None = None
-    segno: str | None = None
+    segno: str | None = Field(default=None, max_length=5)
     natura_flusso_codice: int | None = None
     tipo: TipoFlussoCassa | None = None
     iscrizione_id: int | None = None

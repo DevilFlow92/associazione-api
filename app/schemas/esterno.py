@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StrumentoInEsterno(BaseModel):
@@ -23,7 +23,7 @@ class PersonaInEsterno(BaseModel):
 
 
 class EsternoBase(BaseModel):
-    codice_esterno: str
+    codice_esterno: str = Field(max_length=5)
     strumento_codice: int
     attivo: bool = True
 
@@ -33,7 +33,7 @@ class EsternoCreate(EsternoBase):
 
 
 class EsternoUpdate(BaseModel):
-    codice_esterno: str | None = None
+    codice_esterno: str | None = Field(default=None, max_length=5)
     strumento_codice: int | None = None
     attivo: bool | None = None
 
