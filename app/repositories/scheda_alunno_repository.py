@@ -67,6 +67,26 @@ class SchedaAlunnoRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_iscrizione_corso_ids(
+        self, iscrizione_corso_ids: list[int]
+    ) -> list[SchedaAlunno]:
+        """Schede delle iscrizioni indicate, con le sole voci caricate.
+
+        Usata dal percorso formativo pluriennale (card #220) per calcolare
+        il riepilogo per stato senza il costo dei materiali, delle
+        autovalutazioni e del testo di catalogo delle voci — non serviti da
+        quella superficie, a differenza di ``_LOAD_OPTS``.
+        """
+        if not iscrizione_corso_ids:
+            return []
+        stmt = (
+            select(SchedaAlunno)
+            .where(SchedaAlunno.iscrizione_corso_id.in_(iscrizione_corso_ids))
+            .options(selectinload(SchedaAlunno.voci))
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def create(
         self, data: SchedaAlunnoCreate, aggiornato_da_persona_id: int | None
     ) -> SchedaAlunno:

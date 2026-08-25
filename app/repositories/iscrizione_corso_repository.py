@@ -49,6 +49,25 @@ class IscrizioneCorsoRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
+    async def get_all_by_persona_ordinate_per_anno(
+        self, persona_id: int
+    ) -> list[IscrizioneCorso]:
+        """Tutte le iscrizioni di una persona, corso più recente prima.
+
+        Nessuna paginazione: usata dal percorso formativo pluriennale
+        (card #220), dove il numero di iscrizioni di una persona nel tempo
+        è ragionevolmente piccolo.
+        """
+        stmt = (
+            select(IscrizioneCorso)
+            .join(Corso, IscrizioneCorso.corso_id == Corso.id)
+            .where(IscrizioneCorso.persona_id == persona_id)
+            .order_by(Corso.anno.desc())
+            .options(*_LOAD_OPTS)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_by_id(self, iscrizione_corso_id: int) -> IscrizioneCorso | None:
         stmt = (
             select(IscrizioneCorso)
