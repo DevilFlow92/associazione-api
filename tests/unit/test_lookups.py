@@ -128,6 +128,52 @@ async def test_comune_carries_extra_fields(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_comune_codice_catastale_esatto_6_caratteri(client: AsyncClient):
+    response = await client.post(
+        "/api/v1/comuni/",
+        json={
+            "codice": 5535,
+            "descrizione": "Quartu Sant'Elena",
+            "codice_catastale": "B354Z",
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["codice_catastale"] == "B354Z"
+
+
+@pytest.mark.asyncio
+async def test_comune_codice_catastale_troppo_lungo(client: AsyncClient):
+    response = await client.post(
+        "/api/v1/comuni/",
+        json={
+            "codice": 5535,
+            "descrizione": "Quartu Sant'Elena",
+            "codice_catastale": "B354ZZZ",
+        },
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_provincia_sigla_esatto_5_caratteri(client: AsyncClient):
+    response = await client.post(
+        "/api/v1/province/",
+        json={"codice": 92, "descrizione": "Cagliari", "sigla": "CAGLI"},
+    )
+    assert response.status_code == 201
+    assert response.json()["sigla"] == "CAGLI"
+
+
+@pytest.mark.asyncio
+async def test_provincia_sigla_troppo_lunga(client: AsyncClient):
+    response = await client.post(
+        "/api/v1/province/",
+        json={"codice": 92, "descrizione": "Cagliari", "sigla": "CAGLIA"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_list_strumenti_forbidden_without_permission(client: AsyncClient):
     app.dependency_overrides[get_current_user] = lambda: _user()
     response = await client.get("/api/v1/strumenti/")

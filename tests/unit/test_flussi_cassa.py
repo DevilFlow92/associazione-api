@@ -51,6 +51,16 @@ async def test_create_flusso_cassa(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_create_flusso_segno_troppo_lungo(client: AsyncClient):
+    voce = await create_voce(client)
+    response = await client.post(
+        "/api/v1/flussi-cassa/",
+        json=flusso_payload(voce["id"], segno="++++++"),
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_create_flusso_voce_not_found(client: AsyncClient):
     response = await client.post("/api/v1/flussi-cassa/", json=flusso_payload(999))
     assert response.status_code == 404

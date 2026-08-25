@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ComuneInSocio(BaseModel):
@@ -39,7 +39,7 @@ class PersonaInSocio(BaseModel):
 
 
 class SocioBase(BaseModel):
-    codice_socio: str
+    codice_socio: str = Field(max_length=5)
     ruolo_banda_codice: int
     strumento_codice: int | None = None
 
@@ -49,7 +49,7 @@ class SocioCreate(SocioBase):
 
 
 class SocioUpdate(BaseModel):
-    codice_socio: str | None = None
+    codice_socio: str | None = Field(default=None, max_length=5)
     ruolo_banda_codice: int | None = None
     strumento_codice: int | None = None
 

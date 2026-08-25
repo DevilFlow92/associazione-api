@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PersonaInAllievo(BaseModel):
@@ -26,7 +26,7 @@ class IndirizzoInAllievo(BaseModel):
 
 
 class AllievoBase(BaseModel):
-    codice_allievo: str
+    codice_allievo: str = Field(max_length=5)
     indirizzo_id: int | None = None
 
 
@@ -35,7 +35,7 @@ class AllievoCreate(AllievoBase):
 
 
 class AllievoUpdate(BaseModel):
-    codice_allievo: str | None = None
+    codice_allievo: str | None = Field(default=None, max_length=5)
     indirizzo_id: int | None = None
 
 

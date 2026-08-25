@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LookupCreate(BaseModel):
@@ -47,12 +47,12 @@ class RegioneResponse(LookupResponse):
 
 # ── Provincia ────────────────────────────────────────────────────────────────
 class ProvinciaCreate(LookupCreate):
-    sigla: str | None = None
+    sigla: str | None = Field(default=None, max_length=5)
     regione_codice: int | None = None
 
 
 class ProvinciaUpdate(LookupUpdate):
-    sigla: str | None = None
+    sigla: str | None = Field(default=None, max_length=5)
     regione_codice: int | None = None
 
 
@@ -63,12 +63,12 @@ class ProvinciaResponse(LookupResponse):
 
 # ── Comune ───────────────────────────────────────────────────────────────────
 class ComuneCreate(LookupCreate):
-    codice_catastale: str | None = None
+    codice_catastale: str | None = Field(default=None, max_length=6)
     provincia_codice: int | None = None
 
 
 class ComuneUpdate(LookupUpdate):
-    codice_catastale: str | None = None
+    codice_catastale: str | None = Field(default=None, max_length=6)
     provincia_codice: int | None = None
 
 

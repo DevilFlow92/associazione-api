@@ -34,6 +34,27 @@ async def test_create_allievo(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_create_allievo_codice_esatto_5_caratteri(client: AsyncClient):
+    persona = await create_persona(client)
+    response = await client.post(
+        "/api/v1/allievi/",
+        json=allievo_payload(persona["id"], codice_allievo="A0012"),
+    )
+    assert response.status_code == 201
+    assert response.json()["codice_allievo"] == "A0012"
+
+
+@pytest.mark.asyncio
+async def test_create_allievo_codice_troppo_lungo(client: AsyncClient):
+    persona = await create_persona(client)
+    response = await client.post(
+        "/api/v1/allievi/",
+        json=allievo_payload(persona["id"], codice_allievo="A00123"),
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_create_allievo_persona_not_found(client: AsyncClient):
     response = await client.post("/api/v1/allievi/", json=allievo_payload(999))
     assert response.status_code == 404

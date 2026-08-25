@@ -36,6 +36,27 @@ async def test_create_esterno(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_create_esterno_codice_esatto_5_caratteri(client: AsyncClient):
+    persona = await create_persona(client)
+    response = await client.post(
+        "/api/v1/esterni/",
+        json=esterno_payload(persona["id"], codice_esterno="E0012"),
+    )
+    assert response.status_code == 201
+    assert response.json()["codice_esterno"] == "E0012"
+
+
+@pytest.mark.asyncio
+async def test_create_esterno_codice_troppo_lungo(client: AsyncClient):
+    persona = await create_persona(client)
+    response = await client.post(
+        "/api/v1/esterni/",
+        json=esterno_payload(persona["id"], codice_esterno="E00123"),
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_create_esterno_persona_not_found(client: AsyncClient):
     response = await client.post("/api/v1/esterni/", json=esterno_payload(999))
     assert response.status_code == 404
