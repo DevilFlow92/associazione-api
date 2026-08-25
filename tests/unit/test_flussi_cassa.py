@@ -148,8 +148,6 @@ async def _create_iscrizione(client: AsyncClient) -> dict:
         "/api/v1/soci/",
         json={
             "persona_id": persona.json()["id"],
-            "codice_socio": "S099",
-            "banda_codice": 1,
             "ruolo_banda_codice": 10,
         },
     )

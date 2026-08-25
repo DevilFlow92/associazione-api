@@ -26,7 +26,6 @@ class IndirizzoInAllievo(BaseModel):
 
 
 class AllievoBase(BaseModel):
-    codice_allievo: str = Field(max_length=5)
     indirizzo_id: int | None = None
 
 
@@ -42,6 +41,7 @@ class AllievoUpdate(BaseModel):
 class AllievoResponse(AllievoBase):
     id: int
     persona_id: int
+    codice_allievo: str
     indirizzo: IndirizzoInAllievo | None = None
     persona: PersonaInAllievo | None = None
 

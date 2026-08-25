@@ -62,7 +62,7 @@ async def create_allievo(
         return await service.create(data)
     except PersonaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (AllievoDuplicateCodiceError, AllievoPersonaAlreadyLinkedError) as e:
+    except AllievoPersonaAlreadyLinkedError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 

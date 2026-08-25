@@ -97,7 +97,6 @@ async def _create_strumento(
 async def _create_socio(
     ac: AsyncClient,
     persona_id: int,
-    codice: str = "S001",
     *,
     strumento_codice: int | None = None,
 ) -> dict:
@@ -105,7 +104,6 @@ async def _create_socio(
         "/api/v1/soci/",
         json={
             "persona_id": persona_id,
-            "codice_socio": codice,
             "ruolo_banda_codice": 10,
             "strumento_codice": strumento_codice,
         },
@@ -197,7 +195,6 @@ async def test_socio_provider_resolve(client: AsyncClient, db_session: AsyncSess
         "/api/v1/soci/",
         json={
             "persona_id": persona["id"],
-            "codice_socio": "S001",
             "ruolo_banda_codice": 10,
         },
     )
@@ -205,7 +202,7 @@ async def test_socio_provider_resolve(client: AsyncClient, db_session: AsyncSess
     socio_id = socio_resp.json()["id"]
 
     result = await SocioProvider().resolve(socio_id, db_session)
-    assert result["codice_socio"] == "S001"
+    assert result["codice_socio"] == "00001"
     assert result["nome"] == "Mario"
     assert result["cognome"] == "Rossi"
     assert result["codice_fiscale"] == "RSSMRA80A01H501U"
@@ -246,7 +243,6 @@ async def test_esterno_provider_resolve(client: AsyncClient, db_session: AsyncSe
         "/api/v1/esterni/",
         json={
             "persona_id": persona["id"],
-            "codice_esterno": "E001",
             "strumento_codice": 1,
         },
     )
@@ -254,7 +250,7 @@ async def test_esterno_provider_resolve(client: AsyncClient, db_session: AsyncSe
     esterno_id = esterno_resp.json()["id"]
 
     result = await EsternoProvider().resolve(esterno_id, db_session)
-    assert result["codice_esterno"] == "E001"
+    assert result["codice_esterno"] == "00001"
     assert result["nome"] == "Luigi"
     assert result["cognome"] == "Verdi"
     assert result["indirizzo_completo"] is None
@@ -280,7 +276,6 @@ async def test_esterno_provider_resolve_ragione_sociale_e_luogo_nascita(
         "/api/v1/esterni/",
         json={
             "persona_id": persona["id"],
-            "codice_esterno": "E001",
             "strumento_codice": 1,
         },
     )
@@ -314,7 +309,6 @@ async def test_resolve_context_groups_by_entity(
         "/api/v1/soci/",
         json={
             "persona_id": persona["id"],
-            "codice_socio": "S001",
             "ruolo_banda_codice": 10,
         },
     )
@@ -324,7 +318,7 @@ async def test_resolve_context_groups_by_entity(
     )
 
     context = await resolve_context({"socio": socio_id, "banda": 1}, db_session)
-    assert context["socio"]["codice_socio"] == "S001"
+    assert context["socio"]["codice_socio"] == "00001"
     assert context["banda"]["descrizione"] == "Banda di Test"
 
 
@@ -481,14 +475,12 @@ async def _create_allievo(
     ac: AsyncClient,
     persona_id: int,
     *,
-    codice_allievo: str = "A001",
     indirizzo_id: int | None = None,
 ) -> dict:
     resp = await ac.post(
         "/api/v1/allievi/",
         json={
             "persona_id": persona_id,
-            "codice_allievo": codice_allievo,
             "indirizzo_id": indirizzo_id,
         },
     )
@@ -503,7 +495,7 @@ async def test_allievo_provider_resolve(client: AsyncClient, db_session: AsyncSe
     allievo = await _create_allievo(client, persona["id"], indirizzo_id=indirizzo["id"])
 
     result = await AllievoProvider().resolve(allievo["id"], db_session)
-    assert result["codice_allievo"] == "A001"
+    assert result["codice_allievo"] == "00001"
     assert result["nome"] == "Mario"
     assert result["cognome"] == "Rossi"
     assert result["codice_fiscale"] == "RSSMRA80A01H501U"
@@ -514,7 +506,7 @@ async def test_allievo_provider_resolve_senza_indirizzo(
     client: AsyncClient, db_session: AsyncSession
 ):
     persona = await _create_persona(client, nome="Luigi", cognome="Verdi")
-    allievo = await _create_allievo(client, persona["id"], codice_allievo="A002")
+    allievo = await _create_allievo(client, persona["id"])
 
     result = await AllievoProvider().resolve(allievo["id"], db_session)
     assert result["indirizzo_completo"] is None

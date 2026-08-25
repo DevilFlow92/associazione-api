@@ -66,8 +66,17 @@ class SocioRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def create(self, data: SocioCreate) -> Socio:
-        socio = Socio(**data.model_dump())
+    async def get_codici_by_banda(self, banda_codice: int) -> list[str]:
+        stmt = (
+            select(Socio.codice_socio)
+            .join(Persona)
+            .where(Persona.banda_codice == banda_codice)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def create(self, data: SocioCreate, codice_socio: str) -> Socio:
+        socio = Socio(**data.model_dump(), codice_socio=codice_socio)
         self.db.add(socio)
         await self.db.flush()
         socio_id = socio.id

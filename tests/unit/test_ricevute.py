@@ -22,7 +22,7 @@ async def create_servizio(client: AsyncClient) -> dict:
     return response.json()
 
 
-async def create_esterno(client: AsyncClient, codice: str = "E001") -> dict:
+async def create_esterno(client: AsyncClient) -> dict:
     persona = await client.post(
         "/api/v1/persone/",
         json={"banda_codice": 1, "nome": "Gino", "cognome": "Esterni"},
@@ -31,14 +31,13 @@ async def create_esterno(client: AsyncClient, codice: str = "E001") -> dict:
         "/api/v1/esterni/",
         json={
             "persona_id": persona.json()["id"],
-            "codice_esterno": codice,
             "strumento_codice": 5,
         },
     )
     return response.json()
 
 
-async def create_socio(client: AsyncClient, codice: str = "S001") -> dict:
+async def create_socio(client: AsyncClient) -> dict:
     persona = await client.post(
         "/api/v1/persone/",
         json={"banda_codice": 1, "nome": "Mario", "cognome": "Rossi"},
@@ -47,8 +46,6 @@ async def create_socio(client: AsyncClient, codice: str = "S001") -> dict:
         "/api/v1/soci/",
         json={
             "persona_id": persona.json()["id"],
-            "codice_socio": codice,
-            "banda_codice": 1,
             "ruolo_banda_codice": 10,
         },
     )
@@ -180,8 +177,8 @@ async def test_get_ricevuta_not_found(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_get_ricevute_servizio(client: AsyncClient):
     servizio = await create_servizio(client)
-    esterno1 = await create_esterno(client, "E001")
-    esterno2 = await create_esterno(client, "E002")
+    esterno1 = await create_esterno(client)
+    esterno2 = await create_esterno(client)
     await client.post(
         "/api/v1/ricevute/",
         json=ricevuta_payload(

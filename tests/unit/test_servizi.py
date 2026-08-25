@@ -75,7 +75,6 @@ async def create_esterno(client: AsyncClient) -> dict:
         "/api/v1/esterni/",
         json={
             "persona_id": persona.json()["id"],
-            "codice_esterno": "E010",
             "strumento_codice": 5,
         },
     )
