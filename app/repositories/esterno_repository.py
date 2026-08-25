@@ -40,13 +40,31 @@ class EsternoRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_codice(self, codice_esterno: str) -> Esterno | None:
-        stmt = select(Esterno).where(Esterno.codice_esterno == codice_esterno)
+    async def get_by_codice(
+        self, codice_esterno: str, banda_codice: int
+    ) -> Esterno | None:
+        stmt = (
+            select(Esterno)
+            .join(Persona)
+            .where(
+                Esterno.codice_esterno == codice_esterno,
+                Persona.banda_codice == banda_codice,
+            )
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def create(self, data: EsternoCreate) -> Esterno:
-        esterno = Esterno(**data.model_dump())
+    async def get_codici_by_banda(self, banda_codice: int) -> list[str]:
+        stmt = (
+            select(Esterno.codice_esterno)
+            .join(Persona)
+            .where(Persona.banda_codice == banda_codice)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def create(self, data: EsternoCreate, codice_esterno: str) -> Esterno:
+        esterno = Esterno(**data.model_dump(), codice_esterno=codice_esterno)
         self.db.add(esterno)
         await self.db.flush()
         esterno_id = esterno.id

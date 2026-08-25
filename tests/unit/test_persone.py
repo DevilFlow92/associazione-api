@@ -107,8 +107,6 @@ async def test_delete_persona_with_socio_blocked(client: AsyncClient):
         "/api/v1/soci/",
         json={
             "persona_id": persona["id"],
-            "codice_socio": "S001",
-            "banda_codice": 1,
             "ruolo_banda_codice": 10,
         },
     )

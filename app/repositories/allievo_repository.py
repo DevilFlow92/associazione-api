@@ -40,18 +40,36 @@ class AllievoRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_codice(self, codice_allievo: str) -> Allievo | None:
-        stmt = select(Allievo).where(Allievo.codice_allievo == codice_allievo)
+    async def get_by_codice(
+        self, codice_allievo: str, banda_codice: int
+    ) -> Allievo | None:
+        stmt = (
+            select(Allievo)
+            .join(Persona)
+            .where(
+                Allievo.codice_allievo == codice_allievo,
+                Persona.banda_codice == banda_codice,
+            )
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_codici_by_banda(self, banda_codice: int) -> list[str]:
+        stmt = (
+            select(Allievo.codice_allievo)
+            .join(Persona)
+            .where(Persona.banda_codice == banda_codice)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_by_persona_id(self, persona_id: int) -> Allievo | None:
         stmt = select(Allievo).where(Allievo.persona_id == persona_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def create(self, data: AllievoCreate) -> Allievo:
-        allievo = Allievo(**data.model_dump())
+    async def create(self, data: AllievoCreate, codice_allievo: str) -> Allievo:
+        allievo = Allievo(**data.model_dump(), codice_allievo=codice_allievo)
         self.db.add(allievo)
         await self.db.flush()
         allievo_id = allievo.id

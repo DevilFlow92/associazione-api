@@ -66,13 +66,12 @@ async def create_persona(
 
 
 async def create_esterno(
-    client: AsyncClient, persona_id: int, strumento_codice: int, codice: str
+    client: AsyncClient, persona_id: int, strumento_codice: int
 ) -> dict:
     response = await client.post(
         "/api/v1/esterni/",
         json={
             "persona_id": persona_id,
-            "codice_esterno": codice,
             "strumento_codice": strumento_codice,
         },
     )
@@ -339,7 +338,7 @@ async def test_repertorio_prova_not_found(client: AsyncClient):
 async def test_libretto_prova_generato_correttamente(client: AsyncClient):
     prova = await create_prova(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await client.post(
         "/api/v1/presenze/",
         json={"persona_id": esterno["persona_id"], "prova_id": prova["id"]},
@@ -391,7 +390,7 @@ async def test_libretto_prova_spartito_segnaposto_non_oscura_quello_con_document
     Prova perché è lo scenario segnalato originariamente."""
     prova = await create_prova(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await client.post(
         "/api/v1/presenze/",
         json={"persona_id": esterno["persona_id"], "prova_id": prova["id"]},

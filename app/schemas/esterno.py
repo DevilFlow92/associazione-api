@@ -23,7 +23,6 @@ class PersonaInEsterno(BaseModel):
 
 
 class EsternoBase(BaseModel):
-    codice_esterno: str = Field(max_length=5)
     strumento_codice: int
     attivo: bool = True
 
@@ -41,6 +40,7 @@ class EsternoUpdate(BaseModel):
 class EsternoResponse(EsternoBase):
     id: int
     persona_id: int
+    codice_esterno: str
     strumento: StrumentoInEsterno | None = None
     persona: PersonaInEsterno | None = None
 

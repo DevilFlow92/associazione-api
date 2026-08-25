@@ -1320,7 +1320,6 @@ async def _create_socio_con_template(client: AsyncClient) -> tuple[int, int]:
         "/api/v1/soci/",
         json={
             "persona_id": persona["id"],
-            "codice_socio": "S001",
             "ruolo_banda_codice": 10,
         },
     )

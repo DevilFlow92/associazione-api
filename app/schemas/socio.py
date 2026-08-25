@@ -39,7 +39,6 @@ class PersonaInSocio(BaseModel):
 
 
 class SocioBase(BaseModel):
-    codice_socio: str = Field(max_length=5)
     ruolo_banda_codice: int
     strumento_codice: int | None = None
 
@@ -57,6 +56,7 @@ class SocioUpdate(BaseModel):
 class SocioResponse(SocioBase):
     id: int
     persona_id: int
+    codice_socio: str
     persona: PersonaInSocio | None = None
     ruolo_banda: RuoloBandaInSocio | None = None
     strumento: StrumentoInSocio | None = None

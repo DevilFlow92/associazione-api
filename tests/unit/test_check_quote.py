@@ -64,7 +64,6 @@ async def setup_config(
 
 async def create_socio(
     client: AsyncClient,
-    codice_socio: str,
     nome: str,
     cognome: str,
     banda_codice: int = 1,
@@ -77,7 +76,6 @@ async def create_socio(
         "/api/v1/soci/",
         json={
             "persona_id": persona.json()["id"],
-            "codice_socio": codice_socio,
             "ruolo_banda_codice": 10,
         },
     )
@@ -109,7 +107,7 @@ async def create_iscrizione(
 @pytest.mark.asyncio
 async def test_check_quote_no_config(client: AsyncClient):
     """No config → quota_annuale_attesa=0 and every socio is NON_DOVUTA."""
-    await create_socio(client, "S001", "Mario", "Rossi")
+    await create_socio(client, "Mario", "Rossi")
 
     resp = await client.get(f"{CHECK_BASE}/?banda_codice=1&anno=2026")
     assert resp.status_code == 200
@@ -146,7 +144,7 @@ async def test_check_quote_socio_ok(client: AsyncClient):
     """Versato == atteso → OK, differenza 0."""
     await seed_stati(client)
     await setup_config(client, quota="80.00")
-    socio = await create_socio(client, "S001", "Mario", "Rossi")
+    socio = await create_socio(client, "Mario", "Rossi")
     await create_iscrizione(client, socio["id"], quota=80.0)
 
     resp = await client.get(f"{CHECK_BASE}/?banda_codice=1&anno=2026")
@@ -162,7 +160,7 @@ async def test_check_quote_socio_parziale(client: AsyncClient):
     """0 < versato < atteso → PARZIALE."""
     await seed_stati(client)
     await setup_config(client, quota="80.00")
-    socio = await create_socio(client, "S001", "Mario", "Rossi")
+    socio = await create_socio(client, "Mario", "Rossi")
     await create_iscrizione(client, socio["id"], quota=50.0)
 
     resp = await client.get(f"{CHECK_BASE}/?banda_codice=1&anno=2026")
@@ -177,7 +175,7 @@ async def test_check_quote_socio_mancante(client: AsyncClient):
     """No paid iscrizione → MANCANTE, differenza == quota_attesa."""
     await seed_stati(client)
     await setup_config(client, quota="80.00")
-    await create_socio(client, "S001", "Mario", "Rossi")
+    await create_socio(client, "Mario", "Rossi")
 
     resp = await client.get(f"{CHECK_BASE}/?banda_codice=1&anno=2026")
     riga = resp.json()["soci"][0]
@@ -191,7 +189,7 @@ async def test_check_quote_socio_sovrappiu(client: AsyncClient):
     """Versato > atteso → SOVRAPPIU, differenza negativa."""
     await seed_stati(client)
     await setup_config(client, quota="80.00")
-    socio = await create_socio(client, "S001", "Mario", "Rossi")
+    socio = await create_socio(client, "Mario", "Rossi")
     await create_iscrizione(client, socio["id"], quota=100.0)
 
     resp = await client.get(f"{CHECK_BASE}/?banda_codice=1&anno=2026")
@@ -206,7 +204,7 @@ async def test_check_quote_iscrizione_non_pagata_non_conta(client: AsyncClient):
     """Iscrizione 'Da pagare' is not counted in quota_versata."""
     await seed_stati(client)
     await setup_config(client, quota="80.00")
-    socio = await create_socio(client, "S001", "Mario", "Rossi")
+    socio = await create_socio(client, "Mario", "Rossi")
     await create_iscrizione(
         client, socio["id"], quota=80.0, stato_codice=CODICE_DA_PAGARE
     )
@@ -223,7 +221,7 @@ async def test_check_quote_filtra_per_anno(client: AsyncClient):
     await seed_stati(client)
     await setup_config(client, quota="80.00", anno=2026)
     await setup_config(client, quota="80.00", anno=2025)
-    socio = await create_socio(client, "S001", "Mario", "Rossi")
+    socio = await create_socio(client, "Mario", "Rossi")
     # Paid iscrizione for 2025 only
     await create_iscrizione(
         client, socio["id"], quota=80.0, anno=2025, data="2025-01-10"
@@ -240,22 +238,22 @@ async def test_check_quote_filtra_per_banda(client: AsyncClient):
     """A socio of another banda does not appear in the response."""
     await seed_stati(client)
     await setup_config(client, quota="80.00", banda_codice=1)
-    await create_socio(client, "S001", "Mario", "Rossi", banda_codice=1)
-    await create_socio(client, "S002", "Luigi", "Verdi", banda_codice=2)
+    await create_socio(client, "Mario", "Rossi", banda_codice=1)
+    await create_socio(client, "Luigi", "Verdi", banda_codice=2)
 
     resp = await client.get(f"{CHECK_BASE}/?banda_codice=1&anno=2026")
     soci = resp.json()["soci"]
     assert len(soci) == 1
-    assert soci[0]["codice_socio"] == "S001"
+    assert soci[0]["codice_socio"] == "00001"
 
 
 @pytest.mark.asyncio
 async def test_check_quote_ordering(client: AsyncClient):
     """Soci are ordered by cognome, then nome."""
     await setup_config(client, quota="80.00")
-    await create_socio(client, "S001", "Mario", "Rossi")
-    await create_socio(client, "S002", "Anna", "Bianchi")
-    await create_socio(client, "S003", "Carlo", "Bianchi")
+    await create_socio(client, "Mario", "Rossi")
+    await create_socio(client, "Anna", "Bianchi")
+    await create_socio(client, "Carlo", "Bianchi")
 
     resp = await client.get(f"{CHECK_BASE}/?banda_codice=1&anno=2026")
     soci = resp.json()["soci"]
@@ -273,11 +271,11 @@ async def test_check_quote_totali_aggregati(client: AsyncClient):
     await seed_stati(client)
     await setup_config(client, quota="80.00")
 
-    socio_ok = await create_socio(client, "S001", "Mario", "Rossi")
-    socio_parz = await create_socio(client, "S002", "Anna", "Bianchi")
-    socio_sovr = await create_socio(client, "S003", "Carlo", "Verdi")
+    socio_ok = await create_socio(client, "Mario", "Rossi")
+    socio_parz = await create_socio(client, "Anna", "Bianchi")
+    socio_sovr = await create_socio(client, "Carlo", "Verdi")
     # socio_manc has no paid iscrizione
-    await create_socio(client, "S004", "Dario", "Neri")
+    await create_socio(client, "Dario", "Neri")
 
     await create_iscrizione(client, socio_ok["id"], quota=80.0)
     await create_iscrizione(client, socio_parz["id"], quota=30.0)

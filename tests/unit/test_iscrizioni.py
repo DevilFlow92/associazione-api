@@ -30,7 +30,7 @@ def _user(*, superuser: bool = False, permessi: Collection[str] = ()) -> Utente:
     )
 
 
-async def create_socio(client: AsyncClient, codice: str = "S001") -> dict:
+async def create_socio(client: AsyncClient) -> dict:
     persona = await client.post(
         "/api/v1/persone/",
         json={"banda_codice": 1, "nome": "Mario", "cognome": "Rossi"},
@@ -39,8 +39,6 @@ async def create_socio(client: AsyncClient, codice: str = "S001") -> dict:
         "/api/v1/soci/",
         json={
             "persona_id": persona.json()["id"],
-            "codice_socio": codice,
-            "banda_codice": 1,
             "ruolo_banda_codice": 10,
         },
     )
@@ -110,8 +108,8 @@ async def test_list_iscrizioni_empty(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_list_iscrizioni_filtro_socio(client: AsyncClient):
-    socio1 = await create_socio(client, "S001")
-    socio2 = await create_socio(client, "S002")
+    socio1 = await create_socio(client)
+    socio2 = await create_socio(client)
     await client.post("/api/v1/iscrizioni/", json=iscrizione_payload(socio1["id"]))
     await client.post(
         "/api/v1/iscrizioni/",

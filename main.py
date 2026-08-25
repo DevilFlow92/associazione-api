@@ -75,6 +75,7 @@ from app.exceptions.auth import (
     InvalidTokenError,
     PermissionDeniedError,
 )
+from app.exceptions.codice_progressivo import CodiceProgressivoError
 from app.exceptions.flusso_cassa import (
     AnnoChiusoError,
     FlussoTrasferimentoNonModificabileError,
@@ -170,6 +171,18 @@ async def lookup_duplicate_handler(
     request: Request, exc: LookupDuplicateCodiceError
 ) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+# Generazione codice progressivo (socio/esterno/allievo) esaurita senza
+# trovare un valore libero → 500: non è un conflitto causato dal client
+# (che non invia più alcun codice in creazione), ma un'impossibilità
+# lato server dopo i tentativi massimi.
+@app.exception_handler(CodiceProgressivoError)
+async def codice_progressivo_handler(
+    request: Request, exc: CodiceProgressivoError
+) -> JSONResponse:
+    logger.error("codice progressivo esaurito", error=str(exc))
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 # Violazioni di integrità del DB (es. codice lookup inesistente in una FK, o

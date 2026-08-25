@@ -60,13 +60,12 @@ async def create_persona(client: AsyncClient, nome: str, cognome: str) -> dict:
 
 
 async def create_esterno(
-    client: AsyncClient, persona_id: int, strumento_codice: int, codice: str
+    client: AsyncClient, persona_id: int, strumento_codice: int
 ) -> dict:
     response = await client.post(
         "/api/v1/esterni/",
         json={
             "persona_id": persona_id,
-            "codice_esterno": codice,
             "strumento_codice": strumento_codice,
         },
     )
@@ -76,13 +75,10 @@ async def create_esterno(
 async def create_socio(
     client: AsyncClient,
     persona_id: int,
-    codice: str,
     strumento_codice: int | None,
 ) -> dict:
     payload = {
         "persona_id": persona_id,
-        "codice_socio": codice,
-        "banda_codice": 1,
         "ruolo_banda_codice": 10,
     }
     if strumento_codice is not None:
@@ -155,11 +151,9 @@ async def test_libretto_organico_due_persone_due_brani(client: AsyncClient):
     servizio = await create_servizio(client)
 
     tromba_p = await create_persona(client, "Mario", "Trombetta")
-    tromba = await create_esterno(client, tromba_p["id"], STRUMENTO_TROMBA, "E001")
+    tromba = await create_esterno(client, tromba_p["id"], STRUMENTO_TROMBA)
     clarinetto_p = await create_persona(client, "Anna", "Clarinetti")
-    clarinetto = await create_esterno(
-        client, clarinetto_p["id"], STRUMENTO_CLARINETTO, "E002"
-    )
+    clarinetto = await create_esterno(client, clarinetto_p["id"], STRUMENTO_CLARINETTO)
 
     await create_presenza(client, tromba["persona_id"], servizio["id"])
     await create_presenza(client, clarinetto["persona_id"], servizio["id"])
@@ -207,7 +201,7 @@ async def test_libretto_spartito_strumento_nullo_incluso_per_tutti(
 ):
     servizio = await create_servizio(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await create_presenza(client, esterno["persona_id"], servizio["id"])
 
     brano = await create_nome_parte(client, "Corale")
@@ -231,7 +225,7 @@ async def test_libretto_spartito_strumento_nullo_incluso_per_tutti(
 async def test_libretto_brano_mancante_segnalato_esplicitamente(client: AsyncClient):
     servizio = await create_servizio(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await create_presenza(client, esterno["persona_id"], servizio["id"])
 
     brano_ok = await create_nome_parte(client, "Marcia")
@@ -279,7 +273,7 @@ async def test_libretto_socio_senza_strumento_indeterminato_non_escluso(
     senza uno spartito 'universale' sono segnalati come mancanti."""
     servizio = await create_servizio(client)
     persona = await create_persona(client, "Luca", "Senzastrumento")
-    socio = await create_socio(client, persona["id"], "S001", strumento_codice=None)
+    socio = await create_socio(client, persona["id"], strumento_codice=None)
     await create_presenza(client, socio["persona_id"], servizio["id"])
 
     brano_universale = await create_nome_parte(client, "Inno")
@@ -321,7 +315,7 @@ async def test_libretto_servizio_senza_organico(client: AsyncClient):
 async def test_libretto_servizio_senza_repertorio(client: AsyncClient):
     servizio = await create_servizio(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await create_presenza(client, esterno["persona_id"], servizio["id"])
 
     response = await client.get(f"/api/v1/servizi/{servizio['id']}/libretto")
@@ -332,7 +326,7 @@ async def test_libretto_servizio_senza_repertorio(client: AsyncClient):
 async def test_libretto_persona_id_non_in_organico(client: AsyncClient):
     servizio = await create_servizio(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await create_presenza(client, esterno["persona_id"], servizio["id"])
     brano = await create_nome_parte(client, "Marcia")
     await create_repertorio_item(client, servizio["id"], brano["id"], ordine=1)
@@ -358,7 +352,7 @@ async def test_libretto_persona_senza_nessuno_spartito_download_singolo(
     il download del singolo libretto è un errore esplicito, non un PDF vuoto."""
     servizio = await create_servizio(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await create_presenza(client, esterno["persona_id"], servizio["id"])
 
     brano = await create_nome_parte(client, "Assolo Clarinetto")
@@ -396,7 +390,7 @@ async def test_libretto_spartito_segnaposto_non_oscura_quello_con_documento(
     documento, non il primo della lista."""
     servizio = await create_servizio(client)
     persona = await create_persona(client, "Mario", "Trombetta")
-    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA, "E001")
+    esterno = await create_esterno(client, persona["id"], STRUMENTO_TROMBA)
     await create_presenza(client, esterno["persona_id"], servizio["id"])
 
     brano = await create_nome_parte(client, "Marcia Trionfale")

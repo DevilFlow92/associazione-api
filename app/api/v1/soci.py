@@ -58,8 +58,6 @@ async def create_socio(
         return await service.create(data)
     except PersonaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except SocioDuplicateCodiceError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.patch(
